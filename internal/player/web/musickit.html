@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!--
+    Shared MusicKit JS page used by both the WebKit and Chrome (CDP) backends.
+
+    MODE DETECTION at runtime:
+      CHROME MODE  — goStreamURL is NOT bound; MusicKit plays natively through
+                     Chrome + Widevine (full DRM tracks, direct audio output).
+      GSTREAMER MODE — goStreamURL IS bound; MusicKit is auth+API only; preview
+                     URLs are sent to Go's GStreamer pipeline for audio output.
+
+    Go ↔ JS bridge:
+      Go → JS : w.Eval / chromedp.Evaluate for vibez*() commands
+      JS → Go : goNeedsAuth, goAuthComplete, goPlayerStateChange,
+                goUserTokenChanged, goStorefrontChanged, goStreamURL*, goError
+                (* GStreamer mode only)
+  -->
+  <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
+</head>
+<body>
+<script>
+  document.addEventListener('musickitloaded', async function() {
+    try {
+      const configOpts = {
+        developerToken: '{{.DeveloperToken}}',
+        app: { name: 'vibez', build: '{{.Version}}' },
+      };
+      const configuredStorefront = '{{.Storefront}}';
+      if (configuredStorefront) {
+        configOpts.storefrontId = configuredStorefront;
+      }
+      const music = await MusicKit.configure(configOpts);
+
+      const savedToken = '{{.UserToken}}';
+      if (savedToken !== '') {
+        music.musicUserToken = savedToken;
+      }
+
+      // ── Runtime mode detection ───────────────────────────────────────────
+      // goStreamURL is only bound in GStreamer (WebKit fallback) mode.
+      // In Chrome mode it is absent and MusicKit plays natively.
+      const GSTREAMER_MODE = typeof goStreamURL === 'function';
+
+      // errName extracts a consistent error code from MusicKit's non-standard errors.
+      const errName = (e) => {
+        if (!e) return '';
+        if (typeof e.name === 'string' && e.name) return e.name;
+        if (typeof e.message === 'string') return e.message;
+        return String(e);
+      };
+
+      // ── State notification ───────────────────────────────────────────────
+      function notifyStateFromItem(item, isPlaying) {
+        if (!item) return;
+        const artwork = item.attributes.artwork;
+        const state = {
+          isPlaying:     isPlaying,
+          playbackState: isPlaying ? 3 : 2,
+          currentTime:   0,
+          duration:      (item.attributes.durationInMillis || 0) / 1000,
+          volume:        1.0,
+          nowPlaying: {
+            id:         item.id,
+            title:      item.attributes.name,
+            artist:     item.attributes.artistName,
+            album:      item.attributes.albumName,
+            artworkURL: artwork ? MusicKit.formatArtworkURL(artwork, 300, 300) : '',
+            durationMs: item.attributes.durationInMillis || 0,
+          },
+        };
+        goPlayerStateChange(JSON.stringify(state)).catch(console.error);
+      }
+
+      // ── Token / storefront forwarding (both modes) ───────────────────────
+      music.addEventListener('userTokenDidChange', function() {
+        goUserTokenChanged(MusicKit.getInstance().musicUserToken || '').catch(console.error);
+      });
+      music.addEventListener('storefrontIdentifierDidChange', function() {
+        goStorefrontChanged(MusicKit.getInstance().storefrontId || '').catch(console.error);
+      });
+
+      // ════════════════════════════════════════════════════════════════════
+      // CHROME MODE — MusicKit plays natively; we just mirror state to Go.
+      // ════════════════════════════════════════════════════════════════════
+      if (!GSTREAMER_MODE) {
+        const _m = () => MusicKit.getInstance();
+
+        function notifyState() {
+          const m = _m();
+          const item = m.nowPlayingItem;
+          const state = {
+            isPlaying:     m.isPlaying,
+            playbackState: m.playbackState,
+            currentTime:   m.currentPlaybackTime,
+            duration:      m.currentPlaybackDuration,
+            volume:        m.volume,
+            nowPlaying: item ? {
+              id:         item.id,
+              title:      item.attributes.name,
+              artist:     item.attributes.artistName,
+              album:      item.attributes.albumName,
+              artworkURL: item.attributes.artwork
+                ? MusicKit.formatArtworkURL(item.attributes.artwork, 300, 300) : '',
+              durationMs: item.attributes.durationInMillis,
+            } : null,
+          };
+          goPlayerStateChange(JSON.stringify(state)).catch(console.error);
+        }
+
+        music.addEventListener('playbackStateDidChange',  notifyState);
+        music.addEventListener('nowPlayingItemDidChange', notifyState);
+
+        window.vibezPlay  = async () => { try { await _m().play();  } catch(e) { if (errName(e) !== 'CONTENT_EQUIVALENT') goError('play: '+errName(e)).catch(()=>{}); } };
+        window.vibezPause = async () => { try { await _m().pause(); } catch(e) { goError('pause: '+errName(e)).catch(()=>{}); } };
+        window.vibezNext  = async () => { try { await _m().skipToNextItem();     } catch(e) { goError('next: '+errName(e)).catch(()=>{}); } };
+        window.vibezPrev  = async () => { try { await _m().skipToPreviousItem(); } catch(e) { goError('prev: '+errName(e)).catch(()=>{}); } };
+        window.vibezSeek      = (t) => _m().seekToTime(t);
+        window.vibezSetVolume = (v) => { _m().volume = v; };
+
+        window.vibezSetQueue = async function(idsJSON) {
+          try {
+            const ids = JSON.parse(idsJSON);
+            const m = _m();
+            const allIds    = (ids || []).filter(Boolean);
+            const catalogIds = allIds.filter(id => !id.startsWith('i.'));
+            const sf = m.storefrontId || 'us';
+
+            let items = [];
+            if (catalogIds.length > 0) {
+              try {
+                const resp = await m.api.music(`/v1/catalog/${sf}/songs`, { ids: catalogIds });
+                items = resp && resp.data && resp.data.data ? resp.data.data : [];
+              } catch(e) { goError('[queue] catalog API failed: '+errName(e)).catch(()=>{}); }
+            }
+            if (items.length === 0) { goError('setQueue: no items resolved').catch(()=>{}); return; }
+
+            try { await m.stop(); } catch(_) {}
+
+            try { await m.setQueue({ items }); } catch(e) {
+              if (errName(e) !== 'CONTENT_EQUIVALENT') throw e;
+            }
+            try { await m.play(); } catch(e) {
+              if (errName(e) !== 'CONTENT_EQUIVALENT') throw e;
+            }
+          } catch(e) { goError('setQueue failed: '+errName(e)).catch(()=>{}); }
+        };
+
+      // ════════════════════════════════════════════════════════════════════
+      // GSTREAMER MODE — preview URLs sent to Go; MusicKit is auth+API only.
+      // ════════════════════════════════════════════════════════════════════
+      } else {
+        let _queue = [];
+        let _idx   = 0;
+
+        function playIdx(idx) {
+          if (idx < 0 || idx >= _queue.length) return;
+          _idx = idx;
+          const item    = _queue[idx];
+          const previews = item.attributes && item.attributes.previews;
+          if (previews && previews.length > 0) {
+            goStreamURL(previews[0].url).catch(() => {});
+          } else {
+            goError('no preview URL for: ' + item.attributes.name).catch(() => {});
+          }
+          notifyStateFromItem(item, true);
+        }
+
+        window.vibezPlay  = () => { notifyStateFromItem(_queue[_idx], true);  };
+        window.vibezPause = () => { notifyStateFromItem(_queue[_idx], false); };
+        window.vibezNext  = () => { if (_idx < _queue.length - 1) playIdx(_idx + 1); };
+        window.vibezPrev  = () => { if (_idx > 0) playIdx(_idx - 1); };
+        window.vibezSeek      = () => {};
+        window.vibezSetVolume = () => {};
+
+        window.vibezSetQueue = async function(idsJSON) {
+          try {
+            const ids = JSON.parse(idsJSON);
+            const m = MusicKit.getInstance();
+            const allIds     = (ids || []).filter(Boolean);
+            const catalogIds = allIds.filter(id => !id.startsWith('i.'));
+            const libraryIds = allIds.filter(id =>  id.startsWith('i.'));
+            const sf = m.storefrontId || 'us';
+
+            await goError(`[queue] sf=${sf} catalog=${catalogIds.length} library=${libraryIds.length}`).catch(() => {});
+            if (allIds.length === 0) { goError('setQueue: empty id list').catch(() => {}); return; }
+
+            let items = [];
+            if (catalogIds.length > 0) {
+              try {
+                const resp = await m.api.music(`/v1/catalog/${sf}/songs`, { ids: catalogIds });
+                items = resp && resp.data && resp.data.data ? resp.data.data : [];
+                await goError(`[queue] resolved ${items.length} items`).catch(() => {});
+              } catch(e) { goError(`[queue] catalog API failed: ${errName(e)}`).catch(() => {}); }
+            }
+            if (items.length === 0 && libraryIds.length > 0) {
+              try {
+                const resp = await m.api.music('/v1/me/library/songs', { ids: libraryIds });
+                items = resp && resp.data && resp.data.data ? resp.data.data : [];
+              } catch(e) { goError(`[queue] library API failed: ${errName(e)}`).catch(() => {}); }
+            }
+            if (items.length === 0) { goError('setQueue: no items resolved').catch(() => {}); return; }
+
+            _queue = items;
+            playIdx(0);
+          } catch(e) { goError('setQueue failed: ' + errName(e)).catch(() => {}); }
+        };
+      }
+
+      // ── Auth (both modes) ────────────────────────────────────────────────
+      try {
+        await goNeedsAuth('pending').catch(() => {});
+        const token = await music.authorize();
+        await goUserTokenChanged(token || '').catch(() => {});
+        await goStorefrontChanged(music.storefrontId || '').catch(() => {});
+        await goAuthComplete('done').catch(() => {});
+      } catch(e) {
+        goError('auth failed: ' + (e.message || String(e))).catch(() => {});
+        return;
+      }
+
+    } catch(e) {
+      goError(e.message || String(e)).catch(console.error);
+    }
+  });
+</script>
+</body>
+</html>
