@@ -2414,3 +2414,28 @@ func TestHandleNormalKey_VibeFocused_RoutesToVibe(t *testing.T) {
 	cmd := m.handleNormalKey(tea.KeyPressMsg{Code: tea.KeyEsc}, "esc")
 	_ = cmd
 }
+
+func TestHandleSearchKey_Space_InsertsSpaceInQuery(t *testing.T) {
+	m := newModel(nil)
+	m.mode = modeSearch
+	m.searchQuery = "taylor"
+	m.searchCursor = 6
+
+	m.handleSearchKey("space", tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+
+	if m.searchQuery != "taylor " {
+		t.Errorf("searchQuery after space = %q, want %q", m.searchQuery, "taylor ")
+	}
+	if m.searchCursor != 7 {
+		t.Errorf("searchCursor after space = %d, want 7", m.searchCursor)
+	}
+}
+
+func TestHandleCommandKey_Space_AppendsSpace(t *testing.T) {
+	m := newModel(nil)
+	m.cmdBuf = "save"
+	m.handleCommandKey("space")
+	if m.cmdBuf != "save " {
+		t.Errorf("cmdBuf after space = %q, want %q", m.cmdBuf, "save ")
+	}
+}

@@ -957,6 +957,12 @@ func (m *Model) handleSearchKey(k string, msg tea.KeyPressMsg) tea.Cmd {
 		m.searchQuery = string(runes[m.searchCursor:])
 		m.searchCursor = 0
 		return m.scheduleSearch(m.searchQuery)
+	case "space":
+		runes := []rune(m.searchQuery)
+		runes = append(runes[:m.searchCursor], append([]rune{' '}, runes[m.searchCursor:]...)...)
+		m.searchQuery = string(runes)
+		m.searchCursor++
+		return m.scheduleSearch(m.searchQuery)
 	default:
 		if len(k) == 1 && k[0] >= 32 {
 			runes := []rune(m.searchQuery)
@@ -1041,6 +1047,9 @@ func (m *Model) handleCommandKey(k string) tea.Cmd {
 			m.cmdBuf = m.cmdBuf[:len(m.cmdBuf)-1]
 			m.cmdSuggIdx = 0
 		}
+	case "space":
+		m.cmdBuf += " "
+		m.cmdSuggIdx = 0
 	default:
 		if len(k) == 1 && k[0] >= 32 {
 			m.cmdBuf += k
