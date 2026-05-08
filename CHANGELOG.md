@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.0] — 2026-05-08
+
 ### Added
 - **Persistent volume** — the playback volume is now saved to `~/.config/vibez/config.json`
   whenever the user changes it (arrow keys, `+`/`-`, or `:vol`). On the next launch vibez
