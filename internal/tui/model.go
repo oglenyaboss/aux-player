@@ -90,6 +90,20 @@ func (p *feedPanel) SetSize(w, h int)                   { p.m.SetSize(w, h) }
 func (p *feedPanel) Update(msg tea.KeyPressMsg) tea.Cmd { return p.m.Update(msg) }
 func (p *feedPanel) View() string                       { return p.m.View() }
 
+// eqPanel wraps views.EQModel to satisfy ContentView.
+type eqPanel struct{ m *views.EQModel }
+
+func (p *eqPanel) NavKey() string   { return "e" }
+func (p *eqPanel) NavLabel() string { return "equalizer" }
+func (p *eqPanel) SetSize(w, h int) { p.m.SetSize(w, h) }
+func (p *eqPanel) Update(msg tea.KeyPressMsg) tea.Cmd {
+	if msg.String() == "e" {
+		return nil
+	}
+	return p.m.Update(msg)
+}
+func (p *eqPanel) View() string { return p.m.View() }
+
 // ── Messages ──────────────────────────────────────────────────────────────
 
 type playerStateMsg player.State
@@ -219,6 +233,7 @@ type Model struct {
 	queue       *queuePanel
 	lyricsP     *lyricsPanel
 	feedP       *feedPanel
+	eqP         *eqPanel
 
 	// Lyrics
 	lyricsClient      *lyrics.Client
@@ -297,10 +312,12 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	m.lyricsP = &lyricsPanel{m: views.NewLyrics()}
 	m.lyricsClient = lyrics.NewClient()
 	m.feedP = &feedPanel{m: views.NewFeed()}
+	eqBands := configEQBandsToPlayer(cfg.EQBands)
+	m.eqP = &eqPanel{m: views.NewEqualizer(eqBands)}
 	m.vibe = views.NewVibe()
 	m.search = views.NewSearch(prov)
 	m.favorites = make(map[string]bool)
-	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP}
+	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP, m.eqP}
 	if opts.Backend != "" {
 		m.appendLog("[engine] backend: " + opts.Backend)
 	}
@@ -378,6 +395,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.search.SetSize(contentW, panelH)
 		m.lyricsP.SetSize(contentW, panelH)
 		m.feedP.SetSize(contentW, panelH)
+		m.eqP.SetSize(contentW, panelH)
 
 	case tickMsg:
 		if m.errMsg != "" && time.Now().After(m.errExpiry) {
@@ -545,6 +563,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.feedP.m.SetRecommendations(msg.groups)
 			m.appendLog(fmt.Sprintf("[feed] loaded %d groups", len(msg.groups)))
+		}
+
+	case views.EQChangeMsg:
+		if m.player != nil {
+			if err := m.player.SetEqualizer(msg.Bands); err != nil {
+				m.appendLog(fmt.Sprintf("[eq] error: %v", err))
+			}
+		}
+		m.cfg.EQBands = playerEQBandsToConfig(msg.Bands)
+		if err := m.cfg.Save(""); err != nil {
+			m.appendLog(fmt.Sprintf("[eq] config save error: %v", err))
 		}
 
 	case feedTracksMsg:
@@ -794,6 +823,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.player.SetVolume(v)
 			}))
 			m.appendLog(fmt.Sprintf("[vol] restored %.0f%% from config", v*100))
+		}
+		if len(m.cfg.EQBands) > 0 {
+			bands := configEQBandsToPlayer(m.cfg.EQBands)
+			cmds = append(cmds, m.playerCmd(func() error {
+				return m.player.SetEqualizer(bands)
+			}))
+			m.appendLog("[eq] restored from config")
 		}
 		if m.memProfiling {
 			cmds = append(cmds, memTick(m.helperPaths))
@@ -2286,7 +2322,8 @@ func (m *Model) renderBoxLayout() string {
 	queueActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.queue
 	lyricsActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.lyricsP
 	feedActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.feedP
-	fullWidth := libraryActive || queueActive || lyricsActive || feedActive || m.mode == modeSearch || m.mode == modeCommand || m.debugView
+	eqActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.eqP
+	fullWidth := libraryActive || queueActive || lyricsActive || feedActive || eqActive || m.mode == modeSearch || m.mode == modeCommand || m.debugView
 
 	var sb strings.Builder
 
@@ -2343,6 +2380,11 @@ func (m *Model) renderBoxLayout() string {
 	case feedActive:
 		m.feedP.SetSize(inner-2, panelH)
 		for _, line := range toLines(m.feedP.View(), panelH) {
+			sb.WriteString("│ " + padRight(line, inner-2) + " │\n")
+		}
+	case eqActive:
+		m.eqP.SetSize(inner-2, panelH)
+		for _, line := range toLines(m.eqP.View(), panelH) {
 			sb.WriteString("│ " + padRight(line, inner-2) + " │\n")
 		}
 	default:
@@ -2737,6 +2779,15 @@ func (m *Model) statusNavContent(_ int) string {
 				accent.Render("r") + muted.Render(" refresh"),
 				accent.Render("esc") + muted.Render(" close"),
 			}
+		case m.activePanel >= 0 && m.panels[m.activePanel] == m.eqP:
+			parts = []string{
+				styles.ModeNormal.Render("EQUALIZER"),
+				accent.Render("←/→") + muted.Render(" band"),
+				accent.Render("↑/↓") + muted.Render(" gain"),
+				accent.Render("0") + muted.Render(" reset band"),
+				accent.Render("r") + muted.Render(" reset all"),
+				accent.Render("e") + muted.Render(" close"),
+			}
 		default:
 			parts = []string{
 				styles.ModeNormal.Render("NORMAL"),
@@ -2746,6 +2797,7 @@ func (m *Model) statusNavContent(_ int) string {
 				accent.Render("q") + muted.Render(" queue"),
 				accent.Render("y") + muted.Render(" lyrics"),
 				accent.Render("F") + muted.Render(" feed"),
+				accent.Render("e") + muted.Render(" equalizer"),
 				accent.Render("v") + muted.Render(" vibe"),
 				accent.Render(":q") + muted.Render(" quit"),
 			}
@@ -3084,4 +3136,23 @@ func (m *Model) renderPlaylistPickerModal() string {
 		Padding(0, 1).
 		Width(innerW).
 		Render(strings.Join(lines, "\n"))
+}
+
+func configEQBandsToPlayer(bands []config.EQBand) []player.EQBand {
+	if len(bands) == 0 {
+		return nil
+	}
+	out := make([]player.EQBand, len(bands))
+	for i, b := range bands {
+		out[i] = player.EQBand{Frequency: b.Frequency, Q: b.Q, Gain: b.Gain}
+	}
+	return out
+}
+
+func playerEQBandsToConfig(bands []player.EQBand) []config.EQBand {
+	out := make([]config.EQBand, len(bands))
+	for i, b := range bands {
+		out[i] = config.EQBand{Frequency: b.Frequency, Q: b.Q, Gain: b.Gain}
+	}
+	return out
 }
