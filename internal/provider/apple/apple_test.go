@@ -923,3 +923,72 @@ func TestGetSongRating_InvalidJSON_ReturnsFalse(t *testing.T) {
 		t.Error("GetSongRating = true for invalid JSON, want false")
 	}
 }
+
+func TestGetLibraryPlaylists_AddsSyntheticFavorites(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"data": []any{playlistJSON("pl2", "Workout", 25)}, "next": ""})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	lists, err := p.GetLibraryPlaylists(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryPlaylists: %v", err)
+	}
+	if len(lists) != 2 || lists[0].Name != "Favorites" || !lists[0].ReadOnly {
+		t.Fatalf("synthetic favorites not prepended/read-only: %+v", lists)
+	}
+}
+
+func TestGetPlaylistTracks_FavoritesUsesRatings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/me/library/songs":
+			writeJSON(t, w, map[string]any{"data": []any{
+				songJSONWithCatalog("i.one", "cat1", "Loved", "A", "B", 1000, ""),
+				songJSONWithCatalog("i.two", "cat2", "Plain", "A", "B", 1000, ""),
+			}, "next": ""})
+		case "/me/ratings/songs":
+			if r.URL.Query().Get("ids") != "cat1,cat2" {
+				t.Errorf("ids query = %q", r.URL.Query().Get("ids"))
+			}
+			writeJSON(t, w, map[string]any{"data": []any{map[string]any{"id": "cat1", "attributes": map[string]any{"value": 1}}}})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	tracks, err := p.GetPlaylistTracks(context.Background(), "vibez:favorites")
+	if err != nil {
+		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
+	}
+	if len(tracks) != 1 || tracks[0].Title != "Loved" {
+		t.Fatalf("favorites tracks = %+v", tracks)
+	}
+}
+
+func TestGetPlaylistTracks_PathEscapesPlaylistID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		writeJSON(t, w, map[string]any{"data": []any{}, "next": ""})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	_, err := p.GetPlaylistTracks(context.Background(), "p.foo/bar baz")
+	if err != nil {
+		t.Fatalf("GetPlaylistTracks: %v", err)
+	}
+	if !strings.Contains(gotPath, "p.foo%2Fbar%20baz") {
+		t.Fatalf("path not escaped: %s", gotPath)
+	}
+}
+
+func songJSONWithCatalog(id, catalogID, name, artist, album string, durationMs int, artURL string) map[string]any {
+	s := songJSON(id, name, artist, album, durationMs, artURL)
+	s["attributes"].(map[string]any)["playParams"] = map[string]any{"id": id, "kind": "song", "catalogId": catalogID}
+	return s
+}

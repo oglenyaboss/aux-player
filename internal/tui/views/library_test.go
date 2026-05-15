@@ -625,3 +625,41 @@ func TestLibrary_Update_SpinnerTick_WhenLoadingDrillList(t *testing.T) {
 	// Should not panic.
 	lib.Update(spinner.TickMsg{ID: 1, Time: time.Now()})
 }
+
+func TestLibrary_Back_ReturnsFromDrillPane(t *testing.T) {
+	lib := NewLibrary(&mockProvider{})
+	lib.pane = paneTracks
+	lib.tracksBackPane = paneItems
+	if !lib.Back() {
+		t.Fatal("Back() = false, want true")
+	}
+	if lib.pane != paneItems {
+		t.Fatalf("pane = %v, want paneItems", lib.pane)
+	}
+	if lib.Back() {
+		t.Fatal("Back() at items pane = true, want false")
+	}
+}
+
+func TestLibrary_RenderDrillView_Error(t *testing.T) {
+	lib := NewLibrary(&mockProvider{})
+	lib.SetSize(80, 20)
+	lib.pane = paneTracks
+	lib.drillErr = errors.New("apple 404")
+	view := lib.renderDrillView()
+	if !strings.Contains(view, "Could not load tracks: apple 404") {
+		t.Fatalf("error not rendered: %q", view)
+	}
+}
+
+func TestLibrary_Update_DrillPane_BackKeys(t *testing.T) {
+	for _, key := range []string{"left", "h", "esc", "backspace"} {
+		lib := NewLibrary(&mockProvider{})
+		lib.pane = paneTracks
+		lib.tracksBackPane = paneItems
+		updated, _ := lib.Update(tea.KeyPressMsg{Text: key})
+		if updated.pane != paneItems {
+			t.Fatalf("%s pane = %v, want paneItems", key, updated.pane)
+		}
+	}
+}
