@@ -27,6 +27,9 @@ type Config struct {
 	LastfmSessionKey string `json:"lastfm_session_key,omitempty"`
 	// EQBands stores the last saved 10-band equalizer settings. nil means flat.
 	EQBands []EQBand `json:"eq_bands,omitempty"`
+	// WSL enables audio tuning workarounds for WSL2 environments where Hyper-V
+	// scheduler jitter causes audio underruns with default Chrome buffer sizes.
+	WSL bool `json:"wsl,omitempty"`
 }
 
 type EQBand struct {

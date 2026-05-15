@@ -49,7 +49,7 @@ type Player struct {
 }
 
 // New creates a CDP Player. EnsureBrowser must be called once before New().
-func New(devToken, userToken, storefront string) (*Player, error) {
+func New(devToken, userToken, storefront string, wsl bool) (*Player, error) {
 	html, err := web.RenderHTML(devToken, userToken, storefront, "1.0.0")
 	if err != nil {
 		return nil, fmt.Errorf("cdp: render html: %w", err)
@@ -96,7 +96,7 @@ func New(devToken, userToken, storefront string) (*Player, error) {
 	// (no auth UI needed); show a real window for first-run interactive login.
 	headless := userToken != ""
 
-	args := launchArgs(widevinePath)
+	args := launchArgs(widevinePath, wsl)
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		ExecutablePath:    &chromePath,
@@ -244,8 +244,15 @@ func New(devToken, userToken, storefront string) (*Player, error) {
 	return p, nil
 }
 
-func launchArgs(widevinePath string) []string {
-	return []string{
+func launchArgs(widevinePath string, wsl bool) []string {
+	disableFeatures := "HardwareMediaKeyHandling,MediaSessionService,CertificateTransparencyComponentUpdater"
+	if wsl {
+		// WSL2: disable out-of-process audio service to avoid distortion when
+		// PulseAudio and Windows run at different sample rates (44100 vs 48000).
+		disableFeatures += ",AudioServiceOutOfProcess"
+	}
+
+	args := []string{
 		// Sandbox requires suid/namespace support unavailable from a non-system path.
 		"--no-sandbox",
 		"--disable-setuid-sandbox",
@@ -262,7 +269,7 @@ func launchArgs(widevinePath string) []string {
 		// Also disable the certificate-verifier component updater: when
 		// Chrome swaps it mid-session it raises ERR_CERT_VERIFIER_CHANGED
 		// which breaks all TLS connections including the MusicKit.js CDN load.
-		"--disable-features=HardwareMediaKeyHandling,MediaSessionService,CertificateTransparencyComponentUpdater",
+		"--disable-features=" + disableFeatures,
 		"--disable-component-update",
 		"--ignore-certificate-errors",
 		// Memory footprint reduction:
@@ -279,12 +286,14 @@ func launchArgs(widevinePath string) []string {
 		// Disable background network activity (prefetch, DNS pre-resolve,
 		// speculative connections). Not needed for a single-page music player.
 		"--disable-background-networking",
-		// WSL2/PulseAudio: increase audio buffering to absorb Hyper-V scheduler jitter.
-		"--audio-buffer-size=4096",
-		// Disable Chrome's out-of-process audio service to avoid distortion
-		// when PulseAudio and Windows run at different sample rates (44100 vs 48000).
-		"--disable-features=AudioServiceOutOfProcess",
 	}
+
+	if wsl {
+		// WSL2/PulseAudio: increase audio buffering to absorb Hyper-V scheduler jitter.
+		args = append(args, "--audio-buffer-size=4096")
+	}
+
+	return args
 }
 
 func (p *Player) sendError(err error) {
