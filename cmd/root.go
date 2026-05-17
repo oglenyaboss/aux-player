@@ -181,7 +181,7 @@ func runCDPFlow(cfg *config.Config, iconPath string, opts tui.Options, onUserTok
 
 		// Step 5: Start engine — Chrome launches headless because token is already set.
 		prog.Send(tui.InitStatusMsg("Starting audio engine…"))
-		cdpPlayer, err := cdp.New(cfg.AppleDeveloperToken, cfg.AppleUserToken, cfg.StoreFront)
+		cdpPlayer, err := cdp.New(cfg.AppleDeveloperToken, cfg.AppleUserToken, cfg.StoreFront, cfg.WSL)
 		if err != nil {
 			prog.Send(tui.InitErrMsg{Err: fmt.Errorf("audio engine: %w", err)})
 			return

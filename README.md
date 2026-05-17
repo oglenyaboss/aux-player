@@ -62,6 +62,7 @@ Full tracks stream via an embedded headless Chrome with Widevine DRM (auto-downl
 - **Desktop notifications** — see the current track in your notification area
 - **No external player needed** — vibez is fully self-contained, no Cider, no VLC
 - **Last.fm scrobbling** — optional integration; connect with `vibez auth lastfm login` and your listening history is tracked automatically
+- **WSL2 support** — set `"wsl": true` in config to enable audio workarounds for WSL2 environments
 
 ### 🌀 Vibe Mode
 
@@ -316,6 +317,29 @@ Use `↑` / `↓` (or `ctrl+p` / `ctrl+n`) to cycle through suggestions, and `ta
 | **WebKit + GStreamer** *(fallback)* | 30 s previews | Embedded webkit2gtk-4.0; GStreamer decodes preview URLs |
 
 Chrome is downloaded once to `~/.cache/vibez/playwright` and reused on every start.
+
+---
+
+## WSL2 Audio Setup
+
+Running vibez inside WSL2 can cause audio underruns or sample-rate distortion because the Hyper-V scheduler introduces jitter and PulseAudio / Windows may run at mismatched rates (44 100 Hz vs 48 000 Hz).
+
+Enable the WSL2 workaround by adding `"wsl": true` to `~/.config/vibez/config.json`:
+
+```json
+{
+  "wsl": true
+}
+```
+
+When enabled, vibez launches Chrome with:
+
+| Flag | Purpose |
+|------|---------|
+| `--audio-buffer-size=4096` | Larger buffer absorbs Hyper-V scheduler jitter |
+| `--disable-features=…,AudioServiceOutOfProcess` | Disables out-of-process audio service that causes distortion at mismatched sample rates |
+
+The flag is `false` by default so native Linux users are unaffected.
 
 ---
 
