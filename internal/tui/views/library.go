@@ -141,17 +141,25 @@ func (m *LibraryModel) DrillErr() error { return m.drillErr }
 func (m *LibraryModel) LoadErr() error  { return m.loadErr }
 
 func (m *LibraryModel) Back() bool {
-	if m.pane != paneTracks {
+	switch m.pane {
+	case paneSections:
+		return false
+	case paneItems:
+		m.invalidateLibraryRequest()
+		m.pane = paneSections
+		m.showSections()
+		return true
+	case paneTracks:
+		m.invalidatePlaylistRequest()
+		if m.tracksBackPane == paneSections && m.drillTitle == "" {
+			m.pane = paneItems
+		} else {
+			m.pane = m.tracksBackPane
+		}
+		return true
+	default:
 		return false
 	}
-	m.invalidatePlaylistRequest()
-	if m.tracksBackPane == paneSections && m.drillTitle == "" {
-		m.pane = paneItems
-	} else {
-		m.pane = m.tracksBackPane
-	}
-
-	return true
 }
 
 func (m *LibraryModel) SetSize(w, h int) {

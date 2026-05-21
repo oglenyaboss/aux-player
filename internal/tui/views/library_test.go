@@ -458,6 +458,25 @@ func TestLibrary_Update_SpinnerTick_WhenLoadingDrillList(t *testing.T) {
 	lib.Update(spinner.TickMsg{ID: 1, Time: time.Now()})
 }
 
+func TestLibrary_Back_ReturnsFromItemsPane(t *testing.T) {
+	lib := NewLibrary(&mockProvider{})
+	lib.pane = paneItems
+	lib.selectedSection = sectionArtists
+	lib.showGroups([]trackGroup{{title: "Artist", desc: "1 track"}})
+	if !lib.Back() {
+		t.Fatal("Back() = false, want true")
+	}
+	if lib.pane != paneSections {
+		t.Fatalf("pane = %v, want paneSections", lib.pane)
+	}
+	if len(lib.list.Items()) != 4 {
+		t.Fatalf("section picker item count = %d, want 4", len(lib.list.Items()))
+	}
+	if lib.Back() {
+		t.Fatal("Back() at sections pane = true, want false")
+	}
+}
+
 func TestLibrary_RenderDrillView_Error(t *testing.T) {
 	lib := NewLibrary(&mockProvider{})
 	lib.SetSize(80, 20)
