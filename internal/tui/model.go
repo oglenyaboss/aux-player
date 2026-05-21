@@ -905,13 +905,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	default:
-		// Forward library background loads
+		// Forward library background loads.
+		prevDrillErr := m.library.m.DrillErr()
+		prevLoadErr := m.library.m.LoadErr()
 		updated, libCmd := m.library.m.Update(msg)
-		if err := updated.DrillErr(); err != nil && m.library.m.DrillErr() == nil {
+		if err := updated.DrillErr(); err != nil && prevDrillErr == nil {
 			m.appendLog("[library] playlist tracks error: " + err.Error())
 		}
-		if err := updated.LoadErr(); err != nil && m.library.m.LoadErr() == nil {
-			m.appendLog("[library] playlists load error: " + err.Error())
+		if err := updated.LoadErr(); err != nil && prevLoadErr == nil {
+			m.appendLog("[library] load error: " + err.Error())
 		}
 		m.library.m = updated
 		cmds = append(cmds, libCmd)
@@ -2832,7 +2834,7 @@ func (m *Model) statusPlayContent(_ int) string {
 }
 
 // commandLines renders the command palette in the panel area when CMD mode is active.
-func (m *Model) commandLines(w, h int) []string {
+func (m *Model) commandLines(_ int, h int) []string {
 	muted := styles.QueueItemMuted
 	accent := styles.KeyName
 	header := accent.Render("Commands")
