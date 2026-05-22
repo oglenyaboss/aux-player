@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] — 2026-05-22
+
 ### Added
 - **WSL2 audio workaround flag** — set `"wsl": true` in `~/.config/vibez/config.json`
   to enable Chrome audio tuning for WSL2 environments. When enabled, Chrome launches
@@ -33,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `↑`/`↓` to adjust gain, `0` to reset the current band, `r` to reset all bands, and `e`
   to close the panel. The EQ curve is persisted to `eq_bands` in `config.json` and restored
   automatically on the next launch. Closes #41.
+- **macOS Chrome/CDP playback support** — improved playback support on macOS for the
+  Chrome/CDP backend.
 
 ### Fixed
 
@@ -40,7 +46,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-only Favorites entry, supports back navigation from playlist tracks, and
   shows playlist track-loading errors instead of silently rendering an empty view.
   Playlist IDs are safely encoded so names/IDs containing spaces or slashes load
-  correctly.
+  correctly. Vibez now also falls back to `?include=tracks` when Apple returns
+  404 for library playlist track relationship requests.
+- **Library error handling** — library loading errors are now surfaced in the UI
+  instead of silently leaving the user on the section list.
+- **Apple auth guidance** — 401 Apple Music API errors now include actionable
+  guidance for refreshing login state and local developer tokens.
+
+### Thanks
+
+- Thanks to @elijah-rou for library sections, configurable Apple Music audio
+  quality, and playlist browsing improvements.
+- Thanks to @EzraCerpac for macOS playback support.
+- Thanks to @Wiibleyde for the WSL2 audio improvements.
 
 ---
 
