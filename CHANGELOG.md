@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-29
+
 ### Added
-- **Discord Rich Presence (RPC)** — vibez now displays your currently playing track, artist, album, album art, and listening time on Discord. Connects seamlessly to the local Discord desktop client on Linux and macOS; enabled by default and can be disabled via `--no-discord` or `"discord_rpc": false` in config. Closes #60.
+- **Discord Rich Presence (RPC)** — vibez now displays your currently playing track, artist, album, album art, and listening time on Discord. Connects seamlessly to the local Discord desktop client on Linux and macOS; enabled by default and can be disabled via `--no-discord` or `"discord_rpc": false` in config. Custom client ID can be specified in config via `"discord_client_id"`. Closes #60, refs #145.
+
+### Thanks
+- Thanks to @ianswope for reviewing and testing Discord RPC across platforms, verifying IPC timeouts, and adding fuzz tests for the browserless MP4 parser.
 
 ## [0.9.2] — 2026-09-25
 
@@ -676,7 +681,8 @@ First public pre-release of vibez.
 
 ---
 
-[Unreleased]: https://github.com/simonepelosi/vibez/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/simonepelosi/vibez/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/simonepelosi/vibez/compare/v0.9.2...v1.0.0
 [0.9.2]: https://github.com/simonepelosi/vibez/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/simonepelosi/vibez/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/simonepelosi/vibez/compare/v0.8.0...v0.9.0
