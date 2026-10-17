@@ -146,8 +146,20 @@ func runTUI(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	auth.ApplyEmbedded(cfg)
+	tokenErr := auth.ResolveDeveloperToken(cfg)
 	lastfm.ApplyEmbedded(cfg)
+
+	brokerLogs := auth.BrokerLogs()
+	if debug {
+		for _, msg := range brokerLogs {
+			fmt.Fprintf(os.Stderr, "debug: %s\n", msg)
+		}
+	}
+	opts.InitialLogs = brokerLogs
+
+	if tokenErr != nil && cfg.AppleDeveloperToken == "" {
+		return tokenErr
+	}
 
 	if cfg.AppleDeveloperToken == "" {
 		return fmt.Errorf("apple developer token not set.\n\nSet apple_developer_token in %s\nor run: go run ./scripts/gen-devtoken", cfgPath)
