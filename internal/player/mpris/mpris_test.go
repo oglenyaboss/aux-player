@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 func track(title, artist string) *provider.Track {
@@ -298,7 +298,7 @@ func newFakeMPRIS(t *testing.T, opts ...fakeOption) (*fakeMPRIS, bool) {
 	}
 
 	// Request a unique bus name.
-	busName := "org.mpris.MediaPlayer2.vibeztest"
+	busName := "org.mpris.MediaPlayer2.auxtest"
 	if _, err := conn.RequestName(busName, dbus.NameFlagAllowReplacement|dbus.NameFlagReplaceExisting); err != nil {
 		_ = conn.Close()
 		return nil, false
@@ -727,7 +727,7 @@ func TestNewServer_Success(t *testing.T) {
 	ctrl := &mockController{}
 	srv, err := NewServer(ctrl)
 	if err != nil {
-		// The service name "org.mpris.MediaPlayer2.vibez" might already be taken in CI.
+		// The service name "org.mpris.MediaPlayer2.aux" might already be taken in CI.
 		// Accept that as a non-fatal skip.
 		t.Skipf("NewServer failed (name may be taken): %v", err)
 	}

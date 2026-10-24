@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
 	"github.com/spf13/cobra"
 )
 

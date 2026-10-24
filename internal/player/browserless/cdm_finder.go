@@ -34,7 +34,7 @@ var widevineManifestURLs = []string{
 
 // Standard locations where libwidevinecdm.so may exist on Linux.
 // System browser locations come before the standalone cache so a stale copy in
-// ~/.cache/vibez/cdm never shadows a browser-updated CDM.
+// ~/.cache/aux/cdm never shadows a browser-updated CDM.
 func candidatePaths() []string {
 	home, _ := os.UserHomeDir()
 	var paths []string
@@ -55,10 +55,10 @@ func candidatePaths() []string {
 		"/opt/google/chrome-unstable/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
 		"/usr/lib/chromium/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
 		"/usr/lib/chromium-browser/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
-		filepath.Join(home, ".cache", "vibez", "chrome", "opt", "google", "chrome", "WidevineCdm", "_platform_specific", "linux_x64", "libwidevinecdm.so"),
+		filepath.Join(home, ".cache", "aux", "chrome", "opt", "google", "chrome", "WidevineCdm", "_platform_specific", "linux_x64", "libwidevinecdm.so"),
 		"/usr/lib/firefox/gmp-widevinecdm/system-installed/libwidevinecdm.so",
 		"/var/lib/flatpak/app/org.chromium.Chromium/current/active/files/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
-		filepath.Join(home, ".cache", "vibez", "cdm", "libwidevinecdm.so"),
+		filepath.Join(home, ".cache", "aux", "cdm", "libwidevinecdm.so"),
 	)
 	return paths
 }
@@ -90,7 +90,7 @@ func FindCDM() string {
 // Destination path for the cached standalone CDM library.
 func DefaultCDMPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "vibez", "cdm", "libwidevinecdm.so")
+	return filepath.Join(home, ".cache", "aux", "cdm", "libwidevinecdm.so")
 }
 
 // EnsureCDM returns an existing CDM library path from the host or user cache,
@@ -113,9 +113,9 @@ func EnsureCDM(progress ...func(string)) (string, error) {
 		return "", fmt.Errorf("failed to create cdm cache directory: %w", err)
 	}
 
-	// Check if a user placed it in ~/.config/vibez/libwidevinecdm.so
+	// Check if a user placed it in ~/.config/aux/libwidevinecdm.so
 	home, _ := os.UserHomeDir()
-	cfgPath := filepath.Join(home, ".config", "vibez", "libwidevinecdm.so")
+	cfgPath := filepath.Join(home, ".config", "aux", "libwidevinecdm.so")
 	if fi, err := os.Stat(cfgPath); err == nil && !fi.IsDir() && fi.Size() > 100000 {
 		if data, err := os.ReadFile(cfgPath); err == nil { //nolint:gosec // G304: user config path in home dir
 			if err := os.WriteFile(dest, data, 0600); err == nil { //nolint:gosec // G306: destination path inside user cache

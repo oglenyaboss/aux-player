@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	playerpkg "github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	playerpkg "github.com/oglenyaboss/aux-player/internal/player"
 )
 
 type countingPlayer struct {

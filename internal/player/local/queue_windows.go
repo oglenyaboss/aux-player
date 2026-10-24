@@ -6,8 +6,8 @@ import (
 	"math/rand/v2"
 	"slices"
 
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // queue is the play order of a local session. The TUI keeps its own copy of

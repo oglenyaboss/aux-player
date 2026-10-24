@@ -15,25 +15,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 // devToken is the Apple Music developer JWT injected at build time via -ldflags:
 //
-//	-X 'github.com/simone-vibes/vibez/internal/auth.devToken=<jwt>'
+//	-X 'github.com/oglenyaboss/aux-player/internal/auth.devToken=<jwt>'
 //
 // When empty the user must set apple_developer_token in their config file or
 // use a build configured with tokenURL.
 var devToken string //nolint:gochecknoglobals // intentionally set via ldflags
 
 // tokenURL and clientKey are injected at build time via -ldflags by release
-// builds, which fetch a short-lived developer token from the vibez token
+// builds, which fetch a short-lived developer token from the aux token
 // broker instead of embedding one:
 //
-//	-X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=https://…/v1/token'
-//	-X 'github.com/simone-vibes/vibez/internal/auth.clientKey=<shared header value>'
+//	-X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=https://…/v1/token'
+//	-X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=<shared header value>'
 //
-// The token is not secret from whoever runs vibez (MusicKit JS needs it in the
+// The token is not secret from whoever runs aux (MusicKit JS needs it in the
 // page); fetching it keeps the signing key off the binary, lets a leaked token
 // expire within days and lets the Apple key rotate without a release.
 var (
@@ -310,7 +310,7 @@ func cachePath() string {
 	if err != nil || d == "" {
 		return ""
 	}
-	return filepath.Join(d, "vibez", "devtoken.json")
+	return filepath.Join(d, "aux", "devtoken.json")
 }
 
 func readCache(path string) (cachedToken, error) {

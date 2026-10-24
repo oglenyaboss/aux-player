@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/provider/local"
+	"github.com/oglenyaboss/aux-player/internal/provider/local"
 )
 
 // noticeDir creates a temp directory holding the named empty files and returns

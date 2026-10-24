@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/gst"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/gst"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Player implements player.Player for local audio files using GStreamer.

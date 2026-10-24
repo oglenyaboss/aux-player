@@ -12,23 +12,22 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/lastfm"
-	"github.com/simone-vibes/vibez/internal/openurl"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/stage"
-	"github.com/simone-vibes/vibez/internal/tui/art"
-	"github.com/simone-vibes/vibez/internal/tui/views"
-	"github.com/simone-vibes/vibez/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/lastfm"
+	"github.com/oglenyaboss/aux-player/internal/openurl"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/tui/art"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 type stageScreen struct {
 	st      *stage.Model
 	host    *Model
-	feed    []views.VibeAITrack // mirror of the bridge's r.feed: accepted picks, then the portion's final tracks
-	open    int                 // index in feed where the open portion starts
-	out     []tea.Msg           // actions collected from OnAction, turned into commands
-	cmds    []tea.Cmd           // commands for actions that need I/O, flushed beside the messages
+	feed    []VibeAITrack // mirror of the bridge's r.feed: accepted picks, then the portion's final tracks
+	open    int           // index in feed where the open portion starts
+	out     []tea.Msg     // actions collected from OnAction, turned into commands
+	cmds    []tea.Cmd     // commands for actions that need I/O, flushed beside the messages
 	query   string
 	ticking bool
 	last    time.Time
@@ -37,6 +36,7 @@ type stageScreen struct {
 
 	initErr string // launch error the scene shows on the next tick
 	lastErr string // host error already shown in the player, so a new one toasts once
+	quit    bool   // the scene asked to leave the program; the tick chain stops
 }
 
 type stageCover struct{ key, url string }
@@ -72,7 +72,6 @@ func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 // ── adapter surface: what the agent bridge calls ──────────────────────────
 
 func (s *stageScreen) SetSize(w, h int)       {}
-func (s *stageScreen) SetStep(int)            {}
 func (s *stageScreen) SetPlaylist(string)     {}
 func (s *stageScreen) SetStream(bool)         {}
 func (s *stageScreen) SetMemory([]string)     {}
@@ -82,7 +81,6 @@ func (s *stageScreen) SetPlayed(string)       {}
 func (s *stageScreen) SetSkipped(string, int) {}
 func (s *stageScreen) Cancelled()             {}
 func (s *stageScreen) SetWorking(string)      {}
-func (s *stageScreen) Back() bool             { return false }
 func (s *stageScreen) Query() string          { return s.query }
 func (s *stageScreen) View() string           { return s.st.View() }
 
@@ -105,7 +103,7 @@ func (s *stageScreen) AddProgress(line string) {
 	s.st.Progress(line)
 }
 
-func (s *stageScreen) Ask(qs []views.VibeAIQuestion) {
+func (s *stageScreen) Ask(qs []VibeAIQuestion) {
 	cards := make([]stage.Question, len(qs))
 	for i, q := range qs {
 		cards[i] = stageQuestion(q)
@@ -113,11 +111,11 @@ func (s *stageScreen) Ask(qs []views.VibeAIQuestion) {
 	s.st.Ask(cards)
 }
 
-func (s *stageScreen) AskLater(q views.VibeAIQuestion) {
+func (s *stageScreen) AskLater(q VibeAIQuestion) {
 	s.st.AskLater(stageQuestion(q))
 }
 
-func (s *stageScreen) AddPick(t views.VibeAITrack, name string, accepted bool, reason string) {
+func (s *stageScreen) AddPick(t VibeAITrack, name string, accepted bool, reason string) {
 	s.st.Candidate(stageTrack(t, name), accepted, reason)
 	if accepted {
 		s.feed = append(s.feed, t)
@@ -127,7 +125,7 @@ func (s *stageScreen) AddPick(t views.VibeAITrack, name string, accepted bool, r
 
 // PortionDone mirrors the bridge: the open part of the feed is replaced by the
 // final tracks, the mirror index moves past them.
-func (s *stageScreen) PortionDone(tracks []views.VibeAITrack, note string) {
+func (s *stageScreen) PortionDone(tracks []VibeAITrack, note string) {
 	s.feed = append(s.feed[:s.open], tracks...)
 	s.open = len(s.feed)
 	cards := make([]stage.Track, len(tracks))
@@ -177,7 +175,7 @@ func (s *stageScreen) seekCmd(right bool) tea.Cmd {
 			pos = dur
 		}
 	}
-	h.appendLog(fmt.Sprintf("[player] seek %s %s", dir, views.FormatDuration(pos)))
+	h.appendLog(fmt.Sprintf("[player] seek %s %s", dir, FormatDuration(pos)))
 	return h.playerCmd(func(p player.Player) error { return p.Seek(pos) })
 }
 
@@ -188,26 +186,26 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.Query:
 		s.query = a.Text
 		s.feed, s.open = nil, 0
-		s.out = append(s.out, views.VibeAISubmitMsg{Text: a.Text, Fresh: true})
+		s.out = append(s.out, VibeAISubmitMsg{Text: a.Text, Fresh: true})
 	case stage.Answers:
-		s.out = append(s.out, views.VibeAIAnswersMsg{Answers: a.Raw})
+		s.out = append(s.out, VibeAIAnswersMsg{Answers: a.Raw})
 	case stage.Say:
-		s.out = append(s.out, views.VibeAISubmitMsg{Text: a.Text})
+		s.out = append(s.out, VibeAISubmitMsg{Text: a.Text})
 	case stage.LaterPick:
-		s.out = append(s.out, views.VibeAILaterMsg{Raw: strconv.Itoa(a.N)})
+		s.out = append(s.out, VibeAILaterMsg{Raw: strconv.Itoa(a.N)})
 	case stage.Rate:
 		if i, ok := s.rateTarget(); ok {
 			rating := -1
 			if a.Up {
 				rating = 1
 			}
-			s.out = append(s.out, views.VibeAIRateMsg{Index: i, Rating: rating})
+			s.out = append(s.out, VibeAIRateMsg{Index: i, Rating: rating})
 		}
 	case stage.Save:
-		s.out = append(s.out, views.VibeAIActionMsg{Action: views.VibeAISave})
+		s.out = append(s.out, VibeAIActionMsg{Action: VibeAISave})
 	case stage.Restart:
 		s.feed = s.feed[:s.open] // the bridge trims the same way on cancel
-		s.out = append(s.out, views.VibeAICancelMsg{})
+		s.out = append(s.out, VibeAICancelMsg{})
 	case stage.Settings:
 		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
 		c[1] = false
@@ -277,17 +275,15 @@ func (s *stageScreen) act(a stage.Action) {
 			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 		}
 	case stage.Quit:
-		if s.host.auxOnly {
-			// The AUX is the whole app: leaving it leaves the program.
-			s.host.vibeAINoteLeave()
-			s.host.vibeAI.close()
-			if s.host.player != nil {
-				_ = s.host.player.Close()
-			}
-			s.cmds = append(s.cmds, tea.Quit)
-			break
+		// The AUX is the whole app: leaving it leaves the program.
+		s.quit = true
+		s.ticking = false
+		s.host.vibeAINoteLeave()
+		s.host.vibeAI.close()
+		if s.host.player != nil {
+			_ = s.host.player.Close()
 		}
-		s.host.activePanel = -1
+		s.cmds = append(s.cmds, tea.Quit)
 	}
 }
 
@@ -320,7 +316,7 @@ func (s *stageScreen) rateTarget() (int, bool) {
 	if s.host.playerState.Track == nil {
 		return 0, false
 	}
-	id := views.PlaybackID(*s.host.playerState.Track)
+	id := PlaybackID(*s.host.playerState.Track)
 	for i := len(s.feed) - 1; i >= 0; i-- {
 		if s.feed[i].ID == id {
 			return i, true
@@ -352,7 +348,7 @@ func (s *stageScreen) flush() tea.Cmd {
 
 // ── helpers moved from the old views screen ───────────────────────────────
 
-func stageTrack(t views.VibeAITrack, name string) stage.Track {
+func stageTrack(t VibeAITrack, name string) stage.Track {
 	if t.ID == "" {
 		artist, title, ok := strings.Cut(name, " — ")
 		if !ok {
@@ -363,7 +359,7 @@ func stageTrack(t views.VibeAITrack, name string) stage.Track {
 	return stage.Track{ID: t.ID, Artist: t.Artist, Title: t.Title, Why: t.Why, Dur: t.Dur.Seconds()}
 }
 
-func stageQuestion(q views.VibeAIQuestion) stage.Question {
+func stageQuestion(q VibeAIQuestion) stage.Question {
 	def := questionDefault(q)
 	if q.Kind == "scale" {
 		def--
@@ -372,7 +368,7 @@ func stageQuestion(q views.VibeAIQuestion) stage.Question {
 		Left: q.Left, Right: q.Right, Steps: q.Steps, Def: def}
 }
 
-func questionDefault(q views.VibeAIQuestion) int {
+func questionDefault(q VibeAIQuestion) int {
 	if q.Kind == "scale" {
 		n, err := strconv.Atoi(q.Default)
 		if err != nil || n < 1 || n > q.Steps {
@@ -417,7 +413,7 @@ func thinkingPhrase(rest string) string {
 
 // ── covers ────────────────────────────────────────────────────────────────
 
-func (s *stageScreen) wantCover(t views.VibeAITrack) {
+func (s *stageScreen) wantCover(t VibeAITrack) {
 	if t.ArtworkURL == "" || s.covers[t.ID] {
 		return
 	}
@@ -522,7 +518,7 @@ func stageTick() tea.Cmd {
 // every 100 ms, the ticking flag keeps the chain from multiplying.
 func (m *Model) stageWake() tea.Cmd {
 	s := m.vibeAIP.m
-	if !m.vibeAIActive() || s.ticking {
+	if s.ticking {
 		return nil
 	}
 	s.ticking = true

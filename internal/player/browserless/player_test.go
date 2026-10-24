@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 func TestPlayerQueueIndexAdjustments(t *testing.T) {

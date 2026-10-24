@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Tracks is the built-in demo library shared with the demo Player.

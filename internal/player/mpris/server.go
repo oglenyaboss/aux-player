@@ -2,8 +2,8 @@
 
 package mpris
 
-// Server exports vibez as an MPRIS2 media player on the D-Bus session bus.
-// Desktop environments (GNOME, KDE, …) discover it as "vibez" in their
+// Server exports AUX as an MPRIS2 media player on the D-Bus session bus.
+// Desktop environments (GNOME, KDE, …) discover it as "AUX" in their
 // media panels and send play/pause/next/prev actions to it.
 //
 // Usage:
@@ -22,17 +22,18 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
-	"github.com/simone-vibes/vibez/internal/assets"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/assets"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 const (
-	mprisServiceName = "org.mpris.MediaPlayer2.vibez"
+	mprisServiceName = "org.mpris.MediaPlayer2.aux"
+	mprisIdentity    = "AUX"
 	mprisObjectPath  = dbus.ObjectPath("/org/mpris/MediaPlayer2")
 	mprisRootIface   = "org.mpris.MediaPlayer2"
 	mprisPlayerIface = "org.mpris.MediaPlayer2.Player"
-	noTrackPath      = dbus.ObjectPath("/org/vibez/track/none")
+	noTrackPath      = dbus.ObjectPath("/org/aux/track/none")
 )
 
 // Controller is the subset of player.Player that the MPRIS server delegates to.
@@ -46,7 +47,7 @@ type Controller interface {
 	SetShuffle(on bool) error
 }
 
-// Server is the MPRIS D-Bus server for vibez. Create with NewServer.
+// Server is the MPRIS D-Bus server for AUX. Create with NewServer.
 type Server struct {
 	conn  *dbus.Conn
 	props *properties
@@ -100,7 +101,7 @@ func trackObjectPath(track *provider.Track) dbus.ObjectPath {
 	} else {
 		sum = sha256.Sum256([]byte(identity))
 	}
-	path := dbus.ObjectPath(fmt.Sprintf("/org/vibez/track/%s_%x", namespace, sum))
+	path := dbus.ObjectPath(fmt.Sprintf("/org/aux/track/%s_%x", namespace, sum))
 	if !path.IsValid() {
 		panic(fmt.Sprintf("mpris: generated invalid track path %q", path))
 	}
@@ -167,7 +168,7 @@ func (p *playerObj) openUri(_ string) *dbus.Error { return nil }
 
 // ── Constructor ───────────────────────────────────────────────────────────
 
-// NewServer registers org.mpris.MediaPlayer2.vibez on the session bus and
+// NewServer registers org.mpris.MediaPlayer2.aux on the session bus and
 // returns the server. Call Close when done.
 func NewServer(ctrl Controller) (*Server, error) {
 	conn, err := dbus.SessionBusPrivate()
@@ -217,7 +218,7 @@ func NewServer(ctrl Controller) (*Server, error) {
 			"CanQuit":             ro(false),
 			"CanRaise":            ro(false),
 			"HasTrackList":        ro(false),
-			"Identity":            ro("vibez"),
+			"Identity":            ro(mprisIdentity),
 			"DesktopEntry":        ro(assets.AppID),
 			"SupportedUriSchemes": ro([]string{}),
 			"SupportedMimeTypes":  ro([]string{}),

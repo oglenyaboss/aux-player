@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 // minimalTemplate is a no-op login page template used in handler tests.

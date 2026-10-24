@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // mediaTypes are the Content-Types served for the formats the provider

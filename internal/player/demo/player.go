@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
-	demodp "github.com/simone-vibes/vibez/internal/provider/demo"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	demodp "github.com/oglenyaboss/aux-player/internal/provider/demo"
 )
 
 // tracks is the local alias for the shared demo track list.

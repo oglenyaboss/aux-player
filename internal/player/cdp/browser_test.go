@@ -186,8 +186,8 @@ func TestBaseDir_UsesXDGCacheHome(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", tmp)
 	got := baseDir()
-	if got != filepath.Join(tmp, "vibez") {
-		t.Errorf("baseDir() = %q, want %q", got, filepath.Join(tmp, "vibez"))
+	if got != filepath.Join(tmp, "aux") {
+		t.Errorf("baseDir() = %q, want %q", got, filepath.Join(tmp, "aux"))
 	}
 }
 

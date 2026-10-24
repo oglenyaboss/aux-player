@@ -7,7 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/tui"
 )
 
 func TestAppleLoginLoopRetries(t *testing.T) {

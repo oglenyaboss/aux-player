@@ -39,12 +39,12 @@ const DeveloperTokenPrefix = "Developer token rejected"
 
 // DeveloperTokenStatus is a one-line summary for a status bar, used when
 // nothing more specific about the fix is known.
-const DeveloperTokenStatus = DeveloperTokenPrefix + " - update vibez to continue"
+const DeveloperTokenStatus = DeveloperTokenPrefix + " - update aux to continue"
 
 // DeveloperTokenHelp is the same failure explained where there is room for it.
 //
 //nolint:gosec // G101: prose naming a config key, not a credential
-const DeveloperTokenHelp = `Apple Music rejected vibez's developer token, which is a problem with this
+const DeveloperTokenHelp = `Apple Music rejected AUX's developer token, which is a problem with this
 build rather than with your account. Your saved session has been kept.
 Updating to a newer release restores access; a source build can instead set
 apple_developer_token in the config.`

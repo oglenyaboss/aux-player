@@ -14,11 +14,11 @@ func InstallIcon() string {
 	if err != nil {
 		return ""
 	}
-	dir := filepath.Join(cache, "vibez")
+	dir := filepath.Join(cache, "aux")
 	if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec
 		return ""
 	}
-	dst := filepath.Join(dir, "vibez.svg")
+	dst := filepath.Join(dir, "aux.svg")
 	if err := os.WriteFile(dst, Icon, 0o644); err != nil { //nolint:gosec
 		return ""
 	}

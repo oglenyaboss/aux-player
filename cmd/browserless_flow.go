@@ -7,14 +7,14 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player/browserless"
-	"github.com/simone-vibes/vibez/internal/player/mpris"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
-	"github.com/simone-vibes/vibez/internal/tui"
-	"github.com/simone-vibes/vibez/internal/updater"
-	"github.com/simone-vibes/vibez/internal/version"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless"
+	"github.com/oglenyaboss/aux-player/internal/player/mpris"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/updater"
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int) error {

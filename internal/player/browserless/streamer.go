@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player/browserless/cdm"
-	"github.com/simone-vibes/vibez/internal/player/browserless/license"
-	"github.com/simone-vibes/vibez/internal/player/browserless/mp4"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/cdm"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/license"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/mp4"
 )
 
 type segmentRef struct {

@@ -84,6 +84,7 @@ func removeLegacy(rel ...string) {
 // operations are best-effort; errors are silently ignored.
 func InstallIcon() string {
 	removeLegacy("icons", "hicolor", "scalable", "apps", "vibez.svg")
+	removeLegacy("icons", "hicolor", "scalable", "apps", "io.github.simonepelosi.vibez.svg")
 	if p := installedIcon(); p != "" {
 		return p
 	}
@@ -113,6 +114,7 @@ func InstallIcon() string {
 // operations are best-effort; errors are silently ignored.
 func InstallDesktopEntry() {
 	removeLegacy("applications", "vibez.desktop")
+	removeLegacy("applications", "io.github.simonepelosi.vibez.desktop")
 	if installedDesktopEntry() {
 		return
 	}

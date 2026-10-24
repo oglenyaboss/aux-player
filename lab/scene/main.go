@@ -17,7 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/simone-vibes/vibez/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
 type tickMsg time.Time

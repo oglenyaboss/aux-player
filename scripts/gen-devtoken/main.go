@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 func main() {

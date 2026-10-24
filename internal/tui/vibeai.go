@@ -10,29 +10,16 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
-	"github.com/simone-vibes/vibez/internal/stage"
-	"github.com/simone-vibes/vibez/internal/tui/views"
-	"github.com/simone-vibes/vibez/internal/vibeai"
-	"github.com/simone-vibes/vibez/internal/vibeai/llm"
-	"github.com/simone-vibes/vibez/internal/vibeai/memory"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/vibeai"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 type vibeAIPanel struct{ m *stageScreen }
-
-func (p *vibeAIPanel) NavKey() string   { return "v" }
-func (p *vibeAIPanel) NavLabel() string { return "vibe" }
-func (p *vibeAIPanel) SetSize(w, h int) { p.m.SetSize(w, h) }
-func (p *vibeAIPanel) Update(msg tea.KeyPressMsg) tea.Cmd {
-	if k := msg.String(); k == "left" || k == "right" {
-		return p.m.seekCmd(k == "right")
-	}
-	return nil
-}
-func (p *vibeAIPanel) View() string { return p.m.View() }
-func (p *vibeAIPanel) Back() bool   { return p.m.Back() }
 
 type vibeAIProgressMsg struct {
 	gen  int
@@ -139,7 +126,7 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	if err != nil {
 		cacheDir = os.TempDir()
 	}
-	cacheDir = filepath.Join(cacheDir, "vibez", "vibe")
+	cacheDir = filepath.Join(cacheDir, "aux", "vibe")
 	memDir := cacheDir
 	if p, err := config.ConfigPath(""); err == nil {
 		memDir = filepath.Dir(p)
@@ -275,8 +262,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case stageTickMsg:
 		now := time.Time(msg)
-		if !m.vibeAIActive() {
-			v.ticking = false
+		if v.quit {
 			return nil
 		}
 		dt := now.Sub(v.last)
@@ -294,14 +280,14 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 				v.initErr = ""
 			}
 		}
-		if m.auxOnly && m.errMsg != v.lastErr {
+		if m.errMsg != v.lastErr {
 			v.lastErr = m.errMsg
 			if m.errMsg != "" && v.st.Phase() == stage.PhPlay {
 				v.st.Toast(m.errMsg)
 			}
 		}
 		if m.playerState.Track != nil {
-			v.st.Now(views.PlaybackID(*m.playerState.Track), m.playerState.Position.Seconds(), m.playerState.Playing)
+			v.st.Now(PlaybackID(*m.playerState.Track), m.playerState.Position.Seconds(), m.playerState.Playing)
 		}
 		v.st.Step(dt.Seconds())
 		return tea.Batch(v.flush(), v.coverCmds(m.artHTTP), stageTick())
@@ -365,61 +351,57 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		if msg.gen != r.gen || !r.busy {
 			return waitVibeAI(r.events)
 		}
-		qs := make([]views.VibeAIQuestion, len(msg.qs))
+		qs := make([]VibeAIQuestion, len(msg.qs))
 		for i, q := range msg.qs {
 			qs[i] = vibeAIViewQuestion(q)
 		}
 		v.Ask(qs)
-		if !m.vibeAIActive() {
-			m.errMsg = "✦ vibe спрашивает — нажми v"
-			m.errExpiry = time.Now().Add(10 * time.Second)
-		}
 		return waitVibeAI(r.events)
 
-	case views.VibeAIAnswersMsg:
+	case VibeAIAnswersMsg:
 		select {
 		case r.answers <- msg.Answers:
 		default:
 		}
 
-	case views.VibeAILaterMsg:
+	case VibeAILaterMsg:
 		if r.later != nil {
 			r.laterAnswers = append(r.laterAnswers, vibeaiLaterAnswer{q: *r.later, raw: msg.Raw})
 			r.later = nil
 			m.appendLog("[vibe] later answer " + msg.Raw)
 		}
 
-	case views.VibeAISubmitMsg:
+	case VibeAISubmitMsg:
 		m.vibeAIP.m.SetWorking("")
 		return m.vibeAITurnCmd(msg.Text, msg.Fresh, false)
 
-	case views.VibeAICancelMsg:
+	case VibeAICancelMsg:
 		m.cancelVibeAI()
 
 	case vibeAIDoneMsg:
 		return tea.Batch(waitVibeAI(r.events), m.vibeAIDone(msg))
 
-	case views.VibeAIActionMsg:
+	case VibeAIActionMsg:
 		if len(r.feed) == 0 {
 			return nil
 		}
 		switch msg.Action {
-		case views.VibeAIPlay:
+		case VibeAIPlay:
 			if msg.Index < 0 || msg.Index >= len(r.feed) {
 				return nil
 			}
 			return m.vibeAIPlay(r.feed[msg.Index:])
-		case views.VibeAIQueue:
+		case VibeAIQueue:
 			v.SetNotice(fmt.Sprintf(stage.Tr("+%d в очередь", "+%d queued"), len(r.tracks)))
 			return m.vibeAIAppend(r.tracks)
-		case views.VibeAISave:
+		case VibeAISave:
 			if r.savedPortion == r.portion {
 				v.SetNotice(stage.Tr("эта порция уже в ♫ ", "this batch is already in ♫ ") + r.playlistName)
 				return nil
 			}
 			v.SetNotice(stage.Tr("сохраняю в Apple Music…", "saving to Apple Music…"))
 			return m.vibeAISaveCmd()
-		case views.VibeAIStream:
+		case VibeAIStream:
 			r.stream = !r.stream
 			r.streamForID = ""
 			v.SetStream(r.stream)
@@ -430,7 +412,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			}
 		}
 
-	case views.VibeAIRateMsg:
+	case VibeAIRateMsg:
 		if msg.Index < 0 || msg.Index >= len(r.feed) {
 			return nil
 		}
@@ -533,13 +515,13 @@ func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID {
 		return nil
 	}
-	if _, ok := r.served[views.PlaybackID(*s.Track)]; !ok {
+	if _, ok := r.served[PlaybackID(*s.Track)]; !ok {
 		return nil
 	}
-	pid := views.PlaybackID(*s.Track)
+	pid := PlaybackID(*s.Track)
 	idx := -1
 	for i := len(m.queueTracks) - 1; i >= 0; i-- {
-		if views.PlaybackID(m.queueTracks[i]) == pid {
+		if PlaybackID(m.queueTracks[i]) == pid {
 			idx = i
 			break
 		}
@@ -576,7 +558,7 @@ func (m *Model) vibeAIOnState(s player.State) {
 		return
 	}
 	r := m.vibeAI
-	id := views.PlaybackID(*s.Track)
+	id := PlaybackID(*s.Track)
 	changed := id != r.heardID
 	if changed {
 		m.vibeAINoteLeave()
@@ -623,7 +605,7 @@ func (m *Model) vibeAIPlay(ts []vibeai.Track) tea.Cmd {
 	tracks := vibeAIProviderTracks(ts)
 	ids := make([]string, len(tracks))
 	for i, t := range tracks {
-		ids[i] = views.PlaybackID(t)
+		ids[i] = PlaybackID(t)
 	}
 	m.appendLog(fmt.Sprintf("[vibe] play %d tracks from %s — %s", len(tracks), tracks[0].Artist, tracks[0].Title))
 	m.queueTracks = tracks
@@ -633,7 +615,6 @@ func (m *Model) vibeAIPlay(ts []vibeai.Track) tea.Cmd {
 	m.playerState.Loading = true
 	m.playerState.Playing = false
 	m.playerState.Position = 0
-	m.queue.SetTracks(m.queueTracks)
 	m.vibeAI.streamForID = ""
 	if m.player == nil {
 		m.vibeAI.pendingIDs = ids
@@ -650,11 +631,10 @@ func (m *Model) vibeAIAppend(ts []vibeai.Track) tea.Cmd {
 	tracks := vibeAIProviderTracks(ts)
 	ids := make([]string, len(tracks))
 	for i, t := range tracks {
-		ids[i] = views.PlaybackID(t)
+		ids[i] = PlaybackID(t)
 	}
 	m.queueTracks = append(m.queueTracks, tracks...)
 	m.queueIDs = append(m.queueIDs, ids...)
-	m.queue.SetTracks(m.queueTracks)
 	if m.player == nil {
 		m.vibeAI.pendingIDs = append(m.vibeAI.pendingIDs, ids...)
 		return nil
@@ -705,21 +685,21 @@ func vibeAIPlaylistName(query string) string {
 	return "Vibes AI · " + string(q)
 }
 
-func vibeAIViewTrack(t vibeai.Track) views.VibeAITrack {
-	return views.VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Why: t.Why, Favorite: t.Favorite,
+func vibeAIViewTrack(t vibeai.Track) VibeAITrack {
+	return VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Why: t.Why, Favorite: t.Favorite,
 		ArtworkURL: t.ArtworkURL, Dur: time.Duration(t.DurationMs) * time.Millisecond}
 }
 
-func vibeAIViewTracks(ts []vibeai.Track) []views.VibeAITrack {
-	out := make([]views.VibeAITrack, len(ts))
+func vibeAIViewTracks(ts []vibeai.Track) []VibeAITrack {
+	out := make([]VibeAITrack, len(ts))
 	for i, t := range ts {
 		out[i] = vibeAIViewTrack(t)
 	}
 	return out
 }
 
-func vibeAIViewQuestion(q vibeai.Question) views.VibeAIQuestion {
-	return views.VibeAIQuestion{Question: q.Question, Kind: q.Kind, Options: q.Options, Left: q.Left, Right: q.Right, Steps: q.Steps, Default: q.Default}
+func vibeAIViewQuestion(q vibeai.Question) VibeAIQuestion {
+	return VibeAIQuestion{Question: q.Question, Kind: q.Kind, Options: q.Options, Left: q.Left, Right: q.Right, Steps: q.Steps, Default: q.Default}
 }
 
 func vibeAIMemoryLines(cfg *config.Config) []string {
@@ -750,8 +730,4 @@ func vibeAIProviderTracks(ts []vibeai.Track) []provider.Track {
 		}
 	}
 	return out
-}
-
-func (m *Model) vibeAIActive() bool {
-	return m.activePanel >= 0 && m.panels[m.activePanel] == m.vibeAIP
 }

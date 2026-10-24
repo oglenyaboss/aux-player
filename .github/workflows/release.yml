@@ -91,9 +91,9 @@ jobs:
           # extra_files globs quietly when nothing matches, so without this the
           # release would publish with no macOS binaries and no error anywhere.
           for arch in amd64 arm64; do
-            f="dist-darwin/vibez_darwin_${arch}.tar.gz"
+            f="dist-darwin/aux_darwin_${arch}.tar.gz"
             [ -s "$f" ] || { echo "missing $f"; exit 1; }
-            tar tzf "$f" | grep -qx vibez || { echo "$f contains no vibez binary"; exit 1; }
+            tar tzf "$f" | grep -qx aux || { echo "$f contains no aux binary"; exit 1; }
           done
           ls -l dist-darwin
 

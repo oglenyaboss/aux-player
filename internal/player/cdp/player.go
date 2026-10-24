@@ -13,9 +13,9 @@ import (
 
 	playwright "github.com/mxschmitt/playwright-go"
 
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/web"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/web"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Player drives Apple Music playback through a Playwright-managed Chrome

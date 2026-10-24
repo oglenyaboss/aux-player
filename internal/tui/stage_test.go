@@ -8,10 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simone-vibes/vibez/internal/provider"
-	"github.com/simone-vibes/vibez/internal/stage"
-	"github.com/simone-vibes/vibez/internal/tui/views"
-	"github.com/simone-vibes/vibez/internal/vibeai"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/vibeai"
 )
 
 func stageKeyMsg(k string) tea.KeyPressMsg {
@@ -67,9 +66,7 @@ func stageIntoPlayer(m *Model) {
 
 func TestStageFullScreen(t *testing.T) {
 	m := newModel(nil)
-	m.introStep = introDone // skip the startup animation
 	m.width, m.height = 100, 30
-	press(m, "v")
 	lines := strings.Split(m.View().Content, "\n")
 	if len(lines) != 30 {
 		t.Fatalf("frame has %d lines, want 30", len(lines))
@@ -83,13 +80,12 @@ func TestStageFullScreen(t *testing.T) {
 
 func TestStageEscStays(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
-	if !m.vibeAIActive() {
-		t.Fatal("v must open the aux screen")
+	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhIntro {
+		t.Fatalf("phase = %d, want the aux screen open at intro", phase)
 	}
 	press(m, "esc")
-	if !m.vibeAIActive() {
-		t.Fatal("esc on the input must not close the aux screen")
+	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhIntro {
+		t.Fatalf("phase = %d, want intro: esc on the input must not close the aux screen", phase)
 	}
 }
 
@@ -109,7 +105,7 @@ func TestStageRateIndex(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("+ must send the rating")
 	}
-	if got := cmd(); got != (views.VibeAIRateMsg{Index: 1, Rating: 1}) {
+	if got := cmd(); got != (VibeAIRateMsg{Index: 1, Rating: 1}) {
 		t.Fatalf("got %#v, want rate index 1 (+1)", got)
 	}
 }
@@ -125,7 +121,6 @@ func TestStageRateNoTrack(t *testing.T) {
 
 func TestStageProgressPhrase(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	press(m, "enter") // the example query launches the scene
 	m.vibeAIP.m.st.Step(2.5)
 	if m.vibeAIP.m.st.Phase() != stage.PhScan {
@@ -140,7 +135,6 @@ func TestStageProgressPhrase(t *testing.T) {
 
 func TestStageCoverOnce(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	tr := vibeAIViewTrack(vibeai.Track{ID: "1", Artist: "A", Title: "One", ArtworkURL: "https://x/{w}x{h}.jpg"})
 	m.vibeAIP.m.AddPick(tr, "A — One", true, "")
 	m.vibeAIP.m.AddPick(tr, "A — One", true, "")
@@ -155,7 +149,6 @@ func TestStageCoverOnce(t *testing.T) {
 
 func TestStageTickStops(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	if m.stageWake() == nil {
 		t.Fatal("opening the screen must start the tick chain")
 	}
@@ -163,8 +156,8 @@ func TestStageTickStops(t *testing.T) {
 		t.Fatal("a second wake must not duplicate the chain")
 	}
 	m.vibeAIP.m.act(stage.Quit{})
-	if m.vibeAIActive() {
-		t.Fatal("quit must close the screen")
+	if m.vibeAIP.m.ticking {
+		t.Fatal("quit must stop the screen tick chain")
 	}
 	if cmd := m.handleVibeAIMsg(stageTickMsg(time.Now())); cmd != nil {
 		t.Errorf("a tick with the screen closed must end the chain, got %v", cmd)
@@ -176,7 +169,6 @@ func TestStageTickStops(t *testing.T) {
 
 func TestStageTickFlushesAnswers(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	vibeAITypeText(m, "первый запрос")
 	m.vibeAIP.m.st.Step(2.5)
 	m.handleVibeAIMsg(vibeAIAskMsg{gen: m.vibeAI.gen, qs: []vibeai.Question{{Question: "что по духу?", Options: []string{"новое", "знакомое"}}}})
@@ -191,11 +183,11 @@ func TestStageTickFlushesAnswers(t *testing.T) {
 	found := false
 	for i := 0; i < 40 && !found; i++ {
 		for _, msg := range stageMsgs(t, m.handleVibeAIMsg(stageTickMsg(base.Add(time.Duration(i)*33*time.Millisecond)))) {
-			ans, ok := msg.(views.VibeAIAnswersMsg)
+			ans, ok := msg.(VibeAIAnswersMsg)
 			if !ok {
 				continue
 			}
-			want := views.VibeAIAnswersMsg{Answers: []string{"1"}}
+			want := VibeAIAnswersMsg{Answers: []string{"1"}}
 			if !reflect.DeepEqual(ans, want) {
 				t.Fatalf("answers = %#v, want %#v", ans, want)
 			}
@@ -210,11 +202,10 @@ func TestStageTickFlushesAnswers(t *testing.T) {
 func TestStageSeekPassesThrough(t *testing.T) {
 	plyr := newMockPlayer()
 	m := newModel(plyr)
-	press(m, "v")
 	vibeAITypeText(m, "первый запрос")
 	m.playerState.Track = &provider.Track{ID: "1"}
 	m.playerState.Position = 30 * time.Second
-	cmd := m.handleNormalKey(stageKeyMsg("left"), "left")
+	cmd := press(m, "left")
 	if cmd == nil {
 		t.Fatal("left: the scene declines it, the host must keep seeking")
 	}
@@ -222,7 +213,7 @@ func TestStageSeekPassesThrough(t *testing.T) {
 	if !plyr.seekCalled || plyr.seekPos != 20*time.Second {
 		t.Errorf("seek: called=%v pos=%v, want 20s back", plyr.seekCalled, plyr.seekPos)
 	}
-	cmd = m.handleNormalKey(stageKeyMsg("right"), "right")
+	cmd = press(m, "right")
 	if cmd == nil {
 		t.Fatal("right: the scene declines it, the host must keep seeking")
 	}
@@ -245,7 +236,7 @@ func TestStagePlayActions(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("/ reply msgs = %#v, want one", msgs)
 	}
-	say, ok := msgs[0].(views.VibeAISubmitMsg)
+	say, ok := msgs[0].(VibeAISubmitMsg)
 	if !ok || say.Text != "меньше русского" || say.Fresh {
 		t.Fatalf("/ reply = %#v, want a non-fresh submit", say)
 	}
@@ -254,7 +245,7 @@ func TestStagePlayActions(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("toast answer msgs = %#v, want one", msgs)
 	}
-	later, ok := msgs[0].(views.VibeAILaterMsg)
+	later, ok := msgs[0].(VibeAILaterMsg)
 	if !ok || later.Raw != "1" {
 		t.Fatalf("toast answer = %#v, want raw 1", later)
 	}
@@ -262,11 +253,11 @@ func TestStagePlayActions(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("save msgs = %#v, want one", msgs)
 	}
-	if msgs[0] != (views.VibeAIActionMsg{Action: views.VibeAISave}) {
+	if msgs[0] != (VibeAIActionMsg{Action: VibeAISave}) {
 		t.Fatalf("save = %#v", msgs[0])
 	}
 	msgs = stageMsgs(t, press(m, "r"))
-	if len(msgs) != 1 || msgs[0] != (views.VibeAICancelMsg{}) {
+	if len(msgs) != 1 || msgs[0] != (VibeAICancelMsg{}) {
 		t.Fatalf("restart = %#v", msgs)
 	}
 	if m.vibeAIP.m.st.Phase() != stage.PhIntro {

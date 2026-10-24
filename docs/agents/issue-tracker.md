@@ -12,7 +12,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
-The repo is `oglenyaboss/vibezai` (set as `gh repo set-default`). `git remote` here also points at `upstream` (`simonepelosi/vibez`); never create issues or PRs there.
+The repo is `oglenyaboss/aux-player` (set as `gh repo set-default`). `git remote` here also points at `upstream` (`simonepelosi/vibez`); never create issues or PRs there.
 
 ## Pull requests as a triage surface
 

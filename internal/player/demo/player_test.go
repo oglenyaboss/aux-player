@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/demo"
-	demodp "github.com/simone-vibes/vibez/internal/provider/demo"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/demo"
+	demodp "github.com/oglenyaboss/aux-player/internal/provider/demo"
 )
 
 // newPlayer creates a new demo Player and registers cleanup to close it.

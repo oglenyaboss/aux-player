@@ -9,10 +9,19 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // isSeek distinguishes a deliberate seek from normal playback progression.
+
+func TestServiceIdentity(t *testing.T) {
+	if mprisServiceName != "org.mpris.MediaPlayer2.aux" {
+		t.Errorf("mprisServiceName = %q, want %q", mprisServiceName, "org.mpris.MediaPlayer2.aux")
+	}
+	if mprisIdentity != "AUX" {
+		t.Errorf("mprisIdentity = %q, want %q", mprisIdentity, "AUX")
+	}
+}
 
 func TestIsSeek_NoPriorSample(t *testing.T) {
 	// A zero lastAt means we have never sampled a position yet.
@@ -75,9 +84,9 @@ func TestTrackObjectPath(t *testing.T) {
 		wantPrefix string
 	}{
 		{name: "nil track uses no-track path"},
-		{name: "primary ID", track: &provider.Track{ID: "12345"}, wantPrefix: "/org/vibez/track/id_"},
-		{name: "catalog ID", track: &provider.Track{CatalogID: "67890"}, wantPrefix: "/org/vibez/track/catalog_"},
-		{name: "ID with path separators", track: &provider.Track{ID: "i.track/1"}, wantPrefix: "/org/vibez/track/id_"},
+		{name: "primary ID", track: &provider.Track{ID: "12345"}, wantPrefix: "/org/aux/track/id_"},
+		{name: "catalog ID", track: &provider.Track{CatalogID: "67890"}, wantPrefix: "/org/aux/track/catalog_"},
+		{name: "ID with path separators", track: &provider.Track{ID: "i.track/1"}, wantPrefix: "/org/aux/track/id_"},
 	}
 
 	for _, test := range tests {

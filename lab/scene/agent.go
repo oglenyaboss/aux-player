@@ -3,7 +3,7 @@ package main
 import (
 	"math/rand"
 
-	"github.com/simone-vibes/vibez/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
 // scene owns the screen and the fake agent pretending to be a picker.

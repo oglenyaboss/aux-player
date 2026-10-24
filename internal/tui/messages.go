@@ -1,40 +1,36 @@
 package tui
 
 import (
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Options configures optional TUI features at startup.
 type Options struct {
-	// AUXOnly runs vibez as the AUX screen alone: no vibez intro, no panels, the scene owns the terminal.
-	AUXOnly bool
 	// AppleLogin, when set, holds the Apple Music sign-in until the onboarding asks for it.
 	AppleLogin chan<- struct{}
 	// LastfmConnected, when set, gets a signal each time the onboarding connects Last.fm,
 	// so the scrobbler can start without a restart.
 	LastfmConnected chan<- struct{}
-	// MemProfiling enables live RSS display (vibez + helper) in the header.
-	// Activate with --mem-profiling on the command line.
-	MemProfiling bool
 	// IconPath is the absolute path of the installed app icon (may be empty).
 	IconPath string
-	// Backend is a human-readable description of the audio backend, logged in
-	// the debug view on startup. Leave empty if the engine starts asynchronously
-	// (CDP path uses EngineReadyMsg.Backend instead).
+	// Backend is a human-readable description of the audio backend, logged on
+	// startup. Leave empty if the engine starts asynchronously (CDP path uses
+	// EngineReadyMsg.Backend instead).
 	Backend string
-	// InitialTracks pre-populates the queue panel on launch (used by local mode).
+	// InitialTracks pre-populates the queue on launch (used by local mode).
 	InitialTracks []provider.Track
 	// ScanNotice summarises what a local-mode directory scan left out. It is
-	// recorded in the debug log on startup, and shown in the status bar when
-	// the scan produced no tracks at all, because an empty library otherwise
-	// looks identical to a mistyped path.
+	// recorded in the debug log on startup, and shown as an error when the
+	// scan produced no tracks at all, because an empty library otherwise looks
+	// identical to a mistyped path.
 	ScanNotice string
 	// InitialLogs pre-populates the debug log on launch (e.g. broker token fetch logs).
 	InitialLogs []string
 }
 
-// InitStatusMsg updates the status text shown on the loading screen.
+// InitStatusMsg updates the loading status; the AUX scene has no loading screen
+// of its own, so the message is accepted and ignored.
 type InitStatusMsg string
 
 // EngineReadyMsg is sent when the audio engine and provider are both ready.
@@ -55,21 +51,7 @@ type AppleLoginMsg struct{ Err error }
 // The model handles it by quitting cleanly so the caller can exec the new binary.
 type RestartMsg struct{}
 
-// DebugLogMsg appends a line to the TUI debug log (visible via :debug-logs).
+// DebugLogMsg appends a line to the TUI debug log.
 // Use this to surface background-goroutine events (e.g. scrobbling) without
 // printing to stderr.
 type DebugLogMsg string
-
-// playlistsForPickerMsg is the response to a library-playlists fetch for the
-// playlist picker modal.
-type playlistsForPickerMsg struct {
-	playlists []provider.Playlist
-	err       error
-	gen       int // stale-response guard; discarded if != m.playlistPickerGen
-}
-
-// trackAddedToPlaylistMsg is the response to an AddToPlaylist call.
-type trackAddedToPlaylistMsg struct {
-	playlistName string
-	err          error
-}

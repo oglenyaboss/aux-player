@@ -16,8 +16,8 @@ import (
 
 	_ "embed"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/openurl"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/openurl"
 )
 
 //go:embed web/login.html
@@ -53,7 +53,7 @@ To get one:
   2. Create a key with "MusicKit" capability
   3. Download the .p8 key file
   4. Run: go run ./scripts/gen-devtoken with the required env vars
-  5. Set apple_developer_token in the vibez config file (see vibez --help for its platform path)`)
+  5. Set apple_developer_token in the aux config file (see aux --help for its platform path)`)
 	}
 
 	tokenCh := make(chan string, 1)

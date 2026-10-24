@@ -1,17 +1,17 @@
 #!/usr/bin/env sh
-# vibez installer — https://github.com/simonepelosi/vibez
+# AUX installer — https://github.com/oglenyaboss/aux-player
 #
 # Usage (review before running!):
 #   curl --proto '=https' --tlsv1.2 -sSf \
-#     https://raw.githubusercontent.com/simonepelosi/vibez/main/scripts/install.sh | sh
+#     https://raw.githubusercontent.com/oglenyaboss/aux-player/main/scripts/install.sh | sh
 #
 # Override the install directory:
 #   VIBEZ_INSTALL_DIR=/usr/local/bin curl ... | sh
 
 set -eu
 
-REPO="simonepelosi/vibez"
-BIN="vibez"
+REPO="oglenyaboss/aux-player"
+BIN="aux"
 INSTALL_DIR="${VIBEZ_INSTALL_DIR:-${HOME}/.local/bin}"
 
 # ── colours ───────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ fetch() {
 # ── header ────────────────────────────────────────────────────────────────────
 
 printf '\n'
-printf '%s    ♪  vibez installer%s\n' "${BOLD}${PURPLE}" "${RESET}"
+printf '%s    ♪  AUX installer%s\n' "${BOLD}${PURPLE}" "${RESET}"
 printf '%s    ────────────────────────────────────────%s\n' "${DIM}" "${RESET}"
 printf '\n'
 info "https://github.com/${REPO}"
@@ -95,13 +95,13 @@ case "${OS}" in
     linux)
         PLATFORM="Linux ${ARCH_RAW}"
         [ "${ARCH}" = "amd64" ] || \
-            die "no prebuilt Linux/${ARCH} binary is published yet — build from source: git clone https://github.com/simonepelosi/vibez && cd vibez && make build (arm64 full-track playback needs a system Chromium + Widevine CDM installed)"
+            die "no prebuilt Linux/${ARCH} binary is published yet — build from source: git clone https://github.com/oglenyaboss/aux-player && cd aux-player && make build (arm64 full-track playback needs a system Chromium + Widevine CDM installed)"
         ;;
     darwin)
         PLATFORM="macOS ${ARCH_RAW}"
         ;;
     *)
-        die "vibez supports Linux and macOS (got: ${OS})"
+        die "AUX supports Linux and macOS (got: ${OS})"
         ;;
 esac
 
@@ -128,14 +128,14 @@ success "Latest: ${VERSION}"
 
 CURRENT_VERSION=""
 if [ -x "${INSTALL_DIR}/${BIN}" ]; then
-    # "vibez version" prints "vibez <tag>", e.g. "vibez v0.1.0"
+    # "aux version" prints "aux <tag>", e.g. "aux v0.1.0"
     CURRENT_VERSION="$("${INSTALL_DIR}/${BIN}" version 2>/dev/null | awk '{print $2}' || printf '')"
 fi
 
 if [ -n "${CURRENT_VERSION}" ]; then
     if [ "${CURRENT_VERSION}" = "${VERSION}" ]; then
         printf '\n'
-        printf '%s    ✓  vibez %s is already up to date.%s\n\n' \
+        printf '%s    ✓  AUX %s is already up to date.%s\n\n' \
             "${BOLD}${GREEN}" "${VERSION}" "${RESET}"
         exit 0
     fi
@@ -205,7 +205,7 @@ if [ "${OS}" = "linux" ]; then
     step "Installing desktop integration…"
 
     RAW_BASE="https://raw.githubusercontent.com/${REPO}/main"
-    APP_ID="io.github.simonepelosi.vibez"
+    APP_ID="io.github.oglenyaboss.aux"
 
     DESKTOP_DIR="${HOME}/.local/share/applications"
     ICON_DIR="${HOME}/.local/share/icons/hicolor/512x512/apps"
@@ -226,7 +226,7 @@ fi
 
 # ── Chrome check (macOS) ──────────────────────────────────────────────────────
 
-# vibez plays full tracks through an installed Google Chrome on macOS; it never
+# AUX plays full tracks through an installed Google Chrome on macOS; it never
 # downloads one. Mirrors the lookup order in internal/player/cdp/browser_darwin.go
 # so the installer warns about exactly what the player would fail to find.
 if [ "${OS}" = "darwin" ]; then
@@ -289,7 +289,7 @@ case ":${PATH}:" in
         # Append only if the line is not already present.
         if ! grep -qF "${EXPORT_LINE}" "${PROFILE}" 2>/dev/null; then
             mkdir -p "$(dirname "${PROFILE}")"
-            printf '\n# Added by vibez installer\n%s\n' "${EXPORT_LINE}" >> "${PROFILE}"
+            printf '\n# Added by AUX installer\n%s\n' "${EXPORT_LINE}" >> "${PROFILE}"
             info "Added to ${PROFILE}"
         fi
 
@@ -302,8 +302,8 @@ esac
 # ── done ──────────────────────────────────────────────────────────────────────
 
 printf '\n'
-printf '%s    ♪  vibez %s installed successfully!%s\n' "${BOLD}${GREEN}" "${VERSION}" "${RESET}"
+printf '%s    ♪  AUX %s installed successfully!%s\n' "${BOLD}${GREEN}" "${VERSION}" "${RESET}"
 printf '\n'
-printf '    Run %svibez auth login%s to connect your Apple Music account.\n' "${BOLD}" "${RESET}"
-printf '    Then %svibez%s to start.\n' "${BOLD}" "${RESET}"
+printf '    Run %saux auth login%s to connect your Apple Music account.\n' "${BOLD}" "${RESET}"
+printf '    Then %saux%s to start.\n' "${BOLD}" "${RESET}"
 printf '\n'

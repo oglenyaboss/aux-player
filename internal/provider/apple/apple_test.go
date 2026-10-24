@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
 )
 
 // newTestProvider creates an AppleProvider pointed at a test server.
@@ -473,7 +473,7 @@ func TestSearch_HTTPError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for HTTP 401, got nil")
 	}
-	if !strings.Contains(err.Error(), "Re-run `vibez login`") {
+	if !strings.Contains(err.Error(), "Re-run `aux auth login`") {
 		t.Fatalf("expected actionable auth guidance, got %q", err)
 	}
 }

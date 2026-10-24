@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/provider/local"
+	"github.com/oglenyaboss/aux-player/internal/provider/local"
 )
 
 // newTestProvider creates a Provider pointed at a temp directory

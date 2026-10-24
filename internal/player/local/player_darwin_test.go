@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // trackFrames is 0.7s at 44.1kHz: long enough that EOS arrives through the

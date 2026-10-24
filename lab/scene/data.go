@@ -1,6 +1,6 @@
 package main
 
-import "github.com/simone-vibes/vibez/internal/stage"
+import "github.com/oglenyaboss/aux-player/internal/stage"
 
 // Demo data of the scene. Language-sensitive texts are built on every call, so the language
 // toggled by the onboarding lands with the next line.

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/simone-vibes/vibez/internal/stage"
+import "github.com/oglenyaboss/aux-player/internal/stage"
 
 // drive is the old autopilot of the demo, rewritten over the screen's public API:
 // it walks intro, warm-up cards and the player by typed keys, minute by minute.

@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/dhowden/tag"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Provider scans a local directory and exposes tracks via the provider interface.

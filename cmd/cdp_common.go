@@ -9,15 +9,15 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/lastfm"
-	playerpkg "github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/cdp"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
-	"github.com/simone-vibes/vibez/internal/tui"
-	"github.com/simone-vibes/vibez/internal/updater"
-	"github.com/simone-vibes/vibez/internal/version"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/lastfm"
+	playerpkg "github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/cdp"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/updater"
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 type cdpPlatformHooks struct {
@@ -65,7 +65,7 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 				devTokenRejected = true
 				// The update check above may have been inside its once-a-day
 				// window and returned without asking, which is exactly what
-				// would leave the user reading "update vibez" on a build that
+				// would leave the user reading "update aux" on a build that
 				// could have updated itself. Ask again, and say what came back.
 				res := updater.UpdateNow(version.Version, noUpdate, func(msg string) {
 					prog.Send(tui.InitStatusMsg(msg))
@@ -93,7 +93,7 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		if !devTokenRejected {
 			status := hooks.initStatus
 			if status == "" {
-				status = "Initializing vibez..."
+				status = "Initializing AUX..."
 			}
 			prog.Send(tui.InitStatusMsg(status))
 		}

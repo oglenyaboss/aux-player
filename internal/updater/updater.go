@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	repo          = "simonepelosi/vibez"
+	repo          = "oglenyaboss/aux-player"
 	apiURL        = "https://api.github.com/repos/" + repo + "/releases/latest"
 	checkInterval = 24 * time.Hour
 	apiTimeout    = 5 * time.Second
@@ -103,7 +103,7 @@ const (
 )
 
 // Result reports what an update attempt did, so a caller that knows the build
-// is broken can explain the situation rather than repeating "update vibez".
+// is broken can explain the situation rather than repeating "update aux".
 type Result struct {
 	Outcome Outcome
 	// Tag is the newer release, when the check got far enough to learn it.
@@ -367,13 +367,13 @@ func verifyChecksum(archivePath, assetName, checksumURL string) error {
 }
 
 // releaseAsset names the archive a release publishes for goos/goarch and the
-// executable inside it: a zip holding vibez.exe for Windows, and a tar.gz
-// holding vibez everywhere else.
+// executable inside it: a zip holding aux.exe for Windows, and a tar.gz
+// holding aux everywhere else.
 func releaseAsset(goos, goarch string) (archive, binary string) {
 	if goos == "windows" {
-		return fmt.Sprintf("vibez_%s_%s.zip", goos, goarch), "vibez.exe"
+		return fmt.Sprintf("aux_%s_%s.zip", goos, goarch), "aux.exe"
 	}
-	return fmt.Sprintf("vibez_%s_%s.tar.gz", goos, goarch), "vibez"
+	return fmt.Sprintf("aux_%s_%s.tar.gz", goos, goarch), "aux"
 }
 
 // extractBinary copies binaryName out of the release archive at archivePath
@@ -594,10 +594,10 @@ func parseVersion(v string) [3]int {
 
 func cacheDir() string {
 	if d, err := os.UserCacheDir(); err == nil && d != "" {
-		return filepath.Join(d, "vibez")
+		return filepath.Join(d, "aux")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "vibez")
+	return filepath.Join(home, ".cache", "aux")
 }
 
 func shouldCheck() bool {

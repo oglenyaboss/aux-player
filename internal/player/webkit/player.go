@@ -23,11 +23,11 @@ import (
 
 	webview "github.com/webview/webview_go"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/gst"
-	"github.com/simone-vibes/vibez/internal/player/web"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/gst"
+	"github.com/oglenyaboss/aux-player/internal/player/web"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // jsState
@@ -124,7 +124,7 @@ func New(devToken, userToken, storefront string, audioBitrateKbps int) (*Player,
 	})
 
 	w := webview.New(false)
-	w.SetTitle("vibez-audio")
+	w.SetTitle("aux-audio")
 	w.SetSize(1, 1, webview.HintFixed)
 
 	// Hide the window before the GTK main loop gets a chance to render it.

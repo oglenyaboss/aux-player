@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
 // hashStr is the FNV-1a of the track key the cover cache names carry; it must

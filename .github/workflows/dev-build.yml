@@ -85,8 +85,8 @@ jobs:
           PKG_CONFIG_PATH: ${{ github.workspace }}/pkg-config
           GOTOOLCHAIN: local
         run: |
-          go build -o vibez-linux-amd64 \
-            -ldflags "-s -w -X 'github.com/simone-vibes/vibez/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/simone-vibes/vibez/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
+          go build -o aux-linux-amd64 \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
             .
 
       - name: Build (windows/amd64)
@@ -100,22 +100,22 @@ jobs:
           GOOS: windows
           GOARCH: amd64
         run: |
-          go build -o vibez-windows-amd64.exe \
-            -ldflags "-s -w -X 'github.com/simone-vibes/vibez/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/simone-vibes/vibez/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
+          go build -o aux-windows-amd64.exe \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
             .
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibez-${{ needs.setup.outputs.name_suffix }}-linux-amd64
-          path: vibez-linux-amd64
+          name: aux-${{ needs.setup.outputs.name_suffix }}-linux-amd64
+          path: aux-linux-amd64
           retention-days: 14
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibez-${{ needs.setup.outputs.name_suffix }}-windows-amd64
-          path: vibez-windows-amd64.exe
+          name: aux-${{ needs.setup.outputs.name_suffix }}-windows-amd64
+          path: aux-windows-amd64.exe
           retention-days: 14
 
   build-darwin:
@@ -151,8 +151,8 @@ jobs:
           GOARCH: arm64
           GOTOOLCHAIN: local
         run: |
-          go build -o vibez-darwin-arm64 \
-            -ldflags "-s -w -X 'github.com/simone-vibes/vibez/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/simone-vibes/vibez/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
+          go build -o aux-darwin-arm64 \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
             .
 
       - name: Build (darwin/amd64)
@@ -169,22 +169,22 @@ jobs:
           CGO_LDFLAGS: "-arch x86_64"
           GOTOOLCHAIN: local
         run: |
-          go build -o vibez-darwin-amd64 \
-            -ldflags "-s -w -X 'github.com/simone-vibes/vibez/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/simone-vibes/vibez/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
+          go build -o aux-darwin-amd64 \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.VIBEZ_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.VIBEZ_CLIENT_KEY }}'" \
             .
 
       - name: Upload Darwin AMD64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibez-${{ needs.setup.outputs.name_suffix }}-darwin-amd64
-          path: vibez-darwin-amd64
+          name: aux-${{ needs.setup.outputs.name_suffix }}-darwin-amd64
+          path: aux-darwin-amd64
           retention-days: 14
 
       - name: Upload Darwin ARM64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibez-${{ needs.setup.outputs.name_suffix }}-darwin-arm64
-          path: vibez-darwin-arm64
+          name: aux-${{ needs.setup.outputs.name_suffix }}-darwin-arm64
+          path: aux-darwin-arm64
           retention-days: 14
 
   notify:
@@ -203,9 +203,9 @@ jobs:
           gh pr comment "$PR_NUM" --body "🎵 **Dev builds ready** — [\`${{ needs.setup.outputs.version }}\`]($RUN_URL)
 
           **Download:** Go to the [workflow run]($RUN_URL) → Artifacts:
-          - \`vibez-${{ needs.setup.outputs.name_suffix }}-linux-amd64\`
-          - \`vibez-${{ needs.setup.outputs.name_suffix }}-darwin-amd64\`
-          - \`vibez-${{ needs.setup.outputs.name_suffix }}-darwin-arm64\` (for Apple Silicon Macs)
-          - \`vibez-${{ needs.setup.outputs.name_suffix }}-windows-amd64\` (native Windows)
+          - \`aux-${{ needs.setup.outputs.name_suffix }}-linux-amd64\`
+          - \`aux-${{ needs.setup.outputs.name_suffix }}-darwin-amd64\`
+          - \`aux-${{ needs.setup.outputs.name_suffix }}-darwin-arm64\` (for Apple Silicon Macs)
+          - \`aux-${{ needs.setup.outputs.name_suffix }}-windows-amd64\` (native Windows)
 
           <sub>Built from ${{ needs.setup.outputs.sha }} • expires in 14 days</sub>"

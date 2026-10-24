@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/vibeai/llm"
-	"github.com/simone-vibes/vibez/internal/vibeai/memory"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 type fakeChatter struct {

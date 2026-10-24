@@ -2,7 +2,7 @@ package cmd
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/tui"
 )
 
 // appleLoginLoop waits for the onboarding to ask, signs in, reports the result; a failed sign-in waits for the next ask.

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 func startMediaServer(t *testing.T) *mediaServer {

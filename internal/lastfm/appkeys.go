@@ -1,12 +1,12 @@
 package lastfm
 
-import "github.com/simone-vibes/vibez/internal/config"
+import "github.com/oglenyaboss/aux-player/internal/config"
 
 // apiKey and apiSecret are the Last.fm application credentials injected at
 // build time via -ldflags:
 //
-//	-X 'github.com/simone-vibes/vibez/internal/lastfm.apiKey=<key>'
-//	-X 'github.com/simone-vibes/vibez/internal/lastfm.apiSecret=<secret>'
+//	-X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=<key>'
+//	-X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=<secret>'
 //
 // When empty the user must set lastfm_api_key and lastfm_api_secret in their
 // config file (useful for self-built binaries).

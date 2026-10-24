@@ -10,15 +10,15 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player/cdp"
-	"github.com/simone-vibes/vibez/internal/player/mpris"
-	"github.com/simone-vibes/vibez/internal/player/webkit"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
-	"github.com/simone-vibes/vibez/internal/tui"
-	"github.com/simone-vibes/vibez/internal/updater"
-	"github.com/simone-vibes/vibez/internal/version"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player/cdp"
+	"github.com/oglenyaboss/aux-player/internal/player/mpris"
+	"github.com/oglenyaboss/aux-player/internal/player/webkit"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/updater"
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 func runPlatform(cfg *config.Config, iconPath string, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int) error {
@@ -28,7 +28,7 @@ func runPlatform(cfg *config.Config, iconPath string, opts tui.Options, onUserTo
 	}
 	if cdp.Available() {
 		return runCDPFlow(cfg, opts, onUserToken, onStorefront, audioBitrateKbps, cdpPlatformHooks{
-			initStatus: "Initializing vibez...",
+			initStatus: "Initializing AUX...",
 			afterReady: func(cdpPlayer *cdp.Player) {
 				if srv, mprisErr := mpris.NewServer(cdpPlayer); mprisErr == nil {
 					go func() {

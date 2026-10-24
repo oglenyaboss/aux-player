@@ -51,7 +51,7 @@ func TestVerifyChecksum_Valid(t *testing.T) {
 	data := []byte("fake tarball content")
 	sum := sha256.Sum256(data)
 	hashHex := hex.EncodeToString(sum[:])
-	assetName := "vibez_linux_amd64.tar.gz"
+	assetName := "aux_linux_amd64.tar.gz"
 
 	checksumBody := hashHex + "  " + assetName + "\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +71,7 @@ func TestVerifyChecksum_Valid(t *testing.T) {
 
 func TestVerifyChecksum_Mismatch(t *testing.T) {
 	data := []byte("tampered content")
-	assetName := "vibez_linux_amd64.tar.gz"
+	assetName := "aux_linux_amd64.tar.gz"
 
 	checksumBody := "0000000000000000000000000000000000000000000000000000000000000000  " + assetName + "\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,8 +92,8 @@ func TestVerifyChecksum_Mismatch(t *testing.T) {
 // ── extractBinary ─────────────────────────────────────────────────────────────
 
 func TestExtractBinary_Found(t *testing.T) {
-	binaryContent := []byte("#!/bin/sh\necho vibez")
-	tarPath := filepath.Join(t.TempDir(), "vibez_linux_amd64.tar.gz")
+	binaryContent := []byte("#!/bin/sh\necho aux")
+	tarPath := filepath.Join(t.TempDir(), "aux_linux_amd64.tar.gz")
 
 	f, err := os.Create(tarPath) //nolint:gosec // tarPath is a path inside t.TempDir()
 	if err != nil {
@@ -102,7 +102,7 @@ func TestExtractBinary_Found(t *testing.T) {
 	gw := gzip.NewWriter(f)
 	tw := tar.NewWriter(gw)
 	if err := tw.WriteHeader(&tar.Header{
-		Name:     "vibez",
+		Name:     "aux",
 		Typeflag: tar.TypeReg,
 		Size:     int64(len(binaryContent)),
 		Mode:     0o755,
@@ -122,8 +122,8 @@ func TestExtractBinary_Found(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(t.TempDir(), "vibez")
-	if err := extractBinary(tarPath, "vibez", dst); err != nil {
+	dst := filepath.Join(t.TempDir(), "aux")
+	if err := extractBinary(tarPath, "aux", dst); err != nil {
 		t.Fatalf("extractBinary failed: %v", err)
 	}
 	got, err := os.ReadFile(dst) //nolint:gosec // dst is a path inside t.TempDir()
@@ -154,35 +154,35 @@ func TestExtractBinary_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(t.TempDir(), "vibez")
-	if err := extractBinary(tarPath, "vibez", dst); err == nil {
+	dst := filepath.Join(t.TempDir(), "aux")
+	if err := extractBinary(tarPath, "aux", dst); err == nil {
 		t.Error("extractBinary should error when binary not in archive")
 	}
 }
 
 func TestExtractBinary_ZipFound(t *testing.T) {
-	zipPath := filepath.Join(t.TempDir(), "vibez_windows_amd64.zip")
-	if err := os.WriteFile(zipPath, zipOf(t, "vibez.exe", []byte("MZ vibez")), 0o600); err != nil {
+	zipPath := filepath.Join(t.TempDir(), "aux_windows_amd64.zip")
+	if err := os.WriteFile(zipPath, zipOf(t, "aux.exe", []byte("MZ aux")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(t.TempDir(), "vibez.exe")
-	if err := extractBinary(zipPath, "vibez.exe", dst); err != nil {
+	dst := filepath.Join(t.TempDir(), "aux.exe")
+	if err := extractBinary(zipPath, "aux.exe", dst); err != nil {
 		t.Fatalf("extractBinary failed: %v", err)
 	}
-	if got := readFile(t, dst); got != "MZ vibez" {
-		t.Errorf("extracted content = %q, want %q", got, "MZ vibez")
+	if got := readFile(t, dst); got != "MZ aux" {
+		t.Errorf("extracted content = %q, want %q", got, "MZ aux")
 	}
 }
 
 func TestExtractBinary_ZipNotFound(t *testing.T) {
-	zipPath := filepath.Join(t.TempDir(), "vibez_windows_amd64.zip")
-	if err := os.WriteFile(zipPath, zipOf(t, "vibez", []byte("not the Windows binary")), 0o600); err != nil {
+	zipPath := filepath.Join(t.TempDir(), "aux_windows_amd64.zip")
+	if err := os.WriteFile(zipPath, zipOf(t, "not-aux", []byte("not the Windows binary")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(t.TempDir(), "vibez.exe")
-	if err := extractBinary(zipPath, "vibez.exe", dst); err == nil {
+	dst := filepath.Join(t.TempDir(), "aux.exe")
+	if err := extractBinary(zipPath, "aux.exe", dst); err == nil {
 		t.Error("extractBinary should error when binary not in archive")
 	}
 }
@@ -193,7 +193,7 @@ func TestExtractBinary_ZipOverLimitIsRefused(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.CreateRaw(&zip.FileHeader{
-		Name:               "vibez.exe",
+		Name:               "aux.exe",
 		Method:             zip.Store,
 		CompressedSize64:   1,
 		UncompressedSize64: maxBinarySize + 1,
@@ -207,13 +207,13 @@ func TestExtractBinary_ZipOverLimitIsRefused(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	zipPath := filepath.Join(t.TempDir(), "vibez_windows_amd64.zip")
+	zipPath := filepath.Join(t.TempDir(), "aux_windows_amd64.zip")
 	if err := os.WriteFile(zipPath, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	dst := filepath.Join(t.TempDir(), "vibez.exe")
-	if err := extractBinary(zipPath, "vibez.exe", dst); err == nil {
+	dst := filepath.Join(t.TempDir(), "aux.exe")
+	if err := extractBinary(zipPath, "aux.exe", dst); err == nil {
 		t.Error("extractBinary should refuse an entry larger than maxBinarySize")
 	}
 	if _, err := os.Stat(dst); err == nil {
@@ -229,9 +229,9 @@ func TestReleaseAsset(t *testing.T) {
 	cases := []struct {
 		goos, goarch, archive, binary string
 	}{
-		{"linux", "amd64", "vibez_linux_amd64.tar.gz", "vibez"},
-		{"darwin", "arm64", "vibez_darwin_arm64.tar.gz", "vibez"},
-		{"windows", "amd64", "vibez_windows_amd64.zip", "vibez.exe"},
+		{"linux", "amd64", "aux_linux_amd64.tar.gz", "aux"},
+		{"darwin", "arm64", "aux_darwin_arm64.tar.gz", "aux"},
+		{"windows", "amd64", "aux_windows_amd64.zip", "aux.exe"},
 	}
 	for _, tc := range cases {
 		archive, binary := releaseAsset(tc.goos, tc.goarch)
@@ -303,7 +303,7 @@ func zipOf(t *testing.T, name string, content []byte) []byte {
 	for _, f := range []struct {
 		name    string
 		content []byte
-	}{{"README.md", []byte("# vibez\n")}, {name, content}} {
+	}{{"README.md", []byte("# aux\n")}, {name, content}} {
 		w, err := zw.Create(f.name)
 		if err != nil {
 			t.Fatal(err)
@@ -615,7 +615,7 @@ func TestUpdate_FailedInstallKeepsTheOldBinary(t *testing.T) {
 // it, as installBinary hands them to replaceRunningExe.
 func stageReplacement(t *testing.T) (exe, staged string) {
 	t.Helper()
-	exe = filepath.Join(t.TempDir(), "vibez.exe")
+	exe = filepath.Join(t.TempDir(), "aux.exe")
 	staged = exe + ".new"
 	if err := os.WriteFile(exe, []byte("old binary"), 0o755); err != nil { //nolint:gosec // executable permissions required
 		t.Fatal(err)
@@ -635,8 +635,8 @@ func TestReplaceRunningExe_Installs(t *testing.T) {
 	if content := readFile(t, exe); content != "new binary" {
 		t.Errorf("installed content = %q, want %q", content, "new binary")
 	}
-	if names := dirNames(t, filepath.Dir(exe)); !slices.Equal(names, []string{"vibez.exe"}) {
-		t.Errorf("files beside the binary = %v, want only vibez.exe", names)
+	if names := dirNames(t, filepath.Dir(exe)); !slices.Equal(names, []string{"aux.exe"}) {
+		t.Errorf("files beside the binary = %v, want only aux.exe", names)
 	}
 }
 
@@ -651,7 +651,7 @@ func TestReplaceRunningExe_RestoresTheOldBinary(t *testing.T) {
 	if content := readFile(t, exe); content != "old binary" {
 		t.Errorf("binary after a failed install = %q, want the old one", content)
 	}
-	if names := dirNames(t, filepath.Dir(exe)); !slices.Equal(names, []string{"vibez.exe", "vibez.exe.new"}) {
+	if names := dirNames(t, filepath.Dir(exe)); !slices.Equal(names, []string{"aux.exe", "aux.exe.new"}) {
 		t.Errorf("files = %v, want the binary and the staged update only", names)
 	}
 }
@@ -668,7 +668,7 @@ func TestReplaceRunningExe_ReportsWhereTheOldBinaryIs(t *testing.T) {
 	}
 	var aside string
 	for _, name := range dirNames(t, filepath.Dir(exe)) {
-		if isAsideName("vibez.exe", name) {
+		if isAsideName("aux.exe", name) {
 			aside = filepath.Join(filepath.Dir(exe), name)
 		}
 	}
@@ -687,13 +687,13 @@ func TestReplaceRunningExe_ReportsWhereTheOldBinaryIs(t *testing.T) {
 // the binary survive.
 func TestRemoveAside_TakesOnlyWhatWasMovedAside(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "vibez.exe")
+	exe := filepath.Join(dir, "aux.exe")
 	keep := []string{ // in the order ReadDir lists them
+		"aux.exe",
+		"aux.exe.new",
+		"aux.exe" + asideInfix + "0123",
+		"aux.exe.old-backup",
 		"other.exe" + asideInfix + strings.Repeat("0", 2*asideIDBytes),
-		"vibez.exe",
-		"vibez.exe.new",
-		"vibez.exe" + asideInfix + "0123",
-		"vibez.exe.old-backup",
 	}
 	sweep := []string{filepath.Base(asideName(exe)), filepath.Base(asideName(exe))}
 	for _, name := range slices.Concat(keep, sweep) {
@@ -829,13 +829,13 @@ func init() { assetURLCheck = func(string) error { return nil } }
 
 func TestCheckAssetURL(t *testing.T) {
 	good := []string{
-		"https://github.com/simonepelosi/vibez/releases/download/v1.2.0/vibez_linux_amd64.tar.gz",
+		"https://github.com/oglenyaboss/aux-player/releases/download/v1.2.0/aux_linux_amd64.tar.gz",
 		"https://objects.githubusercontent.com/github-production-release-asset/abc",
 		"https://release-assets.githubusercontent.com/x",
 	}
 	bad := []string{
-		"http://github.com/simonepelosi/vibez/releases/download/v1/x.tar.gz",
-		"https://evil.example/vibez.tar.gz",
+		"http://github.com/oglenyaboss/aux-player/releases/download/v1/x.tar.gz",
+		"https://evil.example/aux.tar.gz",
 		"https://github.com.evil.example/x",
 		"https://githubusercontent.com.evil.example/x",
 		"https://evilgithubusercontent.com/x",
@@ -939,5 +939,12 @@ func TestUpdate_UntrustedAssetHostInstallsNothing(t *testing.T) {
 	}
 	if got := readFile(t, exe); got != "old binary" {
 		t.Errorf("binary was installed from an untrusted host: %q", got)
+	}
+}
+
+func TestAPIPointsAtFork(t *testing.T) {
+	const want = "https://api.github.com/repos/oglenyaboss/aux-player/releases/latest"
+	if apiURL != want {
+		t.Errorf("apiURL = %q, want %q", apiURL, want)
 	}
 }

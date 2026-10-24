@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/player"
 )
 
 // buildSetQueueJS returns the JS expression that calls vibezSetQueue.

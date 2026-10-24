@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 func newTestEngineUI(t *testing.T, ch *fakeChatter, ui UI) *Engine {

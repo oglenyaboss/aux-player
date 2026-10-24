@@ -1,6 +1,36 @@
-package views
+package tui
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/oglenyaboss/aux-player/internal/provider"
+)
+
+// PlaybackID returns the best ID to use for MusicKit queue descriptors.
+// Library tracks (IDs prefixed with "i.") must use their library ID directly
+// so MusicKit never encounters a CONTENT_RESTRICTED error — the catalog copy
+// of a track may be region-locked even when the user already owns it in their
+// library. Catalog IDs are used for tracks not present in the user's library.
+func PlaybackID(t provider.Track) string {
+	// Library tracks must use their library ID directly — never CONTENT_RESTRICTED.
+	if strings.HasPrefix(t.ID, "i.") {
+		return t.ID
+	}
+	if t.CatalogID != "" {
+		return t.CatalogID
+	}
+	return t.ID
+}
+
+// FormatDuration formats a duration as m:ss.
+func FormatDuration(d time.Duration) string {
+	secs := int(d.Seconds())
+	mins := secs / 60
+	secs %= 60
+	return fmt.Sprintf("%d:%02d", mins, secs)
+}
 
 type VibeAIQuestion struct {
 	Question    string

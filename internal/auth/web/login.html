@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>vibez — Connect Apple Music</title>
+  <title>AUX — Connect Apple Music</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -78,7 +78,7 @@
 </head>
 <body>
   <div class="card">
-    <div class="logo">♪ vibez</div>
+    <div class="logo">♪ AUX</div>
     <div class="subtitle">vibe-driven music player for your terminal</div>
 
     <button class="btn" id="connectBtn" onclick="connectAppleMusic()">
@@ -92,7 +92,7 @@
 
     <div class="success-box" id="successBox">
       <h3>✓ Connected!</h3>
-      <p>vibez is now linked to your Apple Music account.<br/>
+      <p>AUX is now linked to your Apple Music account.<br/>
          Return to your terminal — the app will continue automatically.</p>
     </div>
   </div>
@@ -115,14 +115,14 @@
       try {
         await MusicKit.configure({
           developerToken,
-          app: { name: "vibez", build: "0.1.0" },
+          app: { name: "AUX", build: "0.1.0" },
         });
 
         status.textContent = "Waiting for authorization…";
         const music = MusicKit.getInstance();
         const userToken = await music.authorize();
 
-        status.textContent = "Sending token to vibez…";
+        status.textContent = "Sending token to AUX…";
         const resp = await fetch("/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Vibez-State": callbackState },

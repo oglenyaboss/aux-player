@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 const fakeJWT = "aaa.bbb.ccc" //nolint:gosec // G101: test value, not a real credential

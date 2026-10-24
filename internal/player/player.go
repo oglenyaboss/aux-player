@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // Repeat mode constants matching MusicKit.PlayerRepeatMode values.

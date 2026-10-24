@@ -14,19 +14,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player/browserless"
-	"github.com/simone-vibes/vibez/internal/player/browserless/cdm"
-	"github.com/simone-vibes/vibez/internal/player/browserless/license"
-	"github.com/simone-vibes/vibez/internal/player/gst"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/cdm"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/license"
+	"github.com/oglenyaboss/aux-player/internal/player/gst"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
 )
 
 func findCDMPath() string {
 	home, _ := os.UserHomeDir()
 	candidates := []string{
-		filepath.Join(home, ".cache", "vibez", "chrome", "opt", "google", "chrome", "WidevineCdm", "_platform_specific", "linux_x64", "libwidevinecdm.so"),
+		filepath.Join(home, ".cache", "aux", "chrome", "opt", "google", "chrome", "WidevineCdm", "_platform_specific", "linux_x64", "libwidevinecdm.so"),
 		"/usr/lib/chromium/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
 		"/opt/google/chrome/WidevineCdm/_platform_specific/linux_x64/libwidevinecdm.so",
 	}

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
 )
 
 type Config struct {
@@ -116,13 +116,13 @@ func ConfigPath(override string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("could not determine config directory: %w", err)
 		}
-		return filepath.Join(dir, "vibez", "config.json"), nil
+		return filepath.Join(dir, "aux", "config.json"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("could not determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "vibez", "config.json"), nil
+	return filepath.Join(home, ".config", "aux", "config.json"), nil
 }
 
 func Load(override string) (*Config, error) {

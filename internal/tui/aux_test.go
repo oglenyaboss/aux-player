@@ -8,10 +8,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
-	"github.com/simone-vibes/vibez/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
 // auxKey makes the key a terminal sends: space carries its text.
@@ -36,7 +36,6 @@ func auxModel(t *testing.T, plyr player.Player, cfg *config.Config, opts Options
 	if cfg == nil {
 		cfg = testCfg()
 	}
-	opts.AUXOnly = true
 	return New(cfg, &mockProvider{}, plyr, opts)
 }
 
@@ -59,13 +58,17 @@ func TestAUXView(t *testing.T) {
 func TestAUXBlocksPanels(t *testing.T) {
 	m := auxModel(t, nil, nil, Options{})
 	stageIntoPlayer(m)
-	auxPress(m, "l")
-	auxPress(m, ":")
-	if !m.vibeAIActive() {
-		t.Error("panel keys must not leave the AUX screen")
+	phase := m.vibeAIP.m.st.Phase()
+	cmd := auxPress(m, "l")
+	if cmd != nil {
+		t.Errorf("the library key must not produce a cmd, got %#v", cmd())
 	}
-	if m.mode != modeNormal {
-		t.Errorf("mode = %d, want modeNormal: ':' must not open command mode", m.mode)
+	cmd = auxPress(m, ":")
+	if cmd != nil {
+		t.Errorf("':' must not open command mode, got %#v", cmd())
+	}
+	if got := m.vibeAIP.m.st.Phase(); got != phase {
+		t.Errorf("phase = %d, want %d: panel keys must not leave the AUX screen", got, phase)
 	}
 }
 
@@ -255,5 +258,92 @@ func TestAUXPaste(t *testing.T) {
 	m.Update(tea.PasteMsg{Content: "lofi"})
 	if got := st.Input(); got != "lofi" {
 		t.Fatalf("Input() = %q after paste, want lofi", got)
+	}
+}
+
+func TestAUXSeekKeys(t *testing.T) {
+	mp := newMockPlayer()
+	m := auxModel(t, mp, nil, Options{})
+	stageIntoPlayer(m)
+	m.playerState.Track = &provider.Track{ID: "1", Title: "One", Duration: 3 * time.Minute}
+	m.playerState.Position = time.Minute
+	cmd := auxPress(m, "right")
+	if cmd == nil {
+		t.Fatal("right: the scene declines it, the host must keep seeking")
+	}
+	if msg := cmd(); msg != nil {
+		if _, ok := msg.(errMsg); ok {
+			t.Fatalf("seek right failed: %v", msg)
+		}
+	}
+	if !mp.seekCalled || mp.seekPos != 70*time.Second {
+		t.Errorf("seek right: called=%v pos=%v, want 10s forward", mp.seekCalled, mp.seekPos)
+	}
+	cmd = auxPress(m, "left")
+	if cmd == nil {
+		t.Fatal("left: the scene declines it, the host must keep seeking")
+	}
+	if msg := cmd(); msg != nil {
+		if _, ok := msg.(errMsg); ok {
+			t.Fatalf("seek left failed: %v", msg)
+		}
+	}
+	if mp.seekPos != 50*time.Second {
+		t.Errorf("seek left: pos=%v, want 10s back", mp.seekPos)
+	}
+}
+
+func TestAUXOtherKeysInert(t *testing.T) {
+	mp := newMockPlayer()
+	m := auxModel(t, mp, nil, Options{})
+	stageIntoPlayer(m)
+	m.playerState.Track = &provider.Track{ID: "1", Title: "One"}
+	m.width, m.height = 100, 30
+	for _, k := range []string{"l", "/", ":"} {
+		if cmd := auxPress(m, k); cmd != nil {
+			t.Fatalf("%q must do nothing on the scene, got a cmd", k)
+		}
+	}
+	if mp.playCalled || mp.pauseCalled || mp.nextCalled || mp.prevCalled || mp.seekCalled || mp.closeCalled {
+		t.Errorf("the player was touched by inert keys: %+v", mp)
+	}
+	frame := ansi.Strip(m.View().Content)
+	if strings.TrimSpace(frame) == "" {
+		t.Fatal("View() must still draw the scene")
+	}
+	if strings.Contains(frame, "vibez") {
+		t.Errorf("the old vibez UI leaked into the view:\n%s", frame)
+	}
+}
+
+func TestAUXCtrlC(t *testing.T) {
+	mp := newMockPlayer()
+	m := auxModel(t, mp, nil, Options{})
+	cmd := auxPress(m, "ctrl+c")
+	if cmd == nil {
+		t.Fatal("ctrl+c must quit")
+	}
+	if msg := cmd(); msg != (tea.QuitMsg{}) {
+		t.Fatalf("ctrl+c msg = %#v, want tea.QuitMsg", msg)
+	}
+	if !mp.closeCalled {
+		t.Error("ctrl+c must close the player")
+	}
+}
+
+func TestAUXRestrictedSkips(t *testing.T) {
+	mp := newMockPlayer()
+	m := auxModel(t, mp, nil, Options{})
+	m.stateCh = nil // no blocking waitForState in the batch under test
+	_, cmd := m.Update(playerStateMsg{
+		Error: "CONTENT_RESTRICTED: track unavailable",
+		Track: &provider.Track{ID: "111", Title: "Restricted Song", Artist: "Artist"},
+	})
+	runAll(cmd)
+	if !mp.nextCalled {
+		t.Error("CONTENT_RESTRICTED must skip to the next track")
+	}
+	if m.errMsg != "" {
+		t.Errorf("errMsg = %q, want none: a restricted track is skipped silently", m.errMsg)
 	}
 }

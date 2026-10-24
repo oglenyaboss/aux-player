@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 // streamResult is what onFail saw and what the handler panicked with.

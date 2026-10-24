@@ -3,8 +3,8 @@
 package cmd
 
 import (
-	"github.com/simone-vibes/vibez/internal/config"
-	playerpkg "github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	playerpkg "github.com/oglenyaboss/aux-player/internal/player"
 )
 
 // lastfmScrobbleLoop starts the scrobbler now if Last.fm is already connected, and

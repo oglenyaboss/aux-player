@@ -9,24 +9,16 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/provider"
-	"github.com/simone-vibes/vibez/internal/stage"
-	"github.com/simone-vibes/vibez/internal/tui/views"
-	"github.com/simone-vibes/vibez/internal/vibeai"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/vibeai"
 )
 
 func press(m *Model, k string) tea.Cmd {
-	r := []rune(k)
-	msg := tea.KeyPressMsg{Code: r[0], Text: k}
-	switch k {
-	case "esc":
-		msg = tea.KeyPressMsg{Code: tea.KeyEsc}
-	case "enter":
-		msg = tea.KeyPressMsg{Code: tea.KeyEnter}
-	}
-	return m.handleNormalKey(msg, msg.String())
+	_, cmd := m.Update(stageKeyMsg(k))
+	return cmd
 }
 
 func vibeTracks() []vibeai.Track {
@@ -40,7 +32,6 @@ func vibeTracks() []vibeai.Track {
 func openVibeWithPortion(t *testing.T) *Model {
 	t.Helper()
 	m := newModel(nil)
-	press(m, "v")
 	vibeAITypeText(m, "первый запрос")
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
 	return m
@@ -82,22 +73,20 @@ func TestVibeAIConfigSignalsPath(t *testing.T) {
 
 func TestVibeAI_TypingDoesNotTriggerGlobals(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	for _, k := range []string{"q", "l", "v", "/", ":"} {
 		press(m, k)
 	}
-	if !m.vibeAIActive() || m.mode != modeNormal {
-		t.Fatalf("typing in the vibe input leaked to globals: active=%v mode=%v", m.vibeAIActive(), m.mode)
+	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhIntro {
+		t.Fatalf("typing in the vibe input leaked to globals: phase=%d", phase)
 	}
 	press(m, "esc")
-	if !m.vibeAIActive() {
+	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhIntro {
 		t.Error("esc must not close the vibe screen")
 	}
 }
 
 func TestVibeAI_SubmitStartsFreshTurn(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	for _, k := range []string{"j", "a", "z", "z"} {
 		press(m, k)
 	}
@@ -105,7 +94,7 @@ func TestVibeAI_SubmitStartsFreshTurn(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter should submit the request")
 	}
-	sub, ok := cmd().(views.VibeAISubmitMsg)
+	sub, ok := cmd().(VibeAISubmitMsg)
 	if !ok || sub.Text != "jazz" || !sub.Fresh {
 		t.Fatalf("got %#v, want fresh submit of %q", sub, "jazz")
 	}
@@ -133,7 +122,6 @@ func TestVibeAI_StreamOnByDefault(t *testing.T) {
 
 func TestVibeAI_AutoplayFromFirstPick(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	gen := m.vibeAI.gen
 	acceptPick(m, gen, "1", "A", "One")
@@ -161,7 +149,6 @@ func TestVibeAI_AutoplayFromFirstPick(t *testing.T) {
 
 func TestVibeAI_AutoplayWithoutPicks(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	gen := m.vibeAI.gen
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second})
@@ -175,7 +162,6 @@ func TestVibeAI_AutoplayWithoutPicks(t *testing.T) {
 
 func TestVibeAI_StalePickIgnored(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	if cmd := m.handleVibeAIMsg(vibeAIPickMsg{gen: m.vibeAI.gen - 1, pick: vibeai.Pick{
 		Track:    vibeai.Track{ID: "1", Artist: "A", Title: "One"},
@@ -194,7 +180,6 @@ func TestVibeAI_StalePickIgnored(t *testing.T) {
 
 func TestVibeAI_RejectedPick(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	m.handleVibeAIMsg(vibeAIPickMsg{gen: m.vibeAI.gen, pick: vibeai.Pick{Name: "X — Y", Reason: "не нашлось в Apple Music"}})
 	if len(m.vibeAI.feed) != 0 {
@@ -204,7 +189,6 @@ func TestVibeAI_RejectedPick(t *testing.T) {
 
 func TestVibeAILatePickAfterDoneIgnored(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	vibeAITypeText(m, "первый запрос")
 	gen := m.vibeAI.gen
 	acceptPick(m, gen, "1", "A", "One")
@@ -229,7 +213,6 @@ func TestVibeAILatePickAfterDoneIgnored(t *testing.T) {
 
 func TestVibeAILateAskAfterDoneIgnored(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	vibeAITypeText(m, "первый запрос")
 	gen := m.vibeAI.gen
 	acceptPick(m, gen, "1", "A", "One")
@@ -253,7 +236,7 @@ func TestVibeAI_StreamAppendsWhileOn(t *testing.T) {
 	if before != 5 {
 		t.Fatalf("поток должен был добавить 2 трека в очередь, got %d", before)
 	}
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIStream})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIStream})
 	m.handleVibeAIMsg(done())
 	if len(m.queueIDs) != before {
 		t.Errorf("очередь = %v, при выключенном потоке она должна оставаться неизменной", m.queueIDs)
@@ -265,7 +248,7 @@ func TestVibeAI_PlayFromCursor(t *testing.T) {
 	m.player = newMockPlayer()
 	// The feed-cursor play gesture lived on the removed views screen; the bridge
 	// contract itself is unchanged and drives the queue from any index.
-	cmd := m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 1})
+	cmd := m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 1})
 	if cmd == nil {
 		t.Fatal("play from an index must run")
 	}
@@ -278,7 +261,7 @@ func TestVibeAI_QueueAppends(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.queueTracks = []provider.Track{{ID: "x"}}
 	m.queueIDs = []string{"x"}
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIQueue})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIQueue})
 	if len(m.queueIDs) != 4 || m.queueIDs[3] != "3" {
 		t.Fatalf("queue = %v", m.queueIDs)
 	}
@@ -289,23 +272,23 @@ func TestVibeAI_ProviderTracks(t *testing.T) {
 	if got.CatalogID != "1" || got.ArtworkURL != "https://x/300x300bb.jpg" || got.Duration != 61*time.Second {
 		t.Fatalf("got %+v", got)
 	}
-	if views.PlaybackID(got) != "1" {
+	if PlaybackID(got) != "1" {
 		t.Error("playback id should be the catalog id")
 	}
 }
 
 func TestVibeAI_SaveTwiceSamePortion(t *testing.T) {
 	m := openVibeWithPortion(t)
-	if m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAISave}) == nil {
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
 		t.Fatal("first save should run")
 	}
-	if m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAISave}) != nil {
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) != nil {
 		t.Error("saving the same portion twice should be a no-op")
 	}
 	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "Vibes AI · x", n: 3, created: true})
 	m.vibeAITurnCmd("", false, false)
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
-	if m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAISave}) == nil {
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
 		t.Error("a new portion should append to the linked playlist")
 	}
 }
@@ -342,7 +325,7 @@ func TestVibeAI_FeedPlayFromIndex(t *testing.T) {
 	if len(m.vibeAI.feed) != 5 {
 		t.Fatalf("feed = %d tracks, want 5", len(m.vibeAI.feed))
 	}
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 3})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 3})
 	if len(m.queueIDs) != 2 || m.queueIDs[0] != "4" || m.queueIDs[1] != "5" {
 		t.Fatalf("queue = %v, want [4 5]", m.queueIDs)
 	}
@@ -355,7 +338,7 @@ func TestVibeAI_PlayIndexOutOfBounds(t *testing.T) {
 		t.Fatal("fixture broken: queue must hold the portion")
 	}
 	for _, idx := range []int{-1, n + 99} {
-		if cmd := m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: idx}); cmd != nil {
+		if cmd := m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: idx}); cmd != nil {
 			t.Errorf("play at index %d должен быть no-op, got cmd", idx)
 		}
 	}
@@ -366,7 +349,7 @@ func TestVibeAI_PlayIndexOutOfBounds(t *testing.T) {
 
 func TestVibeAINoteLeavePending(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	t1 := &provider.Track{ID: "1", Title: "One"}
 	t2 := &provider.Track{ID: "2", Title: "Two"}
 	m.Update(playerStateMsg{Track: t1, Position: 15 * time.Second})
@@ -392,7 +375,7 @@ func TestVibeAINoteLeavePending(t *testing.T) {
 
 func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
 	found := false
@@ -473,7 +456,7 @@ func TestVibeAIOutcomesNonVibeTrackIgnored(t *testing.T) {
 func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 20 * time.Second})
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 1})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 1})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 20 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	n := 0
@@ -517,7 +500,6 @@ func TestVibeAITurnCmdTakesPending(t *testing.T) {
 
 func TestVibeAI_LaterQuestionAndAnswer(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	gen := m.vibeAI.gen
 	m.handleVibeAIMsg(vibeAIDoneMsg{
@@ -528,7 +510,7 @@ func TestVibeAI_LaterQuestionAndAnswer(t *testing.T) {
 	if m.vibeAI.later == nil {
 		t.Fatal("отложенный вопрос не попал в состояние")
 	}
-	m.handleVibeAIMsg(views.VibeAILaterMsg{Raw: "1"})
+	m.handleVibeAIMsg(VibeAILaterMsg{Raw: "1"})
 	ans := m.vibeAI.laterAnswers
 	if len(ans) != 1 || ans[0].q.Question != "убрать хоррор?" || ans[0].raw != "1" || m.vibeAI.later != nil {
 		t.Fatalf("laterAnswers = %+v, later = %v", ans, m.vibeAI.later)
@@ -546,7 +528,6 @@ func TestVibeAI_AbortedTurnTrimsPicks(t *testing.T) {
 	make := func(t *testing.T) *Model {
 		t.Helper()
 		m := newModel(nil)
-		press(m, "v")
 		m.vibeAITurnCmd("что-нибудь", true, false)
 		acceptPick(m, m.vibeAI.gen, "1", "A", "One")
 		acceptPick(m, m.vibeAI.gen, "2", "B", "Two")
@@ -575,7 +556,7 @@ func TestVibeAI_AbortedTurnTrimsPicks(t *testing.T) {
 
 func TestVibeAI_StreamRefillAhead(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	s := player.State{Track: &provider.Track{ID: "1"}}
 	if m.vibeAIStreamTick(s) == nil {
 		t.Fatal("remaining 2 ≤ 4: stream should top up")
@@ -595,7 +576,6 @@ func TestVibeAI_StreamRefillAhead(t *testing.T) {
 
 func TestVibeAI_StreamAheadThreshold(t *testing.T) {
 	m := newModel(nil)
-	press(m, "v")
 	m.vibeAI.gen = 1
 	tracks := make([]vibeai.Track, 10)
 	for i := range tracks {
@@ -605,7 +585,7 @@ func TestVibeAI_StreamAheadThreshold(t *testing.T) {
 	m.queueTracks = vibeAIProviderTracks(tracks)
 	m.queueIDs = make([]string, len(m.queueTracks))
 	for i, tr := range m.queueTracks {
-		m.queueIDs[i] = views.PlaybackID(tr)
+		m.queueIDs[i] = PlaybackID(tr)
 	}
 	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[2]}) != nil {
 		t.Error("remaining 7 > 4: must not top up")
@@ -659,16 +639,16 @@ func ratedIndex(t *testing.T, m *Model, k string) int {
 		t.Fatalf("%q produced no cmd", k)
 	}
 	got := cmd()
-	msg, ok := got.(views.VibeAIRateMsg)
+	msg, ok := got.(VibeAIRateMsg)
 	if !ok {
-		t.Fatalf("%q: msg = %#v, want views.VibeAIRateMsg", k, got)
+		t.Fatalf("%q: msg = %#v, want VibeAIRateMsg", k, got)
 	}
 	return msg.Index
 }
 
 func TestVibeAI_FollowPlayingOnChange(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	stageIntoPlayer(m)
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1", Title: "One"}, Position: 20 * time.Second})
 	if idx := ratedIndex(t, m, "+"); idx != 0 {
@@ -686,7 +666,7 @@ func TestVibeAI_FollowPlayingOnChange(t *testing.T) {
 
 func TestVibeAI_RateMsgPending(t *testing.T) {
 	m := openVibeWithPortion(t)
-	cmd := m.handleVibeAIMsg(views.VibeAIRateMsg{Index: 1, Rating: 1})
+	cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 1, Rating: 1})
 	if cmd != nil {
 		t.Errorf("rating a non-playing track must not return a cmd")
 	}
@@ -698,9 +678,9 @@ func TestVibeAI_RateMsgPending(t *testing.T) {
 
 func TestVibeAI_LessSkipsPlayingTrack(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 10 * time.Second})
-	if cmd := m.handleVibeAIMsg(views.VibeAIRateMsg{Index: 0, Rating: -1}); cmd == nil {
+	if cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 0, Rating: -1}); cmd == nil {
 		t.Fatal("less on the playing track must skip to the next one")
 	}
 	if o := m.vibeAI.pending[0]; o.ID != "1" || o.Kind != "less" {
@@ -710,13 +690,13 @@ func TestVibeAI_LessSkipsPlayingTrack(t *testing.T) {
 	if len(m.vibeAI.pending) != 1 {
 		t.Fatalf("pending = %+v, want only less: the skip by [ must not add skip_early", m.vibeAI.pending)
 	}
-	if cmd := m.handleVibeAIMsg(views.VibeAIRateMsg{Index: 0, Rating: 0}); cmd != nil {
+	if cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 0, Rating: 0}); cmd != nil {
 		t.Error("clearing the rating must not skip")
 	}
 	if o := m.vibeAI.pending[1]; o.ID != "1" || o.Kind != "rate_clear" {
 		t.Fatalf("pending[1] = %+v, want rate_clear for ID 1", o)
 	}
-	if cmd := m.handleVibeAIMsg(views.VibeAIRateMsg{Index: 2, Rating: -1}); cmd != nil {
+	if cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 2, Rating: -1}); cmd != nil {
 		t.Error("less on another track must not skip")
 	}
 }
@@ -724,7 +704,7 @@ func TestVibeAI_LessSkipsPlayingTrack(t *testing.T) {
 func TestVibeAI_RateIndexOutOfBounds(t *testing.T) {
 	m := openVibeWithPortion(t)
 	before := len(m.vibeAI.pending)
-	if cmd := m.handleVibeAIMsg(views.VibeAIRateMsg{Index: 99, Rating: 1}); cmd != nil {
+	if cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 99, Rating: 1}); cmd != nil {
 		t.Errorf("out-of-range rating must be a no-op, got cmd")
 	}
 	if len(m.vibeAI.pending) != before {
@@ -828,7 +808,7 @@ func TestVibeAIDoneRidesEventChannel(t *testing.T) {
 
 func TestVibeAIQuitNotesLeave(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1", Title: "One"}, Position: 50 * time.Second})
 	m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if len(m.vibeAI.pending) != 1 || m.vibeAI.pending[0].ID != "1" || m.vibeAI.pending[0].Kind != "played" {

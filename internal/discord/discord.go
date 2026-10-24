@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player"
 )
 
 // DefaultClientID is the registered Discord Application ID for vibez.

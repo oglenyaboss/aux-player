@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player"
 )
 
 func TestWaitForStateStopsOnClosedStream(t *testing.T) {

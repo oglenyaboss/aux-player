@@ -29,7 +29,7 @@ ifeq ($(shell uname -s),Linux)
 endif
 
 build: check-deps
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build -o vibez .
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build -o aux .
 
 # build-with-token embeds the Apple developer token without obfuscation.
 # Use this for local testing of the embedded-token flow.
@@ -43,16 +43,16 @@ build-with-token:
 	echo "Generating developer token..."; \
 	TOKEN=$$(GOFLAGS= go run ./scripts/gen-devtoken 2>/dev/null); \
 	test -n "$$TOKEN" || { echo "gen-devtoken produced no output — check credentials"; exit 1; }; \
-	LDFLAGS="-X 'github.com/simone-vibes/vibez/internal/auth.devToken=$$TOKEN'"; \
+	LDFLAGS="-X 'github.com/oglenyaboss/aux-player/internal/auth.devToken=$$TOKEN'"; \
 	if [ -n "$$LASTFM_API_KEY" ] && [ -n "$$LASTFM_API_SECRET" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/simone-vibes/vibez/internal/lastfm.apiKey=$$LASTFM_API_KEY'"; \
-		LDFLAGS="$$LDFLAGS -X 'github.com/simone-vibes/vibez/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'"; \
+		LDFLAGS="$$LDFLAGS -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY'"; \
+		LDFLAGS="$$LDFLAGS -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'"; \
 		echo "Embedding Last.fm API keys..."; \
 	fi; \
 	echo "Building with embedded token..."; \
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build \
 		-ldflags "$$LDFLAGS" \
-		-o vibez . && echo "Done. Run: vibez auth login"
+		-o aux . && echo "Done. Run: aux auth login"
 
 # release builds a release binary wired to the token broker and Last.fm API keys.
 # Requires:
@@ -69,21 +69,21 @@ release: check-deps
 	echo "Building release binary..."; \
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build \
 		-ldflags "-s -w \
-		          -X 'github.com/simone-vibes/vibez/internal/auth.tokenURL=$$VIBEZ_TOKEN_URL' \
-		          -X 'github.com/simone-vibes/vibez/internal/auth.clientKey=$$VIBEZ_CLIENT_KEY' \
-		          -X 'github.com/simone-vibes/vibez/internal/lastfm.apiKey=$$LASTFM_API_KEY' \
-		          -X 'github.com/simone-vibes/vibez/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'" \
-		-o vibez . && echo "Done."
+		          -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=$$VIBEZ_TOKEN_URL' \
+		          -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=$$VIBEZ_CLIENT_KEY' \
+		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY' \
+		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'" \
+		-o aux . && echo "Done."
 
 # refresh-token generates a fresh Apple developer JWT and writes it into your
-# local vibez config (apple_developer_token). Use it when the token expires
+# local aux config (apple_developer_token). Use it when the token expires
 # (~30 days) and you build without an embedded token (plain `make build`).
 #
 # Credentials are read from the environment or a local .env file (gitignored):
 #   APPLE_KEY_ID, APPLE_TEAM_ID
 #   APPLE_PRIVATE_KEY       - PEM contents of the .p8 key, OR
 #   APPLE_PRIVATE_KEY_FILE  - path to the .p8 key (~ is expanded)
-# After refreshing, run `vibez auth login` if your user token is not set.
+# After refreshing, run `aux auth login` if your user token is not set.
 refresh-token:
 	@set -e; \
 	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
@@ -98,7 +98,7 @@ refresh-token:
 	GOFLAGS= go run ./scripts/gen-devtoken -write
 
 # install rebuilds with an embedded developer token and copies the binary onto
-# PATH, so the installed copy cannot silently go stale behind a newer ./vibez in
+# PATH, so the installed copy cannot silently go stale behind a newer ./aux in
 # the working tree. Credentials come from the environment or a local .env
 # (gitignored), which may point at the key with APPLE_PRIVATE_KEY_FILE instead
 # of inlining its contents as APPLE_PRIVATE_KEY — the same inputs refresh-token
@@ -117,14 +117,14 @@ install:
 	export APPLE_KEY_ID APPLE_TEAM_ID APPLE_PRIVATE_KEY LASTFM_API_KEY LASTFM_API_SECRET; \
 	$(MAKE) --no-print-directory build-with-token; \
 	install -d "$(BINDIR)"; \
-	install -m 755 vibez "$(BINDIR)/vibez"; \
-	echo "Installed vibez to $(BINDIR)/vibez"
+	install -m 755 aux "$(BINDIR)/aux"; \
+	echo "Installed aux to $(BINDIR)/aux"
 
 uninstall:
-	rm -f "$(BINDIR)/vibez"
+	rm -f "$(BINDIR)/aux"
 
 run: build
-	./vibez
+	./aux
 
 test:
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go test ./...
@@ -133,4 +133,4 @@ lint:
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) golangci-lint run
 
 clean:
-	rm -f vibez
+	rm -f aux

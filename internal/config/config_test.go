@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 // writeCfg writes a JSON config to a temp file and returns the path.
@@ -44,13 +44,13 @@ func TestConfigPath_Default(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".config", "vibez", "config.json")
+	want := filepath.Join(home, ".config", "aux", "config.json")
 	if runtime.GOOS == "windows" {
 		dir, err := os.UserConfigDir()
 		if err != nil {
 			t.Fatal(err)
 		}
-		want = filepath.Join(dir, "vibez", "config.json")
+		want = filepath.Join(dir, "aux", "config.json")
 	}
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)

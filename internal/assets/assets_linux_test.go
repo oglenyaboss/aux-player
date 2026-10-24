@@ -79,11 +79,11 @@ func TestInstallDesktopEntry_LeavesUserEntryAlone(t *testing.T) {
 
 func TestInstallDesktopEntry_RemovesLegacyEntry(t *testing.T) {
 	isolateXDG(t)
-	legacy := filepath.Join(os.Getenv("HOME"), ".local", "share", "applications", "vibez.desktop")
+	legacy := filepath.Join(os.Getenv("HOME"), ".local", "share", "applications", "io.github.simonepelosi.vibez.desktop")
 	writeFile(t, legacy, "[Desktop Entry]\n")
 	InstallDesktopEntry()
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) { //nolint:gosec // test fixture path
-		t.Errorf("legacy vibez.desktop still present (stat err = %v)", err)
+		t.Errorf("legacy vibez desktop entry still present (stat err = %v)", err)
 	}
 }
 
@@ -116,10 +116,28 @@ func TestInstallIcon_PrefersInstalledIcon(t *testing.T) {
 
 func TestInstallIcon_RemovesLegacyIcon(t *testing.T) {
 	isolateXDG(t)
-	legacy := filepath.Join(os.Getenv("HOME"), ".local", "share", "icons", "hicolor", "scalable", "apps", "vibez.svg")
+	legacy := filepath.Join(os.Getenv("HOME"), ".local", "share", "icons", "hicolor", "scalable", "apps", "io.github.simonepelosi.vibez.svg")
 	writeFile(t, legacy, "<svg/>")
 	InstallIcon()
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) { //nolint:gosec // test fixture path
-		t.Errorf("legacy vibez.svg still present (stat err = %v)", err)
+		t.Errorf("legacy vibez icon still present (stat err = %v)", err)
+	}
+}
+
+func TestInstallDesktopEntry_RemovesLegacyAppID(t *testing.T) {
+	dataHome, _ := isolateXDG(t)
+	legacy := filepath.Join(os.Getenv("HOME"), ".local", "share", "applications", "io.github.simonepelosi.vibez.desktop")
+	writeFile(t, legacy, "[Desktop Entry]\n")
+	InstallDesktopEntry()
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) { //nolint:gosec // test fixture path
+		t.Errorf("legacy AppID desktop entry still present (stat err = %v)", err)
+	}
+	entry := filepath.Join(dataHome, "applications", AppID+".desktop")
+	got, err := os.ReadFile(entry) //nolint:gosec // test fixture path
+	if err != nil {
+		t.Fatalf("new desktop entry not written: %v", err)
+	}
+	if !strings.Contains(string(got), "\nExec=aux\n") {
+		t.Errorf("new desktop entry does not run aux:\n%s", got)
 	}
 }

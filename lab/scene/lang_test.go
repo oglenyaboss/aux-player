@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/simone-vibes/vibez/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
 func TestMain(m *testing.M) {

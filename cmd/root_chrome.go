@@ -5,9 +5,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player/cdp"
-	"github.com/simone-vibes/vibez/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player/cdp"
+	"github.com/oglenyaboss/aux-player/internal/tui"
 )
 
 func runPlatform(cfg *config.Config, _ string, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int) error {

@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 type Client struct {

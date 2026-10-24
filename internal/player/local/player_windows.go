@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/cdp"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/cdp"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 var (
@@ -704,7 +704,7 @@ func (p *Player) pageCrashed() {
 	p.state.Position = 0
 	s := p.state
 	p.mu.Unlock()
-	s.Error = "local player: Chrome page crashed; restart vibez to play again"
+	s.Error = "local player: Chrome page crashed; restart aux to play again"
 	p.bcast.Send(s)
 }
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player"
 )
 
 // ActivityTypeListening indicates "Listening to ..." in Discord.
@@ -65,7 +65,7 @@ func BuildActivity(st player.State) *Activity {
 	if album != "" {
 		act.Assets.LargeText = album
 	} else {
-		act.Assets.LargeText = "vibez"
+		act.Assets.LargeText = "AUX"
 	}
 
 	if st.Playing {

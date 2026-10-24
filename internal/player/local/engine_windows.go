@@ -9,7 +9,7 @@ import (
 
 	playwright "github.com/mxschmitt/playwright-go"
 
-	"github.com/simone-vibes/vibez/internal/player/cdp"
+	"github.com/oglenyaboss/aux-player/internal/player/cdp"
 )
 
 //go:embed web/player.html

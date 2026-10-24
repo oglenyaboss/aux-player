@@ -13,10 +13,10 @@ import (
 
 func baseDir() string {
 	if d, err := os.UserCacheDir(); err == nil && d != "" {
-		return filepath.Join(d, "vibez")
+		return filepath.Join(d, "aux")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "AppData", "Local", "vibez")
+	return filepath.Join(home, "AppData", "Local", "aux")
 }
 
 func chromeCandidates() []string {

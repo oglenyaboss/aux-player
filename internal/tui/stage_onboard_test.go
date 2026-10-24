@@ -13,9 +13,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/stage"
-	"github.com/simone-vibes/vibez/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 // ruLang pins the scene language for the Russian assertions and restores it after.
@@ -227,7 +227,7 @@ func TestStageSetupSaves(t *testing.T) {
 	if got := vibeAIConfig(m.cfg).LLM.Effort; got != "high" {
 		t.Fatalf("engine effort = %q, want high", got)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "vibez", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestStageLastfmConnect(t *testing.T) {
 	if m.cfg.LastfmSessionKey != "sess" {
 		t.Fatalf("session key = %q, want sess", m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "vibez", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestStageLastfmTypedKeys(t *testing.T) {
 		t.Fatalf("cfg = (%q,%q,%q), ждём (k,s,sess)",
 			m.cfg.LastfmAPIKey, m.cfg.LastfmAPISecret, m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "vibez", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}

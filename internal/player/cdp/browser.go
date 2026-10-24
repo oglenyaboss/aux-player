@@ -4,7 +4,7 @@
 // installation managed entirely by vibez. On first run, vibez downloads the
 // Google Chrome .deb (~130 MB) from Google's public CDN, extracts it without
 // requiring dpkg-deb or root (using a pure-Go ar parser + system tar), and
-// caches the result in ~/.cache/vibez/chrome/.
+// caches the result in ~/.cache/aux/chrome/.
 // Subsequent launches use the cached binary instantly — no system packages,
 // no apt-get, no sudo, invisible to the rest of the OS.
 // Widevine CDM is bundled inside Chrome and is available automatically.
@@ -31,10 +31,10 @@ const chromeDebURL = "https://dl.google.com/linux/direct/google-chrome-stable_cu
 
 func baseDir() string {
 	if d, err := os.UserCacheDir(); err == nil && d != "" {
-		return filepath.Join(d, "vibez")
+		return filepath.Join(d, "aux")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "vibez")
+	return filepath.Join(home, ".cache", "aux")
 }
 
 // chromeInstallDir is where the Chrome .deb is extracted.
@@ -123,9 +123,9 @@ func systemBrowserHelp() string {
 	case env == "":
 		return "install Chromium and a Widevine CDM (e.g. `pacman -S chromium widevine` on Arch Linux ARM, or your distro's equivalent), or set VIBEZ_CHROME_PATH to a browser binary"
 	case runtime.GOARCH == "amd64":
-		return "point " + env + " at a browser with a Widevine CDM, or unset it to use the Google Chrome vibez downloads, which bundles one"
+		return "point " + env + " at a browser with a Widevine CDM, or unset it to use the Google Chrome aux downloads, which bundles one"
 	default:
-		return "point " + env + " at a browser with a Widevine CDM, or unset it to let vibez discover a system Chromium (e.g. `pacman -S chromium widevine` on Arch Linux ARM, or your distro's equivalent)"
+		return "point " + env + " at a browser with a Widevine CDM, or unset it to let aux discover a system Chromium (e.g. `pacman -S chromium widevine` on Arch Linux ARM, or your distro's equivalent)"
 	}
 }
 
@@ -508,7 +508,7 @@ func launchArgs(widevinePath string, headless bool, wsl bool, sandbox bool) []st
 		"--enable-features=MediaCapabilities,WidevineCdm",
 		"--disable-blink-features=AutomationControlled",
 		// Suppress Chrome's built-in MPRIS D-Bus registration so our Go
-		// MPRIS server (org.mpris.MediaPlayer2.vibez) is the sole player
+		// MPRIS server (org.mpris.MediaPlayer2.aux) is the sole player
 		// visible to the desktop environment.
 		"--disable-features="+disableFeatures,
 		"--disable-component-update",

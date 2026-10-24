@@ -10,14 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/player"
-	"github.com/simone-vibes/vibez/internal/player/browserless/cdm"
-	"github.com/simone-vibes/vibez/internal/player/browserless/license"
-	"github.com/simone-vibes/vibez/internal/player/gst"
-	"github.com/simone-vibes/vibez/internal/provider"
-	"github.com/simone-vibes/vibez/internal/provider/apple"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/cdm"
+	"github.com/oglenyaboss/aux-player/internal/player/browserless/license"
+	"github.com/oglenyaboss/aux-player/internal/player/gst"
+	"github.com/oglenyaboss/aux-player/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/provider/apple"
 )
 
 // Player implements player.Player without a web browser, using an in-process

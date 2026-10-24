@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/provider"
 )
 
 const (
@@ -185,7 +185,7 @@ func formatAPIError(statusCode int, status string, body []byte) string {
 		msg += ": " + trimmed
 	}
 	if statusCode == http.StatusUnauthorized {
-		msg += ". Re-run `vibez login`; if you're using a local build, also refresh apple_developer_token."
+		msg += ". Re-run `aux auth login`; if you're using a local build, also refresh apple_developer_token."
 	}
 	return msg
 }

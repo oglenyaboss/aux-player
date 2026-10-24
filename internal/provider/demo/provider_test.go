@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simone-vibes/vibez/internal/provider/demo"
+	"github.com/oglenyaboss/aux-player/internal/provider/demo"
 )
 
 func newProvider() demo.Provider {

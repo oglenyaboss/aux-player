@@ -5,26 +5,23 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/simone-vibes/vibez/internal/assets"
-	"github.com/simone-vibes/vibez/internal/auth"
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/lastfm"
-	demoPlayer "github.com/simone-vibes/vibez/internal/player/demo"
-	localPlayer "github.com/simone-vibes/vibez/internal/player/local"
-	demoProvider "github.com/simone-vibes/vibez/internal/provider/demo"
-	localProvider "github.com/simone-vibes/vibez/internal/provider/local"
-	"github.com/simone-vibes/vibez/internal/tui"
-	"github.com/simone-vibes/vibez/internal/tui/styles"
+	"github.com/oglenyaboss/aux-player/internal/assets"
+	"github.com/oglenyaboss/aux-player/internal/auth"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/lastfm"
+	demoPlayer "github.com/oglenyaboss/aux-player/internal/player/demo"
+	localPlayer "github.com/oglenyaboss/aux-player/internal/player/local"
+	demoProvider "github.com/oglenyaboss/aux-player/internal/provider/demo"
+	localProvider "github.com/oglenyaboss/aux-player/internal/provider/local"
+	"github.com/oglenyaboss/aux-player/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var cfgFile string
 var debug bool
-var memProfiling bool
 var demo bool
 var noUpdate bool
 var local bool
@@ -33,10 +30,15 @@ var noDiscord bool
 var browserlessFlag bool
 
 var rootCmd = &cobra.Command{
-	Use:   "vibez",
-	Short: "vibez — a vibe-driven music player for your terminal",
-	Long:  "vibez — a vibe-driven music player for your terminal.\n\nRun without arguments to open the TUI.",
-	RunE:  runTUI,
+	Use:   "aux",
+	Short: "AUX — a vibe-driven music player for your terminal",
+	Long:  "AUX — a vibe-driven music player for your terminal.\n\nRun without arguments to open the TUI.",
+	PersistentPreRun: func(*cobra.Command, []string) {
+		if err := config.MigrateLegacy(); err != nil {
+			fmt.Fprintf(os.Stderr, "aux: moving data from vibez: %v\n", err)
+		}
+	},
+	RunE: runTUI,
 }
 
 func Execute() {
@@ -47,9 +49,8 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.config/vibez/config.json; Windows: %APPDATA%\\vibez\\config.json)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.config/aux/config.json; Windows: %APPDATA%\\aux\\config.json)")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
-	rootCmd.PersistentFlags().BoolVar(&memProfiling, "mem-profiling", false, "show live RSS for vibez and its Chrome helper in the header")
 	rootCmd.PersistentFlags().BoolVar(&demo, "demo", false, "run with built-in fake data — no Apple account or internet required")
 	rootCmd.PersistentFlags().BoolVar(&noUpdate, "no-update", false, "skip automatic update check on startup")
 	rootCmd.PersistentFlags().BoolVar(&local, "local", false, "run with local music files (no Apple account required)")
@@ -73,14 +74,7 @@ func runTUI(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	opts := tui.Options{MemProfiling: memProfiling, AUXOnly: true}
-
-	// Apply theme before creating any TUI model so all panels pick up the palette.
-	theme, themeErr := styles.LoadTheme(cfg.Theme, filepath.Dir(cfgPath))
-	if themeErr != nil && debug {
-		fmt.Fprintf(os.Stderr, "debug: theme: %v (falling back to default)\n", themeErr)
-	}
-	styles.Apply(theme)
+	opts := tui.Options{}
 
 	if local {
 		// if --music-dir was passed, it will save to config.

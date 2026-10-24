@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/discord"
-	playerpkg "github.com/simone-vibes/vibez/internal/player"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/discord"
+	playerpkg "github.com/oglenyaboss/aux-player/internal/player"
 )
 
 func startDiscordRPC(cfg *config.Config, player interface {

@@ -10,7 +10,7 @@ import (
 
 	_ "embed"
 
-	"github.com/simone-vibes/vibez/internal/audioquality"
+	"github.com/oglenyaboss/aux-player/internal/audioquality"
 )
 
 //go:embed musickit.html

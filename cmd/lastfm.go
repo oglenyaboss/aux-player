@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/simone-vibes/vibez/internal/config"
-	"github.com/simone-vibes/vibez/internal/lastfm"
-	"github.com/simone-vibes/vibez/internal/openurl"
+	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/lastfm"
+	"github.com/oglenyaboss/aux-player/internal/openurl"
 	"github.com/spf13/cobra"
 )
 
@@ -20,10 +20,10 @@ var lastfmLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Connect your Last.fm account to enable scrobbling",
 	Long: `Authenticate with Last.fm using the application credentials embedded in
-vibez. Your play history will be scrobbled automatically during playback.
+AUX. Your play history will be scrobbled automatically during playback.
 
-The session key is stored in the vibez config file selected by --config.
-If you built vibez from source without embedded keys, set lastfm_api_key and
+The session key is stored in the aux config file selected by --config.
+If you built aux from source without embedded keys, set lastfm_api_key and
 lastfm_api_secret in that file first (obtain them from https://www.last.fm/api/account/create).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load(cfgFile)
@@ -35,9 +35,9 @@ lastfm_api_secret in that file first (obtain them from https://www.last.fm/api/a
 		if cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "" {
 			return fmt.Errorf(`last.fm API credentials are not available.
 
-If you built vibez from source, register an application at
+If you built aux from source, register an application at
   https://www.last.fm/api/account/create
-and add to your vibez config file:
+and add to your aux config file:
   "lastfm_api_key":    "<your API key>",
   "lastfm_api_secret": "<your shared secret>"`)
 		}
@@ -66,7 +66,7 @@ and add to your vibez config file:
 		if err := cfg.Save(cfgFile); err != nil {
 			return fmt.Errorf("saving config: %w", err)
 		}
-		fmt.Println("✓ Last.fm connected! Vibez will scrobble your plays automatically.")
+		fmt.Println("✓ Last.fm connected! AUX will scrobble your plays automatically.")
 		return nil
 	},
 }
@@ -101,10 +101,10 @@ var lastfmStatusCmd = &cobra.Command{
 		switch {
 		case cfg.LastfmAPIKey == "":
 			fmt.Println("Last.fm: not configured (no API key).")
-			fmt.Println("Run 'vibez auth lastfm login' to connect your account.")
+			fmt.Println("Run 'aux auth lastfm login' to connect your account.")
 		case cfg.LastfmSessionKey == "":
 			fmt.Println("Last.fm: API credentials available, but not authenticated.")
-			fmt.Println("Run 'vibez auth lastfm login' to connect your account.")
+			fmt.Println("Run 'aux auth lastfm login' to connect your account.")
 		default:
 			fmt.Println("Last.fm: connected. Scrobbling is enabled.")
 		}
