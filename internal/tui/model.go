@@ -429,7 +429,7 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	m.favorites = make(map[string]bool)
 	m.aboutP = &aboutPanel{m: views.NewAbout()}
 	m.vibeAI = newVibeAIRun()
-	m.vibeAIP = &vibeAIPanel{m: views.NewVibeAI()}
+	m.vibeAIP = &vibeAIPanel{m: newStageScreen(m)}
 	m.vibeAIP.m.SetMemory(vibeAIMemoryLines(cfg))
 	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP, m.eqP, m.aboutP, m.vibeAIP}
 	for _, line := range opts.InitialLogs {
@@ -561,7 +561,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.aboutP.SetSize(contentW, panelH)
 		m.vibeAIP.SetSize(contentW, panelH)
 
-	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg,
+	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg,
 		views.VibeAIAnswersMsg, views.VibeAISubmitMsg, views.VibeAICancelMsg, views.VibeAIActionMsg, views.VibeAILaterMsg, views.VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
@@ -574,6 +574,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case glowTickMsg:
 		m.glowStep++
 		cmds = append(cmds, glowTick())
+		cmds = append(cmds, m.stageWake())
 
 	case introTickMsg:
 		if m.introStep != introDone {
@@ -3069,6 +3070,8 @@ func (m *Model) View() tea.View {
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderPlaylistPickerModal())
 	case m.introStep != introDone:
 		content = m.renderIntro()
+	case m.vibeAIActive():
+		content = m.vibeAIP.m.Frame(m.width, m.height)
 	default:
 		content = m.renderBoxLayout()
 	}

@@ -53,6 +53,9 @@ type Config struct {
 	VibeLLMBaseURL string `json:"vibe_llm_base_url,omitempty"`
 	VibeLLMAPIKey  string `json:"vibe_llm_api_key,omitempty"`
 	VibeLLMModel   string `json:"vibe_llm_model,omitempty"`
+	VibeLLMEffort  string `json:"vibe_llm_effort,omitempty"`
+	VibeLang       string `json:"vibe_lang,omitempty"`
+	VibeEggs       *bool  `json:"vibe_eggs,omitempty"` // nil = on
 }
 
 type EQBand struct {

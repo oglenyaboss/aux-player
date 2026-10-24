@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/simone-vibes/vibez/internal/config"
 	"github.com/simone-vibes/vibez/internal/player"
 	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/simone-vibes/vibez/internal/stage"
 	"github.com/simone-vibes/vibez/internal/tui/views"
 	"github.com/simone-vibes/vibez/internal/vibeai"
 )
@@ -110,8 +110,8 @@ func TestVibeAI_SubmitStartsFreshTurn(t *testing.T) {
 		t.Fatalf("got %#v, want fresh submit of %q", sub, "jazz")
 	}
 	m.handleVibeAIMsg(sub)
-	if !m.vibeAIP.m.Busy() {
-		t.Error("the screen should switch to working")
+	if m.vibeAIP.m.st.Phase() != stage.PhLaunch {
+		t.Errorf("the scene should launch on the request, phase = %d", m.vibeAIP.m.st.Phase())
 	}
 }
 
@@ -128,12 +128,6 @@ func TestVibeAI_StreamOnByDefault(t *testing.T) {
 	m := newModel(nil)
 	if !m.vibeAI.stream {
 		t.Error("stream mode должен быть включён по умолчанию")
-	}
-	press(m, "v")
-	vibeAITypeText(m, "q")
-	m.vibeAIP.m.SetSize(120, 30)
-	if !strings.Contains(m.vibeAIP.m.View(), "● поток") {
-		t.Error("экран должен показывать включённый поток")
 	}
 }
 
@@ -228,9 +222,8 @@ func TestVibeAILatePickAfterDoneIgnored(t *testing.T) {
 	if want := []string{"1", "2", "3"}; !vibeAIEqual(want, m.queueIDs) {
 		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
 	}
-	m.vibeAIP.m.SetSize(100, 40)
-	if n := strings.Count(m.vibeAIP.m.View(), "Three"); n != 1 {
-		t.Errorf("Three в ленте %d раз, want 1 (поздний пик дублирует трек)", n)
+	if len(m.vibeAIP.m.feed) != 3 {
+		t.Errorf("feed = %d tracks, want 3 (поздний пик дублирует трек)", len(m.vibeAIP.m.feed))
 	}
 }
 
@@ -244,12 +237,8 @@ func TestVibeAILateAskAfterDoneIgnored(t *testing.T) {
 	if cmd := m.handleVibeAIMsg(vibeAIAskMsg{gen: gen, qs: []vibeai.Question{{Question: "ещё?", Options: []string{"да", "нет"}}}}); cmd == nil {
 		t.Fatal("поздний вопрос должен вернуть waitVibeAI, иначе чтение канала остановится")
 	}
-	if m.vibeAIP.m.Capturing() {
+	if m.vibeAIP.m.st.Phase() == stage.PhAsk {
 		t.Error("поздний вопрос не должен захватывать клавиши")
-	}
-	m.vibeAIP.m.SetSize(100, 40)
-	if strings.Contains(m.vibeAIP.m.View(), "ещё?") {
-		t.Error("поздний вопрос не должен попадать в ленту")
 	}
 }
 
@@ -273,13 +262,12 @@ func TestVibeAI_StreamAppendsWhileOn(t *testing.T) {
 
 func TestVibeAI_PlayFromCursor(t *testing.T) {
 	m := openVibeWithPortion(t)
-	press(m, "j")
-	cmd := press(m, "enter")
-	act, ok := cmd().(views.VibeAIActionMsg)
-	if !ok || act.Action != views.VibeAIPlay || act.Index != 1 {
-		t.Fatalf("got %#v, want play from 1", act)
+	// The feed-cursor play gesture lived on the removed views screen; the bridge
+	// contract itself is unchanged and drives the queue from any index.
+	cmd := m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 1})
+	if cmd == nil {
+		t.Fatal("play from an index must run")
 	}
-	m.handleVibeAIMsg(act)
 	if len(m.queueTracks) != 2 || m.queueIDs[0] != "2" || m.playerState.Track.Title != "Two" {
 		t.Fatalf("queue = %v, now playing %v", m.queueIDs, m.playerState.Track)
 	}
@@ -416,20 +404,6 @@ func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 	}
 }
 
-func TestVibeAI_TrackStatesInFeed(t *testing.T) {
-	m := newModel(nil)
-	press(m, "v")
-	vibeAITypeText(m, "хочу нового")
-	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
-	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
-	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 15 * time.Second})
-	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
-	m.vibeAIP.m.SetSize(100, 30)
-	view := m.vibeAIP.m.View()
-	if !strings.Contains(view, "скип на 0:15") {
-		t.Errorf("скип должен быть виден в ленте:\n%s", view)
-	}
-}
 func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 40 * time.Second})
@@ -473,11 +447,6 @@ func TestVibeAIOutcomesPlayedNoSkipInView(t *testing.T) {
 	}
 	if m.vibeAI.pending[0].Kind != "played" {
 		t.Errorf("pending[0].Kind = %q, want played", m.vibeAI.pending[0].Kind)
-	}
-	m.vibeAIP.m.SetSize(100, 30)
-	view := m.vibeAIP.m.View()
-	if strings.Contains(view, "скип на") {
-		t.Errorf("дослушанный трек не должен показывать скип:\n%s", view)
 	}
 }
 
@@ -698,18 +667,18 @@ func ratedIndex(t *testing.T, m *Model, k string) int {
 func TestVibeAI_FollowPlayingOnChange(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	stageIntoPlayer(m)
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1", Title: "One"}, Position: 20 * time.Second})
-	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
-	if idx := ratedIndex(t, m, "]"); idx != 1 {
-		t.Fatalf("cursor = %d, want 1 after the playing track changed", idx)
+	if idx := ratedIndex(t, m, "+"); idx != 0 {
+		t.Fatalf("index = %d, want 0: the rating must target the playing track", idx)
 	}
-	press(m, "k")
-	if idx := ratedIndex(t, m, "]"); idx != 0 {
-		t.Fatalf("cursor = %d, want 0 after k", idx)
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
+	if idx := ratedIndex(t, m, "+"); idx != 1 {
+		t.Fatalf("index = %d, want 1 after the playing track changed", idx)
 	}
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 5 * time.Second})
-	if idx := ratedIndex(t, m, "]"); idx != 0 {
-		t.Fatalf("cursor = %d, want 0: a repeated state tick must not move it", idx)
+	if idx := ratedIndex(t, m, "+"); idx != 1 {
+		t.Fatalf("index = %d, want 1: a repeated state tick must not move it", idx)
 	}
 }
 

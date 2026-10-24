@@ -19,14 +19,19 @@ import (
 	"github.com/simone-vibes/vibez/internal/vibeai/memory"
 )
 
-type vibeAIPanel struct{ m *views.VibeAIModel }
+type vibeAIPanel struct{ m *stageScreen }
 
-func (p *vibeAIPanel) NavKey() string                 { return "v" }
-func (p *vibeAIPanel) NavLabel() string               { return "vibe" }
-func (p *vibeAIPanel) SetSize(w, h int)               { p.m.SetSize(w, h) }
-func (p *vibeAIPanel) Update(tea.KeyPressMsg) tea.Cmd { return nil }
-func (p *vibeAIPanel) View() string                   { return p.m.View() }
-func (p *vibeAIPanel) Back() bool                     { return p.m.Back() }
+func (p *vibeAIPanel) NavKey() string   { return "v" }
+func (p *vibeAIPanel) NavLabel() string { return "vibe" }
+func (p *vibeAIPanel) SetSize(w, h int) { p.m.SetSize(w, h) }
+func (p *vibeAIPanel) Update(msg tea.KeyPressMsg) tea.Cmd {
+	if k := msg.String(); k == "left" || k == "right" {
+		return p.m.seekCmd(k == "right")
+	}
+	return nil
+}
+func (p *vibeAIPanel) View() string { return p.m.View() }
+func (p *vibeAIPanel) Back() bool   { return p.m.Back() }
 
 type vibeAIProgressMsg struct {
 	gen  int
@@ -142,7 +147,7 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 		AppleUserToken:      cfg.AppleUserToken,
 		Storefront:          cfg.StoreFront,
 		LastfmKey:           cfg.LastfmAPIKey,
-		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel},
+		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel, Effort: cfg.VibeLLMEffort},
 		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
 		SignalsPath:         filepath.Join(memDir, "vibe-signals.jsonl"),
 		CacheDir:            cacheDir,
@@ -257,6 +262,43 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 	r := m.vibeAI
 	v := m.vibeAIP.m
 	switch msg := msg.(type) {
+	case stageTickMsg:
+		now := time.Time(msg)
+		if !m.vibeAIActive() {
+			v.ticking = false
+			return nil
+		}
+		dt := now.Sub(v.last)
+		if dt > 100*time.Millisecond {
+			dt = 100 * time.Millisecond
+		}
+		v.last = now
+		if m.playerState.Track != nil {
+			v.st.Now(views.PlaybackID(*m.playerState.Track), m.playerState.Position.Seconds(), m.playerState.Playing)
+		}
+		v.st.Step(dt.Seconds())
+		return tea.Batch(v.flush(), v.coverCmds(m.artHTTP), stageTick())
+
+	case stageCoverMsg:
+		if msg.err == nil && msg.img != nil {
+			v.st.SetCover(msg.key, msg.img)
+		}
+		return nil
+
+	case stageStepMsg:
+		if msg.session != "" {
+			m.cfg.LastfmSessionKey = msg.session
+			if err := m.cfg.Save(""); err != nil {
+				m.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
+			}
+		}
+		v.st.StepDone(msg.step, msg.err)
+		return nil
+
+	case stageModelsMsg:
+		v.st.Models(msg.list, msg.total, msg.err)
+		return nil
+
 	case vibeAIProgressMsg:
 		if msg.gen == r.gen {
 			v.AddProgress(msg.line)
@@ -600,7 +642,8 @@ func vibeAIPlaylistName(query string) string {
 }
 
 func vibeAIViewTrack(t vibeai.Track) views.VibeAITrack {
-	return views.VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Why: t.Why, Favorite: t.Favorite}
+	return views.VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Why: t.Why, Favorite: t.Favorite,
+		ArtworkURL: t.ArtworkURL, Dur: time.Duration(t.DurationMs) * time.Millisecond}
 }
 
 func vibeAIViewTracks(ts []vibeai.Track) []views.VibeAITrack {

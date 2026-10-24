@@ -148,10 +148,11 @@ func (m *stationMockProvider) GetStationTracks(_ context.Context, _ string) ([]p
 
 func testCfg() *config.Config {
 	return &config.Config{
-		StoreFront: "us",
-		AuthPort:   7777,
-		Provider:   "apple",
-		Theme:      "default",
+		StoreFront:    "us",
+		AuthPort:      7777,
+		Provider:      "apple",
+		Theme:         "default",
+		VibeLLMAPIKey: "test-key",
 	}
 }
 
