@@ -242,7 +242,7 @@ func (m *Model) glowBox(f *fb, x, y, w, h int, a float64) {
 func (m *Model) drawChips(f *fb) {
 	right := "aux"
 	if m.ph == phPlay {
-		right = fmt.Sprintf("%d / 20   aux", m.cur+1)
+		right = fmt.Sprintf("%d / %d   aux", m.cur+1, len(m.queue))
 	}
 	rx := m.w - 3 - len([]rune(right))
 	f.fade(rx, 1, right, m.th.dim, 0.8, false)
@@ -301,7 +301,7 @@ func (m *Model) drawAsk(f *fb) {
 	if len(m.warmups) > 1 {
 		f.fade(x+w-7, y+1, fmt.Sprintf("%d / %d", m.qi+1, len(m.warmups)), m.th.dim, ca, false)
 	}
-	f.fade(x+3, y+2, q.Title, m.th.text, easeOut(prog(m.qT, 0.25, 0.35)), true)
+	f.fade(x+3, y+2, trunc(q.Title, w-6), m.th.text, easeOut(prog(m.qT, 0.25, 0.35)), true)
 	if q.Scale {
 		m.drawScale(f, q, x, y, w, ca)
 		f.fade(x+3, y+h-2, tr("←→ степень   enter ответ", "←→ scale   enter answer"), m.th.dim, ca*0.8, false)
@@ -334,7 +334,7 @@ func (m *Model) drawAsk(f *fb) {
 		}
 		dx := int((1 - p) * 3)
 		f.fade(x+4+dx, ry, fmt.Sprint(i+1), m.th.dim, oa, false)
-		f.fade(x+7+dx, ry, o, m.th.dim.lerp(m.th.text, 0.55+0.45*hl), oa, hl > 0.5)
+		f.fade(x+7+dx, ry, trunc(o, w-10), m.th.dim.lerp(m.th.text, 0.55+0.45*hl), oa, hl > 0.5)
 	}
 	f.fade(x+3, y+h-2, tr("↑↓ выбрать   enter ответ   1-4 сразу", "↑↓ choose   enter answer   1-4 quick"), m.th.dim, ca*0.8, false)
 }
@@ -513,9 +513,7 @@ func (m *Model) geom() playGeom {
 	}
 	if w >= 2*h+10 {
 		ch := max(3, min(h-7, int(float64(w)*0.4/2)))
-		if h > 40 {
-			ch = min(ch, h*3/4)
-		}
+		ch = min(ch, 26)
 		pw := min(72, w-ch*2-10)
 		cx := max(3, (w-ch*2-4-pw)/2)
 		cy := max(3, (h-ch)/2)
@@ -614,7 +612,10 @@ func (m *Model) drawPlay(f *fb) {
 
 	time := fmtDur(m.pos) + " / " + fmtDur(tk.Dur)
 	bw := min(56, pw-len(time)-2)
-	frac := m.pos / tk.Dur
+	frac := 0.0
+	if tk.Dur > 0 {
+		frac = min(1, m.pos/tk.Dur)
+	}
 	e := m.eggOf(*tk)
 	knob, kc, fill := '●', m.th.text, m.th.a1
 	if e != nil && e.knob != 0 {
@@ -650,24 +651,24 @@ func (m *Model) drawPlay(f *fb) {
 		if !g.side {
 			bottom = m.h - 2
 		}
-		for k := 1; y < bottom && m.cur+k < len(m.queue); k++ {
+		for k := 1; y+1 < bottom && m.cur+k < len(m.queue); k++ {
 			next := m.queue[m.cur+k]
 			rp := 1.0
 			if m.queueT > 0 {
 				rp = prog(m.t-m.queueT, 0.08*float64(k), 0.4)
 			}
-			tg := m.cover(next.Key(), 2, 2)
-			for yy := 0; yy < 2; yy++ {
-				for xx := 0; xx < 2; xx++ {
+			tg := m.cover(next.Key(), 4, 4)
+			for yy := 0; yy < 4; yy++ {
+				for xx := 0; xx < 4; xx++ {
 					if hash(xx, yy, k) < rp {
 						f.pixel(x+xx, y*2+yy, tg.at(xx, yy).mul(0.85))
 					}
 				}
 			}
 			fade := 1 - 0.12*float64(k)
-			n := f.fade(x+3, y, trunc(next.Title, pw-4), m.th.dim.lerp(m.th.text, 0.6*fade), easeOut(rp), false)
-			f.fade(x+5+n, y, trunc(next.Artist, pw-8-n), m.th.dim, rp*0.7*fade, false)
-			y++
+			f.fade(x+6, y, trunc(next.Title, pw-6), m.th.dim.lerp(m.th.text, 0.6*fade), easeOut(rp), false)
+			f.fade(x+6, y+1, trunc(next.Artist, pw-6), m.th.dim, rp*0.7*fade, false)
+			y += 2
 		}
 	}
 

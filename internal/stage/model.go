@@ -371,6 +371,7 @@ func (m *Model) Ask(qs []Question) {
 		return
 	}
 	m.warmups = qs
+	m.raw = nil
 	if m.ph == PhScan {
 		m.startAsk(0)
 	}
@@ -440,11 +441,17 @@ func (m *Model) queueAdditions(tracks []Track) int {
 	return n
 }
 
-// AskLater pops a toast question; another one waits until the current is gone.
+// AskLater pops a toast question; a newer question replaces an unanswered one;
+// an unanswered question leaves after 45 s.
 func (m *Model) AskLater(q Question) {
-	if m.laterToast() == nil {
-		m.toasts = append(m.toasts, &toast{q: &q, born: m.t, x: spring{x: 70}, picked: -1})
+	if t := m.laterToast(); t != nil {
+		if t.picked < 0 {
+			t.x.to = 80
+		} else {
+			return
+		}
 	}
+	m.toasts = append(m.toasts, &toast{q: &q, born: m.t, x: spring{x: 70}, picked: -1, ttl: 45})
 }
 
 // Ahead lists the keys of the tracks queued after the current one.
@@ -660,8 +667,14 @@ func (m *Model) startAsk(i int) {
 	m.qi, m.qT, m.answered, m.ansT = i, 0, false, 0
 	m.dim.to = 0.45
 	q := m.warmups[i]
-	m.selIdx = 0
-	m.sel = spring{}
+	if !q.Scale && len(q.Options) > 0 {
+		d := min(max(q.Def, 0), len(q.Options)-1)
+		m.selIdx = d
+		m.sel = spring{x: float64(d), to: float64(d)}
+	} else {
+		m.selIdx = 0
+		m.sel = spring{}
+	}
 	m.knobI = q.Def
 	m.knob = spring{x: float64(q.Def), to: float64(q.Def)}
 }
@@ -849,8 +862,11 @@ func (m *Model) playStep(dt float64) {
 	if m.o.SelfPlay || m.playing {
 		m.pos += dt
 	}
+	if d := m.curTrack().Dur; d > 0 {
+		m.pos = min(m.pos, d)
+	}
 	m.eggStep()
-	if m.pos >= m.curTrack().Dur && m.o.SelfPlay {
+	if d := m.curTrack().Dur; d > 0 && m.pos >= d && m.o.SelfPlay {
 		m.startTrack(m.cur + 1)
 	}
 	if m.skipT > 0 && m.t-m.skipT > 0.35 {

@@ -83,7 +83,7 @@ func (o *onboard) models() []ModelInfo {
 	q := strings.ToLower(string(o.filter))
 	var out []ModelInfo
 	for _, mi := range o.list {
-		if strings.Contains(mi.ID, q) {
+		if strings.Contains(strings.ToLower(mi.ID), q) {
 			out = append(out, mi)
 		}
 	}
@@ -201,6 +201,8 @@ func (m *Model) agentKey(k, text string) {
 	}
 	if k == "esc" {
 		switch o.sub {
+		case SubLoading:
+			o.setSub(SubKey)
 		case SubURL:
 			o.setSub(SubProvider)
 		case SubKey:
@@ -988,7 +990,7 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 		f.fade(x, y, tr("адрес OpenAI-совместимого API", "OpenAI-compatible API address"), m.th.dim, a, false)
 		f.fade(x, y+1, "›", m.th.a1, a, true)
 		url := o.url
-		if n := w - 6; len(url) > n {
+		if n := max(0, w-6); len(url) > n {
 			url = url[len(url)-n:]
 		}
 		n := f.fade(x+2, y+1, string(url), m.th.text, a, false)
@@ -1011,7 +1013,7 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 		}
 		f.fade(x, y+1, "›", m.th.a1, a, true)
 		masked := []rune(string(o.key[:min(6, len(o.key))]) + strings.Repeat("•", max(0, len(o.key)-6)))
-		if n := w - 6; len(masked) > n {
+		if n := max(0, w-6); len(masked) > n {
 			masked = masked[len(masked)-n:]
 		}
 		n := f.fade(x+2, y+1, string(masked), m.th.text, a, false)

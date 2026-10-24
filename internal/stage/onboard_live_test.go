@@ -277,3 +277,73 @@ func TestOnboardModelsCursorOnRec(t *testing.T) {
 		t.Fatalf("выбрана %q, ждём рекомендуемую b/y", m.ob.picked)
 	}
 }
+
+// R1: the URL and key substeps render on a narrow screen without panicking.
+func TestOnboardNarrowNoPanic(t *testing.T) {
+	sizes := [][2]int{{20, 5}, {24, 6}, {30, 8}, {34, 8}, {40, 10}}
+	for _, sz := range sizes {
+		m := liveOnboard(t, Options{}, &recorder{})
+		toAgent(m)
+		m.Key("enter", "")
+		if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
+			t.Fatalf("%dx%d: подшаг %d (ok=%v), ждём ключ", sz[0], sz[1], sub, ok)
+		}
+		m.SetSize(sz[0], sz[1])
+		m.View()
+
+		m = liveOnboard(t, Options{}, &recorder{})
+		toAgent(m)
+		for i := 0; i < len(providers)-1; i++ {
+			m.Key("down", "")
+		}
+		m.Key("enter", "")
+		if _, sub, _, ok := m.Onboarding(); !ok || sub != SubURL {
+			t.Fatalf("%dx%d: подшаг %d (ok=%v), ждём адрес", sz[0], sz[1], sub, ok)
+		}
+		m.SetSize(sz[0], sz[1])
+		m.View()
+	}
+}
+
+// R2: the model filter matches the ID in any case.
+func TestOnboardFilterCase(t *testing.T) {
+	for _, q := range []string{"llama", "Llama-3.1"} {
+		m := liveOnboard(t, Options{}, &recorder{})
+		modelsStep(t, m)
+		m.Models([]ModelInfo{{ID: "Meta-Llama/Llama-3.1-70B"}, {ID: "a/x"}}, 2, "")
+		steps(m, 1.5)
+		m.Key("", q)
+		if frame := stripANSI(m.View()); !strings.Contains(frame, "Meta-Llama/Llama-3.1-70B") {
+			t.Errorf("фильтр %q: кадр без Meta-Llama/Llama-3.1-70B:\n%s", q, frame)
+		}
+	}
+}
+
+// R3: esc on the loading substep goes back to the key, enter asks for the list again.
+func TestOnboardLoadingEsc(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	modelsStep(t, m)
+	steps(m, 1)
+	m.Key("esc", "")
+	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
+		t.Fatalf("после esc подшаг %d (ok=%v), ждём ключ", sub, ok)
+	}
+	m.Key("enter", "")
+	if got := recorded[LoadModels](r); len(got) != 2 {
+		t.Fatalf("ждём два LoadModels, записано %v", r.acts)
+	}
+}
+
+// R4: the answer to the abandoned load does not move past the key.
+func TestOnboardLoadingEscLateReply(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	modelsStep(t, m)
+	m.Key("esc", "")
+	m.Models([]ModelInfo{{ID: "a/x"}}, 1, "")
+	steps(m, 2)
+	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
+		t.Fatalf("запоздалый ответ: подшаг %d (ok=%v), ждём ключ", sub, ok)
+	}
+}
