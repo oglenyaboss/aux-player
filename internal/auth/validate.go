@@ -115,6 +115,7 @@ func probe(url, devToken, userToken string) (probeResult, string) {
 		return probeInconclusive, ""
 	}
 	req.Header.Set("Authorization", "Bearer "+devToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	if userToken != "" {
 		req.Header.Set("Music-User-Token", userToken)
 	}

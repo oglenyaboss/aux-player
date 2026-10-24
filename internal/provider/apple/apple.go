@@ -129,6 +129,7 @@ func (a *AppleProvider) newRequest(ctx context.Context, method, endpoint string)
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
 	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	return req, nil
 }
 
@@ -1213,6 +1214,7 @@ func (a *AppleProvider) CreatePlaylist(ctx context.Context, name string, trackID
 		return provider.Playlist{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1248,6 +1250,7 @@ func (a *AppleProvider) AddToPlaylist(ctx context.Context, playlistID, trackID s
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 	req.Header.Set("Content-Type", "application/json")
 	return a.do(req, nil)
@@ -1284,6 +1287,7 @@ func (a *AppleProvider) resolveCatalogSongID(ctx context.Context, libraryID stri
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 
 	var resp stationTracksResponse // same shape: { data: [songResource] }
@@ -1307,6 +1311,7 @@ func (a *AppleProvider) stationNextTracksPage(ctx context.Context, catalogID str
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	req.Header.Set("Origin", "https://music.apple.com")
 	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1388,6 +1393,7 @@ func (a *AppleProvider) LoveSong(ctx context.Context, catalogID string, loved bo
 			return fmt.Errorf("LoveSong: add to library: %w", err)
 		}
 		addReq.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+		addReq.Header.Set("Origin", "https://music.apple.com")
 		addReq.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 		if err := a.do(addReq, nil); err != nil {
 			// Non-fatal: song may already be in library.
@@ -1404,6 +1410,7 @@ func (a *AppleProvider) LoveSong(ctx context.Context, catalogID string, loved bo
 			return fmt.Errorf("LoveSong: delete rating: %w", err)
 		}
 		delReq.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+		delReq.Header.Set("Origin", "https://music.apple.com")
 		delReq.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 		return a.do(delReq, nil)
 	}
@@ -1421,6 +1428,7 @@ func (a *AppleProvider) LoveSong(ctx context.Context, catalogID string, loved bo
 		return fmt.Errorf("LoveSong: %w", err)
 	}
 	putReq.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	putReq.Header.Set("Origin", "https://music.apple.com")
 	putReq.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 	putReq.Header.Set("Content-Type", "application/json")
 	return a.do(putReq, nil)

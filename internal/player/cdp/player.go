@@ -4,6 +4,7 @@ package cdp
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -31,7 +32,6 @@ type Player struct {
 
 	closeBrowser func()
 	page         playwright.Page
-	srv          *pageServer
 
 	mu                 sync.RWMutex
 	userToken          string // handed to the page by goGetUserToken; never put in the served HTML
@@ -52,21 +52,14 @@ func New(devToken, userToken, storefront string, wsl bool, audioBitrateKbps int)
 	if userToken == "" {
 		storefront = ""
 	}
-	// The user token is deliberately not rendered into the page: anything that
-	// can fetch the page from the local server would otherwise get it. The page
-	// asks for it over the goGetUserToken binding instead.
+	// The user token is deliberately not rendered into the page. The page asks
+	// for it over the goGetUserToken binding instead.
 	html, err := web.RenderHTML(devToken, "", storefront, "1.0.0", audioBitrateKbps)
 	if err != nil {
 		return nil, fmt.Errorf("cdp: render html: %w", err)
 	}
 
-	srv, err := newPageServer(html)
-	if err != nil {
-		return nil, err
-	}
-
 	p := &Player{
-		srv:       srv,
 		userToken: userToken,
 		readyCh:   make(chan struct{}),
 		errCh:     make(chan error, 1),
@@ -79,7 +72,6 @@ func New(devToken, userToken, storefront string, wsl bool, audioBitrateKbps int)
 
 	pg, closeBrowser, err := OpenBrowser(headless, wsl)
 	if err != nil {
-		srv.close()
 		return nil, fmt.Errorf("cdp: launch browser: %w", err)
 	}
 	p.closeBrowser = closeBrowser
@@ -199,14 +191,26 @@ func New(devToken, userToken, storefront string, wsl bool, audioBitrateKbps int)
 	for name, fn := range bindings {
 		if err := pg.ExposeFunction(name, fn); err != nil {
 			closeBrowser()
-			srv.close()
 			return nil, fmt.Errorf("cdp: expose %s: %w", name, err)
 		}
 	}
 
-	srvURL := srv.pageURL()
+	// Apple accepts the web developer token only from the music.apple.com
+	// origin, so the page is fulfilled in-browser at a random path there
+	// rather than served from 127.0.0.1.
+	pageURL := "https://music.apple.com/vibez/" + rand.Text() + "/"
+	if err := pg.Route(pageURL, func(r playwright.Route) {
+		_ = r.Fulfill(playwright.RouteFulfillOptions{
+			Status:      playwright.Int(200),
+			ContentType: playwright.String("text/html; charset=utf-8"),
+			Body:        html,
+		})
+	}); err != nil {
+		closeBrowser()
+		return nil, fmt.Errorf("cdp: route page: %w", err)
+	}
 	go func() {
-		if _, err := pg.Goto(srvURL); err != nil {
+		if _, err := pg.Goto(pageURL); err != nil {
 			select {
 			case <-p.doneCh:
 			default:
@@ -321,7 +325,6 @@ func (p *Player) Run() {
 	if p.closeBrowser != nil {
 		p.closeBrowser()
 	}
-	p.srv.close()
 	p.bcast.Close()
 }
 
