@@ -11,6 +11,9 @@ type Options struct {
 	AUXOnly bool
 	// AppleLogin, when set, holds the Apple Music sign-in until the onboarding asks for it.
 	AppleLogin chan<- struct{}
+	// LastfmConnected, when set, gets a signal each time the onboarding connects Last.fm,
+	// so the scrobbler can start without a restart.
+	LastfmConnected chan<- struct{}
 	// MemProfiling enables live RSS display (vibez + helper) in the header.
 	// Activate with --mem-profiling on the command line.
 	MemProfiling bool

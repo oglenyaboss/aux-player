@@ -144,6 +144,8 @@ func (m *Model) drawIntro(f *fb) {
 			f.fade(cx-len([]rune(hint))/2, by+4, hint, m.th.dim, a*0.6, false)
 		}
 	}
+	hint := tr("tab настройки", "tab settings")
+	f.fade(m.w-3-len([]rune(hint)), m.h-2, hint, m.th.dim, a*0.7, false)
 }
 
 func (m *Model) drawLaunch(f *fb) {
@@ -502,6 +504,7 @@ type playGeom struct {
 	cx, cy, cw, ch int
 	px, py, pw     int
 	side, mini     bool
+	split          bool
 }
 
 // geom: landscape windows put the cover beside the text, portrait ones stack it on top.
@@ -519,6 +522,10 @@ func (m *Model) geom() playGeom {
 		cy := max(3, (h-ch)/2)
 		px := cx + ch*2 + 4
 		return playGeom{cx: cx, cy: cy, cw: ch * 2, ch: ch, px: px, py: cy, pw: pw, side: true}
+	}
+	if w >= 50 {
+		ch := max(6, min(20, min((h-10)/2, (w-33)/2)))
+		return playGeom{cx: 3, cy: 3, cw: ch * 2, ch: ch, px: 3 + ch*2 + 3, py: 3, pw: w - 9 - ch*2, side: true, split: true}
 	}
 	ch := max(3, min(20, min(h-13, (w-6)/2)))
 	return playGeom{cx: 3, cy: 3, cw: ch * 2, ch: ch, px: 3, py: 3 + ch + 1, pw: w - 6}
@@ -651,6 +658,11 @@ func (m *Model) drawPlay(f *fb) {
 		if !g.side {
 			bottom = m.h - 2
 		}
+		if g.split {
+			x, pw = 3, m.w-6
+			y = max(y, g.cy+g.ch+1)
+			bottom = m.h - 2
+		}
 		for k := 1; y+1 < bottom && m.cur+k < len(m.queue); k++ {
 			next := m.queue[m.cur+k]
 			rp := 1.0
@@ -665,7 +677,7 @@ func (m *Model) drawPlay(f *fb) {
 					}
 				}
 			}
-			fade := 1 - 0.12*float64(k)
+			fade := max(0.4, 1-0.12*float64(k))
 			f.fade(x+6, y, trunc(next.Title, pw-6), m.th.dim.lerp(m.th.text, 0.6*fade), easeOut(rp), false)
 			f.fade(x+6, y+1, trunc(next.Artist, pw-6), m.th.dim, rp*0.7*fade, false)
 			y += 2

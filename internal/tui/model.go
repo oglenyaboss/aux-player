@@ -345,8 +345,9 @@ type Model struct {
 
 	// AUX-only launch: the vibez chrome is off and the scene owns the terminal;
 	// appleLogin carries the asks from the Apple Music onboarding step.
-	auxOnly    bool
-	appleLogin chan<- struct{}
+	auxOnly         bool
+	appleLogin      chan<- struct{}
+	lastfmConnected chan<- struct{}
 
 	// Search popup (not a panel)
 	search *views.SearchModel
@@ -417,9 +418,10 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		supportsArtColor: art.SupportsColor,
 		renderArt:        artRenderer(),
 		// Measured cell height/width ratio, so album art renders as a true square.
-		artCellAsp: cellAspect(),
-		auxOnly:    opts.AUXOnly,
-		appleLogin: opts.AppleLogin,
+		artCellAsp:      cellAspect(),
+		auxOnly:         opts.AUXOnly,
+		appleLogin:      opts.AppleLogin,
+		lastfmConnected: opts.LastfmConnected,
 	}
 	if plyr != nil {
 		m.stateCh = plyr.Subscribe()
@@ -1119,6 +1121,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.helperPaths = msg.HelperPaths
 		m.appendLog("[engine] backend: " + msg.Backend)
 		cmds = append(cmds, waitForState(m.stateCh), m.library.Init())
+		cmds = append(cmds, m.vibeAIFlushPending())
 		cmds = append(cmds, m.restoreAudioSettings()...)
 		if m.memProfiling {
 			cmds = append(cmds, memTick(m.helperPaths))
@@ -1214,6 +1217,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		cmd := m.handleKey(msg)
 		cmds = append(cmds, cmd)
+
+	case tea.PasteMsg:
+		if m.auxOnly {
+			cmds = append(cmds, m.vibeAIP.m.Paste(msg.Content))
+		}
 
 	default:
 		// Forward library background loads.

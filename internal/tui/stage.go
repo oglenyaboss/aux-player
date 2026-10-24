@@ -152,6 +152,12 @@ func (s *stageScreen) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return s.flush(), handled
 }
 
+// Paste hands the scene a bracketed paste, which arrives apart from key presses.
+func (s *stageScreen) Paste(text string) tea.Cmd {
+	s.st.Paste(text)
+	return s.flush()
+}
+
 // seekCmd seeks the vibez player: the scene declines left/right (they belong to
 // the player, not the screen), and the host forwards them to the active panel.
 func (s *stageScreen) seekCmd(right bool) tea.Cmd {
@@ -200,6 +206,10 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.Restart:
 		s.feed = s.feed[:s.open] // the bridge trims the same way on cancel
 		s.out = append(s.out, views.VibeAICancelMsg{})
+	case stage.Settings:
+		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
+		c[1] = false
+		s.st.Onboard(c)
 	case stage.ConnectApple:
 		if s.host.appleLogin != nil {
 			// The sign-in waits for the onboarding to ask; the answer lands

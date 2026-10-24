@@ -127,10 +127,12 @@ func runWebKitFlow(cfg *config.Config, iconPath string, opts tui.Options, onUser
 
 		opts.IconPath = iconPath
 		opts.Backend = "WebKit/GStreamer · fixed 30s previews · bitrate changes unsupported · provider: Apple Music"
+		lfm := make(chan struct{}, 1)
+		opts.LastfmConnected = lfm
 		m := tui.New(cfg, prov, wkPlayer, opts)
 		p := tea.NewProgram(m)
 
-		startLastfmScrobbler(cfg, wkPlayer, func(msg string) { p.Send(tui.DebugLogMsg(msg)) })
+		go lastfmScrobbleLoop(lfm, cfg, wkPlayer, func(msg string) { p.Send(tui.DebugLogMsg(msg)) })
 		stopRPC := startDiscordRPC(cfg, wkPlayer, func(msg string) { p.Send(tui.DebugLogMsg(msg)) })
 		defer stopRPC()
 

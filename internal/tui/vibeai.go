@@ -86,6 +86,7 @@ type vibeAIRun struct {
 	portionStart int
 	served       map[string]vibeai.Track
 	pending      []vibeai.Outcome
+	pendingIDs   []string
 	heardID      string
 	heardPos     time.Duration
 	portion      int
@@ -307,6 +308,12 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			m.cfg.LastfmSessionKey = msg.session
 			if err := m.cfg.Save(""); err != nil {
 				m.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
+			}
+			if m.lastfmConnected != nil {
+				select {
+				case m.lastfmConnected <- struct{}{}:
+				default:
+				}
 			}
 		}
 		v.st.StepDone(msg.step, msg.err)
@@ -611,6 +618,10 @@ func (m *Model) vibeAIPlay(ts []vibeai.Track) tea.Cmd {
 	m.playerState.Position = 0
 	m.queue.SetTracks(m.queueTracks)
 	m.vibeAI.streamForID = ""
+	if m.player == nil {
+		m.vibeAI.pendingIDs = ids
+		return nil
+	}
 	return m.playerCmd(func(p player.Player) error { return p.SetQueue(ids) })
 }
 
@@ -627,7 +638,21 @@ func (m *Model) vibeAIAppend(ts []vibeai.Track) tea.Cmd {
 	m.queueTracks = append(m.queueTracks, tracks...)
 	m.queueIDs = append(m.queueIDs, ids...)
 	m.queue.SetTracks(m.queueTracks)
+	if m.player == nil {
+		m.vibeAI.pendingIDs = append(m.vibeAI.pendingIDs, ids...)
+		return nil
+	}
 	return m.playerCmd(func(p player.Player) error { return p.AppendQueue(ids) })
+}
+
+// vibeAIFlushPending hands the player the queue that arrived before it was ready.
+func (m *Model) vibeAIFlushPending() tea.Cmd {
+	ids := m.vibeAI.pendingIDs
+	if len(ids) == 0 || m.player == nil {
+		return nil
+	}
+	m.vibeAI.pendingIDs = nil
+	return m.playerCmd(func(p player.Player) error { return p.SetQueue(ids) })
 }
 
 func (m *Model) vibeAISaveCmd() tea.Cmd {

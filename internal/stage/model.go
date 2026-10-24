@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Track is one song on the screen; Key is its identity for covers, themes and the queue.
@@ -92,6 +93,9 @@ type Quit struct{}
 
 // Restart is the r key.
 type Restart struct{}
+
+// Settings is tab on the intro: the host reopens the onboarding with Onboard.
+type Settings struct{}
 
 // Phase is what the screen currently draws.
 type Phase int
@@ -237,6 +241,13 @@ func New(o Options) *Model {
 		m.ph, m.ob = PhOnboard, newOnboard()
 	}
 	return m
+}
+
+// Onboard reopens the onboarding over the intro; connected marks the steps it closes by itself.
+func (m *Model) Onboard(connected [3]bool) {
+	m.reset()
+	m.o.Connected = connected
+	m.ph, m.ob = PhOnboard, newOnboard()
 }
 
 func (m *Model) reset() {
@@ -952,6 +963,23 @@ func (m *Model) Toast(s string) {
 
 // ---------- input ----------
 
+// Paste types pasted text into the field in focus as one line: the edges are trimmed,
+// line breaks and tabs become spaces, other control characters are dropped.
+func (m *Model) Paste(text string) {
+	line := strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(text))
+	if line != "" {
+		m.Key("", line)
+	}
+}
+
 // Key handles one key press and reports whether the screen took it: a host with its
 // own player passes the untaken keys through. Quitting became OnAction(Quit{}).
 func (m *Model) Key(k, text string) bool {
@@ -968,6 +996,8 @@ func (m *Model) Key(k, text string) bool {
 			m.send(Quit{})
 		case "enter":
 			m.launch()
+		case "tab":
+			m.send(Settings{})
 		case "backspace":
 			if len(m.input) > 0 {
 				m.input = m.input[:len(m.input)-1]
@@ -1082,10 +1112,10 @@ func (m *Model) playKey(k, text string) bool {
 			return true
 		}
 		return false
-	case "+", "=", "up":
+	case "+", "=":
 		m.like(true)
 		m.send(Rate{Up: true})
-	case "-", "down":
+	case "-":
 		m.like(false)
 	case "/":
 		m.typing = true

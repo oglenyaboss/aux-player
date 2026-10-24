@@ -250,3 +250,34 @@ func TestLaterPick(t *testing.T) {
 		t.Fatalf("ждём один LaterPick{2}, записано %v", r.acts)
 	}
 }
+
+// The terminal turns mouse-wheel scrolling into arrow keys: arrows must not rate.
+func TestArrowsDoNotRate(t *testing.T) {
+	r := &recorder{}
+	m := New(Options{OnAction: r.on})
+	m.SetSize(110, 32)
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Step(eventDT)
+	for _, k := range []string{"up", "down", "up", "down"} {
+		m.Key(k, "")
+	}
+	steps(m, 1)
+	if rs := recorded[Rate](r); len(rs) != 0 {
+		t.Fatalf("стрелки оценили трек: %v", r.acts)
+	}
+}
+
+func TestPasteReply(t *testing.T) {
+	r := &recorder{}
+	m := New(Options{OnAction: r.on})
+	m.SetSize(110, 32)
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Step(eventDT)
+	m.Paste("без вокала")
+	m.Key("/", "/")
+	m.Paste("без вокала\n")
+	m.Key("enter", "")
+	if got := recorded[Say](r); len(got) != 1 || got[0].Text != "без вокала" {
+		t.Fatalf("ждём один Say «без вокала», записано %v", r.acts)
+	}
+}

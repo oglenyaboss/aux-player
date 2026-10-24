@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/simone-vibes/vibez/internal/config"
 	"github.com/simone-vibes/vibez/internal/stage"
 	"github.com/simone-vibes/vibez/internal/vibeai/llm"
@@ -361,5 +362,19 @@ func TestStageAppleConnect(t *testing.T) {
 	sm, ok := cmd().(stageStepMsg)
 	if !ok || sm.step != 0 || sm.session != "" || sm.err != "" {
 		t.Fatalf("msg = %#v, want stageStepMsg{step: 0}", sm)
+	}
+}
+
+// R3: tab on the AUX intro reopens the onboarding even with a filled agent.
+func TestStageTabOpensSettings(t *testing.T) {
+	isolatedHome(t)
+	m := newModel(nil)
+	st := m.vibeAIP.m.st
+	if st.Phase() != stage.PhIntro {
+		t.Fatalf("phase = %d, want intro", st.Phase())
+	}
+	m.vibeAIP.m.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	if st.Phase() != stage.PhOnboard {
+		t.Fatalf("phase after tab = %d, want onboarding", st.Phase())
 	}
 }

@@ -262,6 +262,7 @@ func TestVibeAI_StreamAppendsWhileOn(t *testing.T) {
 
 func TestVibeAI_PlayFromCursor(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.player = newMockPlayer()
 	// The feed-cursor play gesture lived on the removed views screen; the bridge
 	// contract itself is unchanged and drives the queue from any index.
 	cmd := m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 1})
@@ -727,5 +728,79 @@ func TestVibeAI_RateIndexOutOfBounds(t *testing.T) {
 	}
 	if len(m.vibeAI.pending) != before {
 		t.Errorf("pending = %+v, want unchanged", m.vibeAI.pending)
+	}
+}
+
+func TestVibeAIPlayBeforeReady(t *testing.T) {
+	m := newModel(nil)
+	a := []vibeai.Track{{ID: "a1"}, {ID: "a2"}}
+	b := []vibeai.Track{{ID: "b1"}, {ID: "b2"}}
+	if cmd := m.vibeAIPlay(a); cmd != nil {
+		t.Fatalf("vibeAIPlay without a player returned a cmd")
+	}
+	if cmd := m.vibeAIAppend(b); cmd != nil {
+		t.Fatalf("vibeAIAppend without a player returned a cmd")
+	}
+	want := []string{"a1", "a2", "b1", "b2"}
+	if !reflect.DeepEqual(m.vibeAI.pendingIDs, want) {
+		t.Fatalf("pendingIDs = %v, want %v", m.vibeAI.pendingIDs, want)
+	}
+}
+
+func TestVibeAIFlushOnReady(t *testing.T) {
+	a := []vibeai.Track{{ID: "a1"}, {ID: "a2"}}
+	b := []vibeai.Track{{ID: "b1"}, {ID: "b2"}}
+	want := []string{"a1", "a2", "b1", "b2"}
+
+	m := newModel(nil)
+	m.vibeAIPlay(a)
+	m.vibeAIAppend(b)
+	mp := newMockPlayer()
+	m.Update(EngineReadyMsg{Player: mp, Provider: &mockProvider{}})
+	if len(m.vibeAI.pendingIDs) != 0 {
+		t.Fatalf("pendingIDs = %v after EngineReadyMsg, want empty", m.vibeAI.pendingIDs)
+	}
+
+	m = newModel(nil)
+	m.vibeAIPlay(a)
+	m.vibeAIAppend(b)
+	mp = newMockPlayer()
+	m.player = mp
+	cmd := m.vibeAIFlushPending()
+	if cmd == nil {
+		t.Fatal("vibeAIFlushPending returned nil with pending ids and a player")
+	}
+	cmd()
+	if !reflect.DeepEqual(mp.setQueueIDs, want) {
+		t.Fatalf("setQueueIDs = %v, want %v", mp.setQueueIDs, want)
+	}
+}
+
+func TestVibeAIPlayReplacesPending(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAIPlay([]vibeai.Track{{ID: "a1"}, {ID: "a2"}})
+	c := []vibeai.Track{{ID: "c1"}, {ID: "c2"}}
+	m.vibeAIPlay(c)
+	want := []string{"c1", "c2"}
+	if !reflect.DeepEqual(m.vibeAI.pendingIDs, want) {
+		t.Fatalf("pendingIDs = %v, want %v", m.vibeAI.pendingIDs, want)
+	}
+}
+
+func TestVibeAIPlayWithPlayer(t *testing.T) {
+	mp := newMockPlayer()
+	m := newModel(mp)
+	a := []vibeai.Track{{ID: "a1"}, {ID: "a2"}}
+	cmd := m.vibeAIPlay(a)
+	if cmd == nil {
+		t.Fatal("vibeAIPlay with a player returned nil")
+	}
+	cmd()
+	want := []string{"a1", "a2"}
+	if !reflect.DeepEqual(mp.setQueueIDs, want) {
+		t.Fatalf("setQueueIDs = %v, want %v", mp.setQueueIDs, want)
+	}
+	if len(m.vibeAI.pendingIDs) != 0 {
+		t.Fatalf("pendingIDs = %v, want empty", m.vibeAI.pendingIDs)
 	}
 }

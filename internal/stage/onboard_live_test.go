@@ -347,3 +347,88 @@ func TestOnboardLoadingEscLateReply(t *testing.T) {
 		t.Fatalf("запоздалый ответ: подшаг %d (ok=%v), ждём ключ", sub, ok)
 	}
 }
+
+// R1: tab on the intro sends Settings and leaves the input empty.
+func TestIntroTabSettings(t *testing.T) {
+	r := &recorder{}
+	m := New(Options{OnAction: r.on})
+	m.SetSize(110, 32)
+	if !runTo(m, PhIntro, 300) {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	m.Key("tab", "")
+	if got := recorded[Settings](r); len(got) != 1 {
+		t.Fatalf("ждём один Settings, записано %v", r.acts)
+	}
+	if m.Input() != "" {
+		t.Fatalf("Input()=%q, ждём пустое поле", m.Input())
+	}
+}
+
+// R2: Onboard reopens the onboarding over the intro; the connected Apple step closes
+// itself after the language and the screen stops on the agent step.
+func TestOnboardReopen(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	if !runTo(m, PhIntro, 300) {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	m.Onboard([3]bool{true, false, false})
+	if m.Phase() != PhOnboard {
+		t.Fatalf("фаза %v, ждём PhOnboard", m.Phase())
+	}
+	for i := 0; i < 400 && m.ob.t < obReady; i++ {
+		m.Step(eventDT)
+	}
+	m.Key("enter", "")
+	steps(m, 3)
+	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
+		t.Fatalf("после языка шаг %d (ok=%v), ждём 1", step, ok)
+	}
+}
+
+// R4: the intro shows the settings hint in the bottom right corner.
+func TestIntroSettingsHint(t *testing.T) {
+	langEN(t)
+	m := New(Options{})
+	m.SetSize(110, 32)
+	steps(m, 3)
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "tab settings") {
+		t.Errorf("кадр без подсказки tab settings:\n%s", frame)
+	}
+}
+
+func TestOnboardPasteKey(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	toAgent(m)
+	m.Key("enter", "")
+	m.Paste("  sk-or-v1-abc\n")
+	m.Key("enter", "")
+	if got := recorded[LoadModels](r); len(got) != 1 || got[0].Key != "sk-or-v1-abc" {
+		t.Fatalf("ждём LoadModels с ключом sk-or-v1-abc, записано %v", r.acts)
+	}
+}
+
+func TestIntroPaste(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	if !runTo(m, PhIntro, 300) {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	m.Paste("lofi\nна вечер\t")
+	if m.Input() != "lofi на вечер" {
+		t.Fatalf("Input()=%q, ждём «lofi на вечер»", m.Input())
+	}
+}
+
+func TestOnboardPasteFilter(t *testing.T) {
+	m := liveOnboard(t, Options{}, &recorder{})
+	modelsStep(t, m)
+	m.Models([]ModelInfo{{ID: "Meta-Llama/Llama-3.1-70B"}, {ID: "a/x"}}, 2, "")
+	steps(m, 1.5)
+	m.Paste("llama\n")
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "Meta-Llama/Llama-3.1-70B") || strings.Contains(frame, "a/x") {
+		t.Fatalf("вставка в фильтр не сработала:\n%s", frame)
+	}
+}

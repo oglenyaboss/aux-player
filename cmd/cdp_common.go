@@ -34,6 +34,8 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		ask = make(chan struct{}, 1)
 		opts.AppleLogin = ask
 	}
+	lfm := make(chan struct{}, 1)
+	opts.LastfmConnected = lfm
 	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *cdp.Player, 1)
 	runDone := make(chan struct{})
@@ -162,7 +164,7 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		if hooks.afterReady != nil {
 			hooks.afterReady(cdpPlayer)
 		}
-		startLastfmScrobbler(cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		go lastfmScrobbleLoop(lfm, cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 		stopRPC = startDiscordRPC(cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 
 		prog.Send(tui.EngineReadyMsg{
@@ -198,9 +200,9 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 
 func startLastfmScrobbler(cfg *config.Config, player interface {
 	Subscribe() <-chan playerpkg.State
-}, log func(string)) {
+}, log func(string)) bool {
 	if cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "" || cfg.LastfmSessionKey == "" {
-		return
+		return false
 	}
 	lfmClient := lastfm.NewClient(cfg.LastfmAPIKey, cfg.LastfmAPISecret, cfg.LastfmSessionKey)
 	scrobbler := lastfm.NewScrobbler(lfmClient)
@@ -210,4 +212,5 @@ func startLastfmScrobbler(cfg *config.Config, player interface {
 			scrobbler.Update(st)
 		}
 	}()
+	return true
 }

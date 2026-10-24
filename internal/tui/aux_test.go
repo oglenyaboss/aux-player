@@ -225,3 +225,35 @@ func runAll(cmd tea.Cmd) {
 		}
 	}
 }
+
+func TestLastfmConnectedSignal(t *testing.T) {
+	ch := make(chan struct{}, 1)
+	cfg := testCfg()
+	m := auxModel(t, nil, cfg, Options{LastfmConnected: ch})
+	m.Update(stageStepMsg{step: 2, session: "s"})
+	if got := len(ch); got != 1 {
+		t.Fatalf("after the session the signal channel holds %d values, want 1", got)
+	}
+	if m.cfg.LastfmSessionKey != "s" {
+		t.Fatalf("LastfmSessionKey = %q, want the onboarding session", m.cfg.LastfmSessionKey)
+	}
+
+	failed := make(chan struct{}, 1)
+	mf := auxModel(t, nil, testCfg(), Options{LastfmConnected: failed})
+	mf.Update(stageStepMsg{step: 2, err: "x"})
+	if got := len(failed); got != 0 {
+		t.Fatalf("a failed step signalled %d times, want 0", got)
+	}
+}
+
+func TestAUXPaste(t *testing.T) {
+	m := auxModel(t, nil, nil, Options{})
+	st := m.vibeAIP.m.st
+	for i := 0; i < 400 && st.Phase() != stage.PhIntro; i++ {
+		st.Step(1.0 / 60)
+	}
+	m.Update(tea.PasteMsg{Content: "lofi"})
+	if got := st.Input(); got != "lofi" {
+		t.Fatalf("Input() = %q after paste, want lofi", got)
+	}
+}

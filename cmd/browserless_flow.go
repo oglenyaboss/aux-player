@@ -24,6 +24,8 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 		ask = make(chan struct{}, 1)
 		opts.AppleLogin = ask
 	}
+	lfm := make(chan struct{}, 1)
+	opts.LastfmConnected = lfm
 	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *browserless.Player, 1)
 	restartExe := make(chan string, 1)
@@ -116,7 +118,7 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 		}
 
 		// Last.fm scrobbler & Discord RPC integration
-		startLastfmScrobbler(cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		go lastfmScrobbleLoop(lfm, cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 		stopRPC = startDiscordRPC(cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 
 		backendLabel := fmt.Sprintf("Browserless (In-Process Widevine + GStreamer) · %d kbps AAC", audioBitrateKbps)

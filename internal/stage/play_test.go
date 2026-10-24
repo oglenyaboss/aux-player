@@ -128,3 +128,92 @@ func TestZeroDur(t *testing.T) {
 		t.Errorf("в кадре NaN:\n%s", frame)
 	}
 }
+
+// R1: portrait windows at least 50 wide split into a cover on the left and text on
+// the right; narrower ones keep the stacked layout.
+func TestGeomSplit(t *testing.T) {
+	m := New(Options{})
+	for _, c := range []struct {
+		w, h           int
+		ch, cw, px, pw int
+	}{
+		{60, 60, 13, 26, 32, 25},
+		{80, 60, 20, 40, 46, 31},
+	} {
+		m.SetSize(c.w, c.h)
+		g := m.geom()
+		if !g.split {
+			t.Errorf("%dx%d: split=false, ждём split", c.w, c.h)
+		}
+		if g.ch != c.ch || g.cw != c.cw || g.px != c.px || g.pw != c.pw {
+			t.Errorf("%dx%d: ch=%d cw=%d px=%d pw=%d, ждём %d/%d/%d/%d", c.w, c.h, g.ch, g.cw, g.px, g.pw, c.ch, c.cw, c.px, c.pw)
+		}
+	}
+	m.SetSize(46, 60)
+	if g := m.geom(); g.split || g.px != 3 {
+		t.Errorf("46x60: split=%v px=%d, ждём стопку с px=3", g.split, g.px)
+	}
+	m.SetSize(110, 32)
+	if g := m.geom(); g.split || g.ch != 22 {
+		t.Errorf("110x32: split=%v ch=%d, ждём боковую с ch=22", g.split, g.ch)
+	}
+}
+
+// R4: in the split player the artist and the time bar sit right of the cover, and the
+// next track starts below the cover on the full width.
+func TestSplitLayout(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(60, 60)
+	m.JumpPlay(threeTracks(), 0, 0)
+	steps(m, 3)
+	lines := strings.Split(stripANSI(m.View()), "\n")
+	g := m.geom()
+	inCover := func(y int) bool { return y >= g.cy && y < g.cy+g.ch }
+	row := func(y int) []rune {
+		if y < 0 || y >= len(lines) {
+			return nil
+		}
+		return []rune(lines[y])
+	}
+	at := func(y, x int) string {
+		r := row(y)
+		if x < 0 || x > len(r) {
+			return ""
+		}
+		return string(r[x:])
+	}
+	alpha, time := -1, -1
+	for y := 0; y < len(lines); y++ {
+		if strings.HasPrefix(at(y, g.px), "Alpha") {
+			alpha = y
+		}
+		if strings.Contains(lines[y], "0:0") && strings.Contains(lines[y], "/ 2:00") {
+			time = y
+		}
+	}
+	if alpha < 0 {
+		t.Fatalf("строка Alpha не найдена справа от обложки")
+	}
+	if !inCover(alpha) {
+		t.Errorf("Alpha в строке %d, ждём внутри [%d,%d)", alpha, g.cy, g.cy+g.ch)
+	}
+	if time < 0 {
+		t.Fatalf("строка времени не найдена")
+	}
+	if !inCover(time) {
+		t.Errorf("полоска времени в строке %d, ждём внутри [%d,%d)", time, g.cy, g.cy+g.ch)
+	}
+	next := -1
+	for y := 0; y < len(lines); y++ {
+		if strings.HasPrefix(at(y, 3+6), "Two") {
+			next = y
+			break
+		}
+	}
+	if next < 0 {
+		t.Fatalf("строка Two не найдена")
+	}
+	if next < g.cy+g.ch {
+		t.Errorf("Two в строке %d, ждём не выше %d", next, g.cy+g.ch)
+	}
+}
