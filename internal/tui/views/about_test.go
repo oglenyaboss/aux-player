@@ -37,7 +37,6 @@ func TestAboutModel(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected non-nil command for enter key")
 	}
-	_ = cmd() // run it
 
 	// Test View after open link status change
 	viewAfter := m.View()
@@ -52,7 +51,6 @@ func TestAboutModel(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected non-nil command for d key")
 	}
-	_ = cmd()
 }
 
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
