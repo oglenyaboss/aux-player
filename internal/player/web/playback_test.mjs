@@ -336,3 +336,53 @@ test('waiting mid-track, or a stall that clears, is left alone', async (t) => {
  t.mock.timers.tick(3000);
  assert.deepEqual(cleared.calls, []);
 });
+
+// ─── queue operations run in call order (#10a) ───────────────────────────────
+function setupQueue(resolveItems) {
+ const calls = [];
+ const errors = [];
+ const env = {
+  window: {}, _q: [], _qi: -1, _qUnshuffled: [], _nativeQueue: false,
+  _removedIds: new Set(), _log: () => {}, _warmLibItems: () => {}, _syncNext: () => {},
+  errName: e => e.message,
+  goError: text => { errors.push(text); return Promise.resolve(); },
+  _playAt: i => { calls.push(['playAt', i]); env._qi = i; },
+  _playNativeAt: i => { calls.push(['playNativeAt', i]); env._qi = i; },
+  _m: () => ({ async playLater() {} }),
+  _resolveItems: resolveItems,
+ };
+ const start = html.indexOf('window.vibezSetQueue = async function');
+ const end = html.indexOf('window.vibezQueueRemove = function', start);
+ runInNewContext(html.slice(start, end), env);
+ return { env, calls, errors, ids: () => env._q.map(i => i.id).join(',') };
+}
+test('setQueue then appendQueue keeps call order when append resolves first', async () => {
+ const { env, calls, ids } = setupQueue(ids => new Promise(resolve =>
+  setTimeout(() => resolve(ids.map(id => ({ id }))), ids[0] === 'a' ? 20 : 1)));
+ const p1 = env.window.vibezSetQueue('["a"]');
+ const p2 = env.window.vibezAppendQueue('["b","c"]');
+ await Promise.all([p1, p2]);
+ assert.equal(ids(), 'a,b,c');
+ assert.deepEqual(calls, [['playAt', 0]]);
+});
+test('a failed queue operation does not break the chain', async () => {
+ const { env, errors, ids } = setupQueue(async ids => {
+  if (ids.includes('bad')) throw new Error('nope');
+  return ids.map(id => ({ id }));
+ });
+ const p1 = env.window.vibezSetQueue('["bad"]');
+ const p2 = env.window.vibezAppendQueue('["x"]');
+ await Promise.all([p1, p2]);
+ assert.equal(ids(), 'x');
+ assert.equal(errors.length, 1);
+});
+test('three queue calls run strictly in call order', async () => {
+ const delay = { a: 30, b: 10, c: 1 };
+ const { env, ids } = setupQueue(ids => new Promise(resolve =>
+  setTimeout(() => resolve(ids.map(id => ({ id }))), delay[ids[0]])));
+ const p1 = env.window.vibezSetQueue('["a"]');
+ const p2 = env.window.vibezAppendQueue('["b"]');
+ const p3 = env.window.vibezAppendQueue('["c"]');
+ await Promise.all([p1, p2, p3]);
+ assert.equal(ids(), 'a,b,c');
+});

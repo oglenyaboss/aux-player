@@ -382,6 +382,14 @@
           } catch(e) { goError('appendQueue failed: '+errName(e)).catch(()=>{}); }
         };
 
+        // Each queue call resolves its ids asynchronously; chain them so a later
+        // call never lands before an earlier one (setQueue then appendQueue).
+        let _qChain = Promise.resolve();
+        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue']) {
+          const fn = window[name];
+          window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
+        }
+
       // ════════════════════════════════════════════════════════════════════
       // GSTREAMER MODE — preview URLs sent to Go; MusicKit is auth+API only.
       // ════════════════════════════════════════════════════════════════════
@@ -458,6 +466,14 @@
             playIdx(startIdx || 0);
           } catch(e) { goError('setPlaylist failed: ' + errName(e)).catch(() => {}); }
         };
+
+        // Each queue call resolves its ids asynchronously; chain them so a later
+        // call never lands before an earlier one (setQueue then setPlaylist).
+        let _qChain = Promise.resolve();
+        for (const name of ['vibezSetQueue', 'vibezSetPlaylist']) {
+          const fn = window[name];
+          window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
+        }
       }
 
       // ── Auth (both modes) ────────────────────────────────────────────────

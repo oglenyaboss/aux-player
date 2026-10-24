@@ -1233,6 +1233,14 @@
           });
         }
 
+        // Each queue call resolves its ids asynchronously; chain them so a later
+        // call never lands before an earlier one (setQueue then appendQueue).
+        let _qChain = Promise.resolve();
+        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue', 'vibezQueuePlayNext']) {
+          const fn = window[name];
+          window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
+        }
+
         window.vibezQueueRemove = function(idxStr) {
           const idx = parseInt(idxStr);
           if (idx < 0 || idx >= _q.length) return;
@@ -1408,6 +1416,14 @@
           if (before === 0) return; // the append started playback at item 0
           for (let i = before; i < _queue.length; i++) window.vibezQueueMove(i, at + (i - before));
         };
+
+        // Each queue call resolves its ids asynchronously; chain them so a later
+        // call never lands before an earlier one (setQueue then appendQueue).
+        let _qChain = Promise.resolve();
+        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue']) {
+          const fn = window[name];
+          window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
+        }
 
         window.vibezQueueRemove = function(idxStr) {
           const idx = parseInt(idxStr);
