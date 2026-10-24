@@ -1,0 +1,58 @@
+{
+  "data": [
+    {
+      "id": "1146195596",
+      "attributes": {
+        "name": "Blonde",
+        "artistName": "Frank Ocean",
+        "releaseDate": "2016-08-20",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "R&B/Soul"
+        ],
+        "editorialNotes": {
+          "standard": "<b>100 Best Albums</b> In the four years between Frank Ocean’s debut album <i>channel ORANGE</i> and his second, <i>Blonde</i>, he had revealed some of his private life—he published a post on social media about having been in love with a man—but still remained as mysterious and sceptical towards fame as ever, teasing new music sporadically and then disappearing like a wisp on the wind. Behind great innovation, however, is a massive amount of work, and so when <i>Blonde</i> was released one day after a 24-hour streaming performance art piece (<i>Endless</i>) and alongside a limited-edition magazine entitled <i>Boys Don’t Cry</i>, his slipperiness felt more like part of a carefully considered mystique. Even the apparent indecision over the album title’s official spelling can be seen in hindsight as being characteristically mischievous.\n\n<i>Endless</i> featured the mundane beauty of Ocean woodworking in a studio, soundtracked by abstract and meandering ambient music. <i>Blonde</i> built on those ideas and imbued them with more form, taking a left-field, often minimalist approach to his breezy harmonies and ever-present narrative lyricism. His confidence was crucial to the risk of creating a big multimedia project for a sophomore album, but it also extended to his songwriting—his voice surer of itself (“Solo”), his willingness to excavate his weird impulses more prominent (“Good Guy” and “Pretty Sweet”, among others).\n\nThough <i>Blonde</i> packs 17 tracks into one quick hour, it’s a sprawling palette of ideas, a testament to the intelligence of flying one’s own artistic freak flag and trusting that audiences will meet you where you’re at. They did. And Ocean established himself as a generational artist uniquely suited to the complexities and convulsive changes of the second decade of the 21st century."
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1146195712",
+              "attributes": {
+                "name": "Nikes",
+                "artistName": "Frank Ocean",
+                "durationInMillis": 314075
+              }
+            },
+            {
+              "id": "1146195713",
+              "attributes": {
+                "name": "Ivy",
+                "artistName": "Frank Ocean",
+                "durationInMillis": 249191
+              }
+            },
+            {
+              "id": "1146195714",
+              "attributes": {
+                "name": "Pink + White",
+                "artistName": "Frank Ocean",
+                "durationInMillis": 184516
+              }
+            },
+            {
+              "id": "1146195715",
+              "attributes": {
+                "name": "Be Yourself",
+                "artistName": "Frank Ocean",
+                "durationInMillis": 86944
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "id": "1484937109",
+      "attributes": {
+        "name": "Closed on Sunday",
+        "artistName": "Kanye West",
+        "albumName": "JESUS IS KING",
+        "releaseDate": "2019-10-25",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ]
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1484936940",
+              "attributes": {
+                "name": "JESUS IS KING",
+                "editorialNotes": {
+                  "short": "Ye looks to his faith—and the Sunday Service Choir—on his ninth album."
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

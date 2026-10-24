@@ -1,0 +1,125 @@
+{
+  "data": [
+    {
+      "id": "1318094493",
+      "type": "artists",
+      "attributes": {
+        "name": "Yeat",
+        "genreNames": [
+          "Hip-Hop/Rap"
+        ],
+        "editorialNotes": {
+          "short": "Rage-rap auteur."
+        }
+      },
+      "views": {
+        "full-albums": {
+          "data": [
+            {
+              "id": "1888322963",
+              "attributes": {
+                "name": "ADL",
+                "releaseDate": "2026-03-27",
+                "trackCount": 21,
+                "artistName": "Yeat"
+              }
+            },
+            {
+              "id": "1830346710",
+              "attributes": {
+                "name": "DANGEROUS SUMMER",
+                "releaseDate": "2025-08-01",
+                "trackCount": 11,
+                "artistName": "Yeat"
+              }
+            },
+            {
+              "id": "1774384537",
+              "attributes": {
+                "name": "LYFESTYLE",
+                "releaseDate": "2024-10-18",
+                "trackCount": 22,
+                "artistName": "Yeat"
+              }
+            }
+          ]
+        },
+        "latest-release": {
+          "data": [
+            {
+              "id": "6813244843",
+              "attributes": {
+                "name": "COCOON",
+                "releaseDate": "2026-09-18",
+                "trackCount": 7,
+                "artistName": "Yeat"
+              }
+            }
+          ]
+        },
+        "singles": {
+          "data": [
+            {
+              "id": "6813244843",
+              "attributes": {
+                "name": "COCOON",
+                "releaseDate": "2026-09-18",
+                "trackCount": 7,
+                "artistName": "Yeat"
+              }
+            },
+            {
+              "id": "6808741542",
+              "attributes": {
+                "name": "ON NOTHING - Single",
+                "releaseDate": "2026-09-04",
+                "trackCount": 1,
+                "artistName": "Yeat"
+              }
+            },
+            {
+              "id": "6781327121",
+              "attributes": {
+                "name": "Million Dollar Minion - Single",
+                "releaseDate": "2026-06-17",
+                "trackCount": 1,
+                "artistName": "Yeat"
+              }
+            }
+          ]
+        },
+        "top-songs": {
+          "data": [
+            {
+              "id": "1888323260",
+              "attributes": {
+                "name": "Back Home",
+                "releaseDate": "2026-03-25",
+                "trackCount": null,
+                "artistName": "Yeat & Joji"
+              }
+            },
+            {
+              "id": "1710685786",
+              "attributes": {
+                "name": "IDGAF (feat. Yeat)",
+                "releaseDate": "2023-10-06",
+                "trackCount": null,
+                "artistName": "Drake"
+              }
+            },
+            {
+              "id": "1675399628",
+              "attributes": {
+                "name": "Monëy so big",
+                "releaseDate": "2021-09-10",
+                "trackCount": null,
+                "artistName": "Yeat"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

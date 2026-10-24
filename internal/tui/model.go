@@ -339,6 +339,10 @@ type Model struct {
 	// Vibe panel (always visible, right split)
 	vibe *views.VibeModel
 
+	// Vibe AI screen (v): agent-driven picks, full width
+	vibeAI  *vibeAIRun
+	vibeAIP *vibeAIPanel
+
 	// Search popup (not a panel)
 	search *views.SearchModel
 
@@ -424,7 +428,10 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	m.search = views.NewSearch(prov)
 	m.favorites = make(map[string]bool)
 	m.aboutP = &aboutPanel{m: views.NewAbout()}
-	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP, m.eqP, m.aboutP}
+	m.vibeAI = newVibeAIRun()
+	m.vibeAIP = &vibeAIPanel{m: views.NewVibeAI()}
+	m.vibeAIP.m.SetMemory(vibeAIMemoryLines(cfg))
+	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP, m.eqP, m.aboutP, m.vibeAIP}
 	for _, line := range opts.InitialLogs {
 		m.appendLog(line)
 	}
@@ -455,6 +462,7 @@ func (m *Model) Init() tea.Cmd {
 		tick(),
 		glowTick(),
 		introTick(),
+		waitVibeAI(m.vibeAI.events),
 	}
 	if m.provider != nil {
 		cmds = append(cmds, m.library.Init())
@@ -551,6 +559,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feedP.SetSize(contentW, panelH)
 		m.eqP.SetSize(contentW, panelH)
 		m.aboutP.SetSize(contentW, panelH)
+		m.vibeAIP.SetSize(contentW, panelH)
+
+	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg,
+		views.VibeAIAnswersMsg, views.VibeAISubmitMsg, views.VibeAICancelMsg, views.VibeAIActionMsg, views.VibeAILaterMsg, views.VibeAIRateMsg:
+		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
 	case tickMsg:
 		if m.errMsg != "" && time.Now().After(m.errExpiry) {
@@ -719,6 +732,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.radio.refilling = true
 			cmds = append(cmds, m.runRadioSearch())
 		}
+		m.vibeAIOnState(s)
+		cmds = append(cmds, m.vibeAIStreamTick(s))
 		m.playerState = s
 		if !wasPlaying && m.playerState.Playing {
 			m.appendLog("[player] playing")
@@ -1205,6 +1220,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	// ctrl+c always quits
 	if k == "ctrl+c" {
+		m.vibeAI.close()
 		if m.player != nil {
 			_ = m.player.Close()
 		}
@@ -1477,6 +1493,7 @@ func (m *Model) handleCommandKey(k string) tea.Cmd {
 func (m *Model) executeCommand(cmd string) tea.Cmd {
 	switch {
 	case cmd == "q" || cmd == "quit":
+		m.vibeAI.close()
 		if m.player != nil {
 			_ = m.player.Close()
 		}
@@ -2011,6 +2028,13 @@ func (m *Model) handleNormalKey(msg tea.KeyPressMsg, k string) tea.Cmd {
 		return m.vibe.Update(msg)
 	}
 
+	if m.vibeAIActive() {
+		if cmd, handled := m.vibeAIP.m.HandleKey(msg); handled {
+			m.lastKey = ""
+			return cmd
+		}
+	}
+
 	if k == "L" {
 		m.library.m.ResetTopLevel()
 		for i, p := range m.panels {
@@ -2244,11 +2268,6 @@ func (m *Model) handleNormalKey(msg tea.KeyPressMsg, k string) tea.Cmd {
 			}
 			m.vibe.ShowPicker(sim)
 		}
-		return nil
-
-	case "v":
-		m.lastKey = ""
-		m.vibe.Focus()
 		return nil
 
 	case "R":
@@ -3084,7 +3103,8 @@ func (m *Model) renderBoxLayout() string {
 	feedActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.feedP
 	eqActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.eqP
 	aboutActive := m.activePanel >= 0 && m.panels[m.activePanel] == m.aboutP
-	fullWidth := libraryActive || queueActive || lyricsActive || feedActive || eqActive || aboutActive || m.mode == modeSearch || m.mode == modeCommand || m.debugView
+	vibeAIActive := m.vibeAIActive()
+	fullWidth := libraryActive || queueActive || lyricsActive || feedActive || eqActive || aboutActive || vibeAIActive || m.mode == modeSearch || m.mode == modeCommand || m.debugView
 
 	var sb strings.Builder
 
@@ -3151,6 +3171,12 @@ func (m *Model) renderBoxLayout() string {
 	case aboutActive:
 		m.aboutP.SetSize(inner-2, panelH)
 		for _, line := range toLines(m.aboutP.View(), panelH) {
+			sb.WriteString("│ " + padRight(line, inner-2) + " │\n")
+		}
+	case vibeAIActive:
+		m.vibeAIP.SetSize(inner-2, panelH)
+		m.vibeAIP.m.SetStep(m.glowStep)
+		for _, line := range toLines(m.vibeAIP.View(), panelH) {
 			sb.WriteString("│ " + padRight(line, inner-2) + " │\n")
 		}
 	default:
@@ -3700,6 +3726,11 @@ func (m *Model) statusNavLines(w int) []string {
 				accent.Render("0") + muted.Render(" reset band"),
 				accent.Render("r") + muted.Render(" reset all"),
 				accent.Render("e") + muted.Render(" close"),
+			}
+		case m.vibeAIActive():
+			parts = []string{
+				styles.ModeNormal.Render("VIBE"),
+				accent.Render("esc") + muted.Render(" back/close"),
 			}
 		case m.activePanel >= 0 && m.panels[m.activePanel] == m.aboutP:
 			parts = []string{

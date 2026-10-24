@@ -1959,11 +1959,11 @@ func TestHandleSearchKey_CtrlR_StartRadioFromSelected(t *testing.T) {
 	}
 }
 
-func TestHandleNormalKey_V_FocusVibe(t *testing.T) {
+func TestHandleNormalKey_V_OpensVibeAI(t *testing.T) {
 	m := newModel(nil)
 	m.handleNormalKey(tea.KeyPressMsg{Code: 'v', Text: "v"}, "v")
-	if !m.vibe.IsFocused() {
-		t.Error("v key should focus the vibe panel")
+	if !m.vibeAIActive() {
+		t.Error("v key should open the vibe screen")
 	}
 }
 

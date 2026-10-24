@@ -49,6 +49,10 @@ type Config struct {
 	DiscordRPC *bool `json:"discord_rpc,omitempty"`
 	// DiscordClientID overrides the default Discord application client ID.
 	DiscordClientID string `json:"discord_client_id,omitempty"`
+	// Vibe AI: OpenAI-compatible chat completions endpoint for the vibe agent.
+	VibeLLMBaseURL string `json:"vibe_llm_base_url,omitempty"`
+	VibeLLMAPIKey  string `json:"vibe_llm_api_key,omitempty"`
+	VibeLLMModel   string `json:"vibe_llm_model,omitempty"`
 }
 
 type EQBand struct {
@@ -158,6 +162,12 @@ func (c *Config) normalize() {
 	}
 	if c.AudioQuality == "" {
 		c.AudioQuality = "high"
+	}
+	if c.VibeLLMBaseURL == "" {
+		c.VibeLLMBaseURL = "https://opencode.ai/zen/go/v1"
+	}
+	if c.VibeLLMModel == "" {
+		c.VibeLLMModel = "deepseek-v4.1-flash"
 	}
 }
 
