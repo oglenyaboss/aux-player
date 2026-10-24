@@ -45,6 +45,30 @@ func newTestClient(t *testing.T, respond func(n int) (int, string)) (*Client, fu
 	}
 }
 
+func newTestClientEffort(t *testing.T, effort string, respond func(n int) (int, string)) (*Client, func() []captured) {
+	t.Helper()
+	var mu sync.Mutex
+	var reqs []captured
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		n := len(reqs)
+		reqs = append(reqs, captured{method: r.Method, path: r.URL.Path, body: string(b), header: r.Header.Clone()})
+		mu.Unlock()
+		code, out := respond(n)
+		w.WriteHeader(code)
+		_, _ = w.Write([]byte(out))
+	}))
+	t.Cleanup(srv.Close)
+	c := New(Config{BaseURL: srv.URL, APIKey: "sk-secret-123", Model: "test-model", Effort: effort}, srv.Client())
+	c.sleep = func(time.Duration) {}
+	return c, func() []captured {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]captured(nil), reqs...)
+	}
+}
+
 const okBody = `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`
 
 func TestToolCallRoundtrip(t *testing.T) {
@@ -252,5 +276,60 @@ func TestUsage(t *testing.T) {
 	}
 	if resp.Usage != (Usage{10, 5, 3}) {
 		t.Errorf("Usage = %+v, want {10 5 3}", resp.Usage)
+	}
+}
+
+func TestEffortOpenAIStyle(t *testing.T) {
+	c, reqs := newTestClientEffort(t, "high", func(int) (int, string) { return http.StatusOK, okBody })
+	if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	body := reqs()[0].body
+	if !strings.Contains(body, `"reasoning_effort":"high"`) {
+		t.Errorf("в теле нет reasoning_effort: %s", body)
+	}
+	if strings.Contains(body, `"reasoning":{`) {
+		t.Errorf("тело содержит reasoning-объект: %s", body)
+	}
+}
+
+func TestEffortOpenRouter(t *testing.T) {
+	var mu sync.Mutex
+	var bodies []string
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		mu.Unlock()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(okBody)),
+		}, nil
+	})
+	c := New(Config{BaseURL: "https://openrouter.ai/api/v1", APIKey: "sk-or-test", Model: "test-model", Effort: "low"}, &http.Client{Transport: rt})
+	c.sleep = func(time.Duration) {}
+	if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	body := bodies[0]
+	if !strings.Contains(body, `"reasoning":{"effort":"low"}`) {
+		t.Errorf("в теле нет reasoning-объекта: %s", body)
+	}
+	if strings.Contains(body, "reasoning_effort") {
+		t.Errorf("тело содержит reasoning_effort: %s", body)
+	}
+}
+
+func TestNoEffort(t *testing.T) {
+	c, reqs := newTestClientEffort(t, "", func(int) (int, string) { return http.StatusOK, okBody })
+	if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	body := reqs()[0].body
+	if strings.Contains(body, "reasoning_effort") || strings.Contains(body, `"reasoning"`) {
+		t.Errorf("тело содержит reasoning без Effort: %s", body)
 	}
 }

@@ -3,8 +3,6 @@ package llm
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +13,7 @@ import (
 	"time"
 )
 
-type Config struct{ BaseURL, APIKey, Model string }
+type Config struct{ BaseURL, APIKey, Model, Effort string }
 
 func LoadEnv(path string) (Config, error) {
 	data, err := os.ReadFile(path)
@@ -82,15 +80,13 @@ type Client struct {
 }
 
 func New(cfg Config, h *http.Client) *Client {
-	b := make([]byte, 16)
-	rand.Read(b)
 	if h == nil {
 		h = http.DefaultClient
 	}
 	return &Client{
 		cfg:     cfg,
 		http:    h,
-		session: "vibelab-" + hex.EncodeToString(b),
+		session: newSession(),
 		sleep:   time.Sleep,
 	}
 }
@@ -119,10 +115,16 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool, jsonMod
 }
 
 type wireRequest struct {
-	Model          string            `json:"model"`
-	Messages       []json.RawMessage `json:"messages"`
-	Tools          []wireTool        `json:"tools,omitempty"`
-	ResponseFormat *wireFormat       `json:"response_format,omitempty"`
+	Model           string            `json:"model"`
+	Messages        []json.RawMessage `json:"messages"`
+	Tools           []wireTool        `json:"tools,omitempty"`
+	ResponseFormat  *wireFormat       `json:"response_format,omitempty"`
+	Reasoning       *wireReasoning    `json:"reasoning,omitempty"`
+	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+}
+
+type wireReasoning struct {
+	Effort string `json:"effort"`
 }
 
 type wireTool struct {
@@ -175,6 +177,13 @@ func (c *Client) requestBody(msgs []Message, tools []Tool, jsonMode bool) ([]byt
 	if jsonMode {
 		req.ResponseFormat = &wireFormat{Type: "json_object"}
 	}
+	if c.cfg.Effort != "" {
+		if isOpenRouter(c.cfg.BaseURL) {
+			req.Reasoning = &wireReasoning{Effort: c.cfg.Effort}
+		} else {
+			req.ReasoningEffort = c.cfg.Effort
+		}
+	}
 	b, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("llm: %w", err)
@@ -188,10 +197,8 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 	if err != nil {
 		return Response{}, retryableError{fmt.Errorf("llm: %w", err)}
 	}
-	req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "vibelab/0.1")
-	req.Header["x-opencode-session"] = []string{c.session}
+	setHeaders(req, c.cfg.APIKey, c.session)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -280,6 +287,12 @@ func parseMessage(raw json.RawMessage) (Message, error) {
 		m.ToolCalls = append(m.ToolCalls, ToolCall{ID: tc.ID, Name: tc.Function.Name, Arguments: tc.Function.Arguments})
 	}
 	return m, nil
+}
+
+func setHeaders(req *http.Request, apiKey, session string) {
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("User-Agent", "vibelab/0.1")
+	req.Header["x-opencode-session"] = []string{session}
 }
 
 func bodySnippet(b []byte) string {
