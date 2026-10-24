@@ -227,14 +227,14 @@ func TestOfferSeedKnownNotCounted(t *testing.T) {
 	}
 }
 
-func TestOfferSignalsServedBefore(t *testing.T) {
+func TestOfferSignalsSkippedBefore(t *testing.T) {
 	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
+	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
 	s := NewSession(nil, nil, 20)
 	s.SetSignals(sig, "s2")
 	v := s.Offer(Suggestion{Artist: "Ken Carson", Title: "Yale"}, Song{ID: "1", Artist: "Ken Carson", Title: "Yale"}, true)
-	if v.Accepted || v.Reason != "уже выдавали раньше" {
-		t.Errorf("got (%v, %q), want (false, \"уже выдавали раньше\")", v.Accepted, v.Reason)
+	if v.Accepted || v.Reason != "бросал раньше, не дослушав" {
+		t.Errorf("got (%v, %q), want (false, \"бросал раньше, не дослушав\")", v.Accepted, v.Reason)
 	}
 }
 
@@ -244,17 +244,17 @@ func TestOfferSignalsGlobalArtistBlock(t *testing.T) {
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
 	)
-	song := Song{ID: "1", Artist: "Ghostemane", Title: "Mercury: Retrograde"}
+	song := Song{ID: "1", Artist: "Ghostemane", Title: "Venom"}
 	s := NewSession(nil, nil, 20)
 	s.SetSignals(sig, "s3")
-	v := s.Offer(Suggestion{Artist: "Ghostemane", Title: "Mercury: Retrograde"}, song, true)
+	v := s.Offer(Suggestion{Artist: "Ghostemane", Title: "Venom"}, song, true)
 	if v.Accepted || v.Reason != "владелец скипает (2 сессий)" {
 		t.Errorf("без сидов: got (%v, %q), want (false, \"владелец скипает (2 сессий)\")", v.Accepted, v.Reason)
 	}
 	w := NewSession(nil, nil, 20)
 	w.SetPlan(Plan{Seeds: []Seed{{Artist: "Ghostemane", Mode: "and_similar"}}})
 	w.SetSignals(sig, "s3")
-	v2 := w.Offer(Suggestion{Artist: "Ghostemane", Title: "Mercury: Retrograde"}, song, true)
+	v2 := w.Offer(Suggestion{Artist: "Ghostemane", Title: "Venom"}, song, true)
 	if !v2.Accepted {
 		t.Errorf("seed and_similar: rejected: %s", v2.Reason)
 	}

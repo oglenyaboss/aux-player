@@ -51,7 +51,7 @@ func (m *Model) backdrop(f *fb) {
 				if m.prev != m.cur {
 					bg = m.coverField(m.queue[m.prev].Key(), u, v).lerp(bg, easeInOut(prog(m.trackT, 0, 1.4)))
 				}
-				bg = m.eggBackdrop(bg, x, y, float64(y)/float64(f.h))
+				bg = m.eggBackdrop(bg, x, y, float64(y)/float64(f.h)).mul(1 - m.pause)
 			} else {
 				n := math.Sin(fx*0.035+m.t*0.08) + math.Sin(fy*0.05-m.t*0.06) + math.Sin((fx+fy)*0.025+m.t*0.04)
 				bg = th.bg.lerp(th.a1, smooth((n+1)/4)*0.07)
@@ -550,7 +550,7 @@ func (m *Model) drawPlay(f *fb) {
 			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
 			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
 			lit := smooth((c.lum() - 0.12) * 4)
-			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal))
+			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
 		}
 	}
 
@@ -575,7 +575,7 @@ func (m *Model) drawPlay(f *fb) {
 			} else {
 				c = prev.at(px, py).mul(0.6)
 			}
-			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul(1-0.75*skip))
+			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul((1-0.75*skip)*(1-0.7*m.pause)))
 		}
 	}
 
@@ -640,7 +640,7 @@ func (m *Model) drawPlay(f *fb) {
 	for i := 0; i < bw; i++ {
 		switch {
 		case float64(i)/float64(bw) < frac:
-			f.put(x+i, y, '━', m.eggClock(fill))
+			f.put(x+i, y, '━', fill)
 		case i == mark:
 			f.put(x+i, y, '┼', m.eggMark(e))
 		default:
@@ -648,8 +648,7 @@ func (m *Model) drawPlay(f *fb) {
 		}
 	}
 	f.style(x+int(frac*float64(bw)), y, knob, kc, true, false)
-	n := f.text(x+bw+2, y, fmtDur(m.pos), m.eggClock(m.th.dim))
-	f.text(x+bw+2+n, y, time[len(fmtDur(m.pos)):], m.th.dim)
+	f.text(x+bw+2, y, time, m.th.dim)
 
 	y += 2
 
@@ -673,7 +672,7 @@ func (m *Model) drawPlay(f *fb) {
 			for yy := 0; yy < 4; yy++ {
 				for xx := 0; xx < 4; xx++ {
 					if hash(xx, yy, k) < rp {
-						f.pixel(x+xx, y*2+yy, tg.at(xx, yy).mul(0.85))
+						f.pixel(x+xx, y*2+yy, tg.at(xx, yy).mul(0.85*(1-0.7*m.pause)))
 					}
 				}
 			}

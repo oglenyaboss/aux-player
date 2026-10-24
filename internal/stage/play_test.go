@@ -217,3 +217,28 @@ func TestSplitLayout(t *testing.T) {
 		t.Errorf("Two в строке %d, ждём не выше %d", next, g.cy+g.ch)
 	}
 }
+
+func TestPauseGoesDark(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.JumpPlay(threeTracks(), 0, 0)
+	key := threeTracks()[0].Key()
+	light := func(playing bool) float64 {
+		m.Now(key, 1, playing)
+		steps(m, 2)
+		sum := 0.0
+		for _, c := range m.render().c {
+			sum += c.bg.r + c.bg.g + c.bg.b
+		}
+		return sum
+	}
+	on := light(true)
+	off := light(false)
+	again := light(true)
+	if !(off < 0.35*on) {
+		t.Fatalf("на паузе экран не потемнел: %v против %v", off, on)
+	}
+	if !(again > 0.9*on) {
+		t.Fatalf("после паузы экран не вернулся: %v против %v", again, on)
+	}
+}

@@ -60,10 +60,12 @@ func newStageScreen(host *Model) *stageScreen {
 func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 	apple := !appleLogin || cfg.AppleUserToken != ""
 	return stage.Options{
-		Onboard:   cfg.VibeLLMAPIKey == "" || !apple,
-		Connected: [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
-		NoEggs:    cfg.VibeEggs != nil && !*cfg.VibeEggs,
-		Example:   func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
+		Onboard:       cfg.VibeLLMAPIKey == "" || !apple,
+		Connected:     [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
+		LastfmAskKeys: cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "",
+		LastfmKey:     cfg.LastfmAPIKey,
+		NoEggs:        cfg.VibeEggs != nil && !*cfg.VibeEggs,
+		Example:       func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
 	}
 }
 
@@ -223,7 +225,14 @@ func (s *stageScreen) act(a stage.Action) {
 		}
 		s.cmds = append(s.cmds, func() tea.Msg { return stageStepMsg{step: 0} })
 	case stage.ConnectLastfm:
-		key, secret := s.host.cfg.LastfmAPIKey, s.host.cfg.LastfmAPISecret
+		cfg := s.host.cfg
+		if a.Key != "" && a.Secret != "" {
+			cfg.LastfmAPIKey, cfg.LastfmAPISecret = a.Key, a.Secret
+			if err := cfg.Save(""); err != nil {
+				s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
+			}
+		}
+		key, secret := cfg.LastfmAPIKey, cfg.LastfmAPISecret
 		if key == "" || secret == "" {
 			s.cmds = append(s.cmds, func() tea.Msg {
 				return stageStepMsg{step: 2, err: stage.Tr("нет ключа приложения Last.fm", "no Last.fm app key")}
@@ -270,6 +279,7 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.Quit:
 		if s.host.auxOnly {
 			// The AUX is the whole app: leaving it leaves the program.
+			s.host.vibeAINoteLeave()
 			s.host.vibeAI.close()
 			if s.host.player != nil {
 				_ = s.host.player.Close()

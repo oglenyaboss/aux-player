@@ -81,15 +81,15 @@ func TestStageFullScreen(t *testing.T) {
 	}
 }
 
-func TestStageEscCloses(t *testing.T) {
+func TestStageEscStays(t *testing.T) {
 	m := newModel(nil)
 	press(m, "v")
 	if !m.vibeAIActive() {
 		t.Fatal("v must open the aux screen")
 	}
 	press(m, "esc")
-	if m.vibeAIActive() {
-		t.Fatal("esc on the input must close the aux screen")
+	if !m.vibeAIActive() {
+		t.Fatal("esc on the input must not close the aux screen")
 	}
 }
 
@@ -162,9 +162,9 @@ func TestStageTickStops(t *testing.T) {
 	if m.stageWake() != nil {
 		t.Fatal("a second wake must not duplicate the chain")
 	}
-	press(m, "esc")
+	m.vibeAIP.m.act(stage.Quit{})
 	if m.vibeAIActive() {
-		t.Fatal("esc must close the screen")
+		t.Fatal("quit must close the screen")
 	}
 	if cmd := m.handleVibeAIMsg(stageTickMsg(time.Now())); cmd != nil {
 		t.Errorf("a tick with the screen closed must end the chain, got %v", cmd)

@@ -72,9 +72,7 @@ func TestOnboardEscFromKey(t *testing.T) {
 	m.ob.step = 1
 	m.ob.langDone = true
 	m.ob.sub = SubKey
-	if m.onboardKey("esc", "") {
-		t.Errorf("esc из ключа не должен закрывать онбординг")
-	}
+	m.onboardKey("esc", "")
 	if m.ob.sub != SubProvider {
 		t.Errorf("esc из ключа должен вернуть SubProvider, стало %v", m.ob.sub)
 	}

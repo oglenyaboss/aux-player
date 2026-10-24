@@ -164,7 +164,7 @@ func TestTurnFirstTurnGlobalBlock(t *testing.T) {
 	}
 	key := songArtists(Song{Artist: "Ghostemane", Title: "X"})[0]
 	user := ch.got[0][1].Content
-	want := "в духе X\n\n" + globalBlock(e.sig.globalSkips())
+	want := "в духе X\n\n" + globalBlock(e.sig.globalSkips()) + "\n\n" + skippedBlock(e.sig.skippedElsewhere("s1"))
 	if user != want {
 		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
 	}
@@ -173,24 +173,24 @@ func TestTurnFirstTurnGlobalBlock(t *testing.T) {
 	}
 }
 
-func TestServedBlock(t *testing.T) {
-	if got := servedBlock(nil); got != "" {
-		t.Errorf("servedBlock(nil) = %q, want \"\"", got)
+func TestSkippedBlock(t *testing.T) {
+	if got := skippedBlock(nil); got != "" {
+		t.Errorf("skippedBlock(nil) = %q, want \"\"", got)
 	}
-	got := servedBlock([]Song{
+	got := skippedBlock([]Song{
 		{Artist: "Ken Carson", Title: "Yale"},
 		{Artist: "SoFaygo", Title: "Knock Knock"},
 		{Artist: "Ken Carson", Title: "Freestyle 2"},
 	})
-	want := "Уже выдавали в прошлых сессиях (код их отклонит, не предлагай):\n" +
+	want := "В прошлых сессиях владелец бросил их до середины (код их отклонит, не предлагай):\n" +
 		"- Ken Carson: Yale, Freestyle 2\n" +
 		"- SoFaygo: Knock Knock"
 	if got != want {
-		t.Errorf("servedBlock:\n%s\nwant:\n%s", got, want)
+		t.Errorf("skippedBlock:\n%s\nwant:\n%s", got, want)
 	}
 }
 
-func TestTurnFirstTurnServedBlock(t *testing.T) {
+func TestTurnFirstTurnSkippedBlock(t *testing.T) {
 	ch := &fakeChatter{resps: []llm.Response{
 		toolResp(call("c1", "set_plan", `{"seeds":[],"exclusions":[]}`)),
 		toolResp(call("c2", "submit_candidates", `{"tracks":[
@@ -200,27 +200,27 @@ func TestTurnFirstTurnServedBlock(t *testing.T) {
 		]}`)),
 	}}
 	e := newTestEngine(t, ch)
-	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "served", Session: "other", Artist: "Ken Carson", Title: "Yale"})
+	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "other", Artist: "Ken Carson", Title: "Yale"})
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
 		t.Fatalf("ход 1: %v", err)
 	}
 	user := ch.got[0][1].Content
-	want := "в духе X\n\n" + servedBlock(e.sig.servedElsewhere("s1"))
+	want := "в духе X\n\n" + skippedBlock(e.sig.skippedElsewhere("s1"))
 	if user != want {
 		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
 	}
 }
 
-func TestHistoryServedBlock(t *testing.T) {
+func TestHistorySkippedBlock(t *testing.T) {
 	e := newTestEngine(t, &fakeChatter{})
-	if h := e.history(); strings.Contains(h, "Уже выдавали в прошлых сессиях") {
+	if h := e.history(); strings.Contains(h, "В прошлых сессиях владелец бросил") {
 		t.Fatalf("history без записей содержит блок:\n%s", h)
 	}
-	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "served", Session: "other", Artist: "SoFaygo", Title: "Knock Knock"})
+	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "other", Artist: "SoFaygo", Title: "Knock Knock"})
 	h := e.history()
-	want := servedBlock(e.sig.servedElsewhere("s1"))
+	want := skippedBlock(e.sig.skippedElsewhere("s1"))
 	if want == "" {
-		t.Fatal("servedBlock пуст, тест бессмыслен")
+		t.Fatal("skippedBlock пуст, тест бессмыслен")
 	}
 	if !strings.HasSuffix(h, want) {
 		t.Errorf("history не заканчивается на блок:\n%s\nwant suffix:\n%s", h, want)
@@ -529,5 +529,25 @@ func TestTurnReplyClearsReserve(t *testing.T) {
 	user := ch.got[2][len(ch.got[2])-1].Content
 	if strings.Contains(user, "Из запаса") {
 		t.Errorf("после реплики запас не сброшен:\n%s", user)
+	}
+}
+
+func TestTurnWritesNoServed(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("c1", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
+		t.Fatalf("ход: %v", err)
+	}
+	for _, r := range e.sig.recs {
+		if r.Kind == "served" {
+			t.Fatalf("порция не должна писать served: %+v", r)
+		}
 	}
 }

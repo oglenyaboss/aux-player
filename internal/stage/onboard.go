@@ -47,6 +47,9 @@ type onboard struct {
 	effort   int
 	picked   string
 	langDone bool
+	lfKey    []rune
+	lfSecret []rune
+	lfSub    int // 0 API key field, 1 secret field
 }
 
 // agentSub walks the agent step: provider, address for a custom one, key, model list, effort.
@@ -144,13 +147,10 @@ func (m *Model) completeStep() {
 	}
 }
 
-func (m *Model) onboardKey(k, text string) (quit bool) {
+func (m *Model) onboardKey(k, text string) {
 	o := m.ob
-	if k == "esc" && !(o.step == 1 && o.sub > SubProvider) {
-		return true
-	}
 	if o.t < obReady-0.4 || o.waitT >= 0 && !(o.step == 2 && k == "tab") || o.step > 2 {
-		return false
+		return
 	}
 	o.errMsg = ""
 	switch o.step {
@@ -166,7 +166,7 @@ func (m *Model) onboardKey(k, text string) (quit bool) {
 			case "enter":
 				o.langDone, o.stepT = true, o.t
 			}
-			return false
+			return
 		}
 		if k == "enter" {
 			o.waitT = o.t
@@ -175,16 +175,55 @@ func (m *Model) onboardKey(k, text string) (quit bool) {
 	case 1:
 		m.agentKey(k, text)
 	case 2:
-		switch k {
-		case "enter":
-			o.waitT = o.t
-			m.send(ConnectLastfm{})
-		case "tab":
+		if !m.o.LastfmAskKeys {
+			switch k {
+			case "enter":
+				o.waitT = o.t
+				m.send(ConnectLastfm{})
+			case "tab":
+				o.skipped, o.waitT = true, -1
+				m.completeStep()
+			}
+			return
+		}
+		edit := func(buf *[]rune) {
+			switch {
+			case k == "backspace":
+				if len(*buf) > 0 {
+					*buf = (*buf)[:len(*buf)-1]
+				}
+			case len(text) > 0:
+				*buf = append(*buf, []rune(text)...)
+			}
+		}
+		switch {
+		case k == "tab":
 			o.skipped, o.waitT = true, -1
 			m.completeStep()
+		case k == "enter" && o.lfSub == 0:
+			if len(o.lfKey) == 0 {
+				o.errMsg = tr("нужен API key", "API key needed")
+			} else {
+				o.lfSub = 1
+			}
+		case k == "enter":
+			if len(o.lfSecret) == 0 {
+				o.errMsg = tr("нужен secret", "secret needed")
+			} else {
+				o.waitT = o.t
+				m.o.LastfmKey = string(o.lfKey)
+				m.send(ConnectLastfm{Key: string(o.lfKey), Secret: string(o.lfSecret)})
+			}
+		case k == "esc" && o.lfSub > 0:
+			o.lfSub = 0
+		default:
+			if o.lfSub == 0 {
+				edit(&o.lfKey)
+			} else {
+				edit(&o.lfSecret)
+			}
 		}
 	}
-	return false
 }
 
 func (m *Model) agentKey(k, text string) {
@@ -336,6 +375,9 @@ func (m *Model) StepDone(step int, err string) {
 		return
 	}
 	o.replied = true
+	if step == 2 {
+		m.o.LastfmAskKeys = false
+	}
 }
 
 // Models replies to LoadModels: the models that support tools, how many the provider has
@@ -952,12 +994,53 @@ func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {
 		return m.drawAgentBody(f, x, y, w, a*easeOut(prog(o.t, o.subT, 0.3)))
 
 	case 2:
-		f.fade(x, y, trunc(tr("скробблинг, по желанию", "scrobbling, optional"), w), m.th.dim, a, false)
-		dx := key(x, y+1, "enter", tr("подключить", "connect"))
-		key(x+dx, y+1, "tab", tr("пропустить", "skip"))
-		if o.errMsg != "" {
-			f.fade(x, y+2, trunc(o.errMsg, w), m.th.bad, a, false)
+		if !m.o.LastfmAskKeys {
+			f.fade(x, y, trunc(tr("скробблинг, по желанию", "scrobbling, optional"), w), m.th.dim, a, false)
+			dx := key(x, y+1, "enter", tr("подключить", "connect"))
+			key(x+dx, y+1, "tab", tr("пропустить", "skip"))
+			if o.errMsg != "" {
+				f.fade(x, y+2, trunc(o.errMsg, w), m.th.bad, a, false)
+			}
+			return 3
 		}
+		f.fade(x, y, trunc(tr("ключи: last.fm/api/account/create", "keys: last.fm/api/account/create"), w), m.th.dim, a, false)
+		fields := [2]struct {
+			label string
+			val   []rune
+			mask  bool
+		}{{"API key", o.lfKey, false}, {"secret", o.lfSecret, true}}
+		for i, fl := range fields {
+			if i == o.lfSub {
+				f.fade(x, y+1+i, "›", m.th.a1, a, true)
+			}
+			f.fade(x+2, y+1+i, fl.label, m.th.dim, a, false)
+			text := string(fl.val)
+			if fl.mask {
+				text = strings.Repeat("•", len(fl.val))
+			}
+			if r, n := []rune(text), max(0, w-13); len(r) > n {
+				text = string(r[len(r)-n:])
+			}
+			if i == o.lfSub {
+				n := f.fade(x+12, y+1+i, text, m.th.text, a, false)
+				f.fade(x+12+n, y+1+i, "▎", m.th.a1, a*(0.35+0.65*(0.5+0.5*math.Sin(m.t*6))), false)
+			} else if text != "" {
+				f.fade(x+12, y+1+i, text, m.th.text, a, false)
+			}
+		}
+		next := tr("дальше", "next")
+		if o.lfSub == 1 {
+			next = tr("подключить", "connect")
+		}
+		dx := key(x, y+3, "enter", next)
+		dx += key(x+dx, y+3, "tab", tr("пропустить", "skip"))
+		if o.lfSub == 1 {
+			key(x+dx, y+3, "esc", tr("назад", "back"))
+		}
+		if o.errMsg != "" {
+			f.fade(x, y+4, trunc(o.errMsg, w), m.th.bad, a, false)
+		}
+		return 6
 	}
 	return 3
 }

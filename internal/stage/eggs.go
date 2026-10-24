@@ -285,14 +285,6 @@ func (m *Model) drawTag(f *fb, x, y, w int, e *egg) {
 	}
 }
 
-// eggClock turns the clock and the bar green for a moment at 4:20 into any track.
-func (m *Model) eggClock(c col) col {
-	if p := m.pos - 260; p >= 0 && p < 3 {
-		return c.lerp(hex(0x8fd694), 1-prog(p, 1.5, 1.5))
-	}
-	return c
-}
-
 // drip lets letters of the title bleed downward, quickly at first, then a little more all track long.
 func (m *Model) drip(f *fb, x, y int, bottom string, sc, seed int) {
 	for gx, b := range bottom {

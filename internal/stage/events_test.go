@@ -281,3 +281,38 @@ func TestPasteReply(t *testing.T) {
 		t.Fatalf("ждём один Say «без вокала», записано %v", r.acts)
 	}
 }
+
+func TestEscNeverQuits(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	m.Key("esc", "")
+	if _, _, _, ok := m.Onboarding(); !ok {
+		t.Fatal("esc закрыл онбординг")
+	}
+
+	m = New(Options{OnAction: r.on})
+	m.SetSize(110, 32)
+	if !runTo(m, PhIntro, 300) {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	m.Key("", "lofi")
+	m.Key("esc", "")
+	if m.Input() != "" {
+		t.Fatalf("esc на стартовом экране не очистил поле: %q", m.Input())
+	}
+
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Step(eventDT)
+	m.Key("?", "?")
+	m.Key("esc", "")
+	if m.help {
+		t.Fatal("esc в плеере не закрыл подсказку")
+	}
+	if q := recorded[Quit](r); len(q) != 0 {
+		t.Fatalf("esc вышел из приложения: %v", r.acts)
+	}
+	m.Key("q", "q")
+	if q := recorded[Quit](r); len(q) != 1 {
+		t.Fatalf("q в плеере должен выходить: %v", r.acts)
+	}
+}

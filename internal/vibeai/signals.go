@@ -20,7 +20,7 @@ type signalRec struct {
 	Time    time.Time `json:"t"`
 	Session string    `json:"session"`
 	Query   string    `json:"query"`
-	Kind    string    `json:"kind"` // "served" | "played" | "skip_early" | "skip_mid" | "more" | "less" | "rate_clear"
+	Kind    string    `json:"kind"` // "played" | "skip_early" | "skip_mid" | "more" | "less" | "rate_clear"
 	ID      string    `json:"id"`
 	Artist  string    `json:"artist"`
 	Title   string    `json:"title"`
@@ -86,12 +86,12 @@ func (s *Signals) append(recs ...signalRec) error {
 	return err
 }
 
-func (s *Signals) servedBefore(song Song, session string) bool {
+func (s *Signals) skippedBefore(song Song, session string) bool {
 	key := songKey(song)
 	cutoff := s.now().Add(-14 * 24 * time.Hour)
-	served, played := false, false
+	skipped, played := false, false
 	for _, r := range s.recs {
-		if r.Kind != "served" && r.Kind != "played" {
+		if r.Kind != "skip_early" && r.Kind != "skip_mid" && r.Kind != "played" {
 			continue
 		}
 		if songKey(Song{Artist: r.Artist, Title: r.Title}) != key {
@@ -100,13 +100,13 @@ func (s *Signals) servedBefore(song Song, session string) bool {
 		if r.Kind == "played" {
 			played = true
 		} else if r.Session != session && !r.Time.Before(cutoff) {
-			served = true
+			skipped = true
 		}
 	}
-	return served && !played
+	return skipped && !played
 }
 
-func (s *Signals) servedElsewhere(session string) []Song {
+func (s *Signals) skippedElsewhere(session string) []Song {
 	cutoff := s.now().Add(-14 * 24 * time.Hour)
 	played := make(map[string]bool)
 	for _, r := range s.recs {
@@ -118,7 +118,7 @@ func (s *Signals) servedElsewhere(session string) []Song {
 	out := make([]Song, 0, 8)
 	for i := len(s.recs) - 1; i >= 0 && len(out) < 100; i-- {
 		r := s.recs[i]
-		if r.Kind != "served" || r.Session == session || r.Time.Before(cutoff) {
+		if r.Kind != "skip_early" && r.Kind != "skip_mid" || r.Session == session || r.Time.Before(cutoff) {
 			continue
 		}
 		song := Song{Artist: r.Artist, Title: r.Title}

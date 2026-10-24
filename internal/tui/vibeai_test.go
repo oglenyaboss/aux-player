@@ -90,8 +90,8 @@ func TestVibeAI_TypingDoesNotTriggerGlobals(t *testing.T) {
 		t.Fatalf("typing in the vibe input leaked to globals: active=%v mode=%v", m.vibeAIActive(), m.mode)
 	}
 	press(m, "esc")
-	if m.vibeAIActive() {
-		t.Error("esc on the empty prompt should close the vibe screen")
+	if !m.vibeAIActive() {
+		t.Error("esc must not close the vibe screen")
 	}
 }
 
@@ -317,7 +317,8 @@ func TestVibeAI_Outcome(t *testing.T) {
 		want vibeai.Outcome
 	}{
 		{150 * time.Second, vibeai.Outcome{ID: "1", Artist: "A", Title: "T", Kind: "played", PosSec: 150, DurSec: 200}},
-		{139 * time.Second, vibeai.Outcome{ID: "1", Artist: "A", Title: "T", Kind: "skip_mid", PosSec: 139, DurSec: 200}},
+		{100 * time.Second, vibeai.Outcome{ID: "1", Artist: "A", Title: "T", Kind: "played", PosSec: 100, DurSec: 200}},
+		{99 * time.Second, vibeai.Outcome{ID: "1", Artist: "A", Title: "T", Kind: "skip_mid", PosSec: 99, DurSec: 200}},
 		{12 * time.Second, vibeai.Outcome{ID: "1", Artist: "A", Title: "T", Kind: "skip_early", PosSec: 12, DurSec: 200}},
 	}
 	for _, c := range cases {
@@ -392,7 +393,7 @@ func TestVibeAINoteLeavePending(t *testing.T) {
 func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
-	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 40 * time.Second})
+	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
 	found := false
 	for _, o := range m.vibeAI.pending {
@@ -407,10 +408,10 @@ func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 
 func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 40 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Position: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
-	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 40, DurSec: 61}}
+	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 30, DurSec: 61}}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
 		t.Errorf("pending = %+v, want %+v (один исход с позицией до перехода)", m.vibeAI.pending, want)
 	}
@@ -418,10 +419,10 @@ func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 
 func TestVibeAIOutcomesSameTrackAtZero(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 40 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
-	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 40, DurSec: 61}}
+	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 30, DurSec: 61}}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
 		t.Errorf("pending = %+v, want %+v (Position 0 не должен затирать heardPos)", m.vibeAI.pending, want)
 	}
@@ -491,11 +492,11 @@ func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 
 func TestVibeAIOutcomesTwoTransitions(t *testing.T) {
 	m := openVibeWithPortion(t)
-	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 40 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 130 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}, Position: 0})
 	want := []vibeai.Outcome{
-		{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 40, DurSec: 61},
+		{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 30, DurSec: 61},
 		{ID: "2", Artist: "B", Title: "Two", Kind: "played", PosSec: 130},
 	}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
@@ -802,5 +803,35 @@ func TestVibeAIPlayWithPlayer(t *testing.T) {
 	}
 	if len(m.vibeAI.pendingIDs) != 0 {
 		t.Fatalf("pendingIDs = %v, want empty", m.vibeAI.pendingIDs)
+	}
+}
+
+func TestVibeAIDoneRidesEventChannel(t *testing.T) {
+	isolatedHome(t)
+	m := newModel(nil)
+	cmd := m.vibeAITurnCmd("x", true, false)
+	gen := m.vibeAI.gen
+	m.vibeAI.events <- vibeAIPickMsg{gen: gen}
+	if msg := cmd(); msg != nil {
+		t.Fatalf("turn result %T came apart from the picks", msg)
+	}
+	if _, ok := (<-m.vibeAI.events).(vibeAIPickMsg); !ok {
+		t.Fatal("the pick must come first")
+	}
+	if d, ok := (<-m.vibeAI.events).(vibeAIDoneMsg); !ok || d.gen != gen || d.err == nil {
+		t.Fatalf("want the failed turn's done after the pick, got %#v", d)
+	}
+	if m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks()}) == nil {
+		t.Fatal("done must keep reading the event channel")
+	}
+}
+
+func TestVibeAIQuitNotesLeave(t *testing.T) {
+	m := openVibeWithPortion(t)
+	m.handleVibeAIMsg(views.VibeAIActionMsg{Action: views.VibeAIPlay, Index: 0})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "1", Title: "One"}, Position: 50 * time.Second})
+	m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if len(m.vibeAI.pending) != 1 || m.vibeAI.pending[0].ID != "1" || m.vibeAI.pending[0].Kind != "played" {
+		t.Fatalf("pending = %+v, want the track playing at quit marked played", m.vibeAI.pending)
 	}
 }

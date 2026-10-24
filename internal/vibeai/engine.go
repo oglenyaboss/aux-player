@@ -129,7 +129,7 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		if block := globalBlock(e.sig.globalSkips()); block != "" {
 			message += "\n\n" + block
 		}
-		if block := servedBlock(e.sig.servedElsewhere(e.sessionID)); block != "" {
+		if block := skippedBlock(e.sig.skippedElsewhere(e.sessionID)); block != "" {
 			message += "\n\n" + block
 		}
 	} else {
@@ -164,24 +164,6 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 	e.log.f("## порция %d", e.turns)
 	for _, en := range entries {
 		e.log.f("%s — %s", en.Song.Artist, en.Song.Title)
-	}
-	if e.sig != nil && len(entries) > 0 {
-		now := time.Now()
-		recs := make([]signalRec, 0, len(entries))
-		for _, en := range entries {
-			recs = append(recs, signalRec{
-				Time:    now,
-				Session: e.sessionID,
-				Query:   e.query,
-				Kind:    "served",
-				ID:      en.Song.ID,
-				Artist:  en.Song.Artist,
-				Title:   en.Song.Title,
-			})
-		}
-		if err := e.sig.append(recs...); err != nil {
-			e.log.f("журнал сигналов: %v", err)
-		}
 	}
 	tracks := toTracks(entries)
 	e.portions = append(e.portions, tracks)
@@ -241,7 +223,7 @@ func (e *Engine) history() string {
 		b.WriteString("\n")
 		b.WriteString(block)
 	}
-	if block := servedBlock(e.sig.servedElsewhere(e.sessionID)); block != "" {
+	if block := skippedBlock(e.sig.skippedElsewhere(e.sessionID)); block != "" {
 		b.WriteString("\n")
 		b.WriteString(block)
 	}
@@ -286,12 +268,12 @@ func globalBlock(stats []skipStat) string {
 	return b.String()
 }
 
-func servedBlock(songs []Song) string {
+func skippedBlock(songs []Song) string {
 	if len(songs) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Уже выдавали в прошлых сессиях (код их отклонит, не предлагай):")
+	b.WriteString("В прошлых сессиях владелец бросил их до середины (код их отклонит, не предлагай):")
 	idx := make(map[string]int, len(songs))
 	artists := make([]string, 0, len(songs))
 	titles := make([][]string, 0, len(songs))

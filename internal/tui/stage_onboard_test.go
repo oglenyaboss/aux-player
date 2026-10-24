@@ -378,3 +378,43 @@ func TestStageTabOpensSettings(t *testing.T) {
 		t.Fatalf("phase after tab = %d, want onboarding", st.Phase())
 	}
 }
+
+// R6: the keys typed on the Last.fm step reach both the config and the sign-in.
+func TestStageLastfmTypedKeys(t *testing.T) {
+	isolatedHome(t)
+	var gotKey, gotSecret string
+	setLastfmAuth(t, func(_ context.Context, key, secret string) (string, error) {
+		gotKey, gotSecret = key, secret
+		return "sess", nil
+	})
+	m := New(testCfg(), &mockProvider{}, nil, Options{})
+	s := m.vibeAIP.m
+	s.act(stage.ConnectLastfm{Key: "k", Secret: "s"})
+	m.handleVibeAIMsg(s.flush()())
+	if gotKey != "k" || gotSecret != "s" {
+		t.Fatalf("авторизация с (%q,%q), ждём (k,s)", gotKey, gotSecret)
+	}
+	if m.cfg.LastfmAPIKey != "k" || m.cfg.LastfmAPISecret != "s" || m.cfg.LastfmSessionKey != "sess" {
+		t.Fatalf("cfg = (%q,%q,%q), ждём (k,s,sess)",
+			m.cfg.LastfmAPIKey, m.cfg.LastfmAPISecret, m.cfg.LastfmSessionKey)
+	}
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "vibez", "config.json"))
+	if err != nil {
+		t.Fatalf("reading the saved config: %v", err)
+	}
+	if !strings.Contains(string(data), `"lastfm_api_secret": "s"`) {
+		t.Fatalf("the saved config misses the secret:\n%s", data)
+	}
+}
+
+// R6: the step asks for the keys exactly when one of them is missing.
+func TestStageOptionsLastfmAsk(t *testing.T) {
+	o := stageOptions(&config.Config{LastfmAPIKey: "k"}, false)
+	if !o.LastfmAskKeys || o.LastfmKey != "k" {
+		t.Fatalf("key without secret: ask=%v key=%q, ждём true/k", o.LastfmAskKeys, o.LastfmKey)
+	}
+	o = stageOptions(&config.Config{LastfmAPIKey: "k", LastfmAPISecret: "s"}, false)
+	if o.LastfmAskKeys {
+		t.Fatalf("key and secret: ask=%v, ждём false", o.LastfmAskKeys)
+	}
+}

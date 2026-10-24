@@ -1246,6 +1246,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	// ctrl+c always quits
 	if k == "ctrl+c" {
+		m.vibeAINoteLeave()
 		m.vibeAI.close()
 		if m.player != nil {
 			_ = m.player.Close()
@@ -1539,6 +1540,7 @@ func (m *Model) handleCommandKey(k string) tea.Cmd {
 func (m *Model) executeCommand(cmd string) tea.Cmd {
 	switch {
 	case cmd == "q" || cmd == "quit":
+		m.vibeAINoteLeave()
 		m.vibeAI.close()
 		if m.player != nil {
 			_ = m.player.Close()

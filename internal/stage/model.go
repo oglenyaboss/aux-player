@@ -72,8 +72,8 @@ type Save struct{}
 // ConnectApple is enter on the Apple Music step: the host signs the user in in the browser.
 type ConnectApple struct{}
 
-// ConnectLastfm is enter on the Last.fm step.
-type ConnectLastfm struct{}
+// ConnectLastfm is enter on the Last.fm step; Key and Secret are set when the step asked for them.
+type ConnectLastfm struct{ Key, Secret string }
 
 // LoadModels is the agent key confirmed: the host fetches the provider's models.
 type LoadModels struct{ URL, Key string }
@@ -122,14 +122,16 @@ const (
 
 // Options wires the screen to its host.
 type Options struct {
-	Onboard   bool                      // start with the first-run onboarding
-	SelfPlay  bool                      // no player behind the screen: the stage itself skips, seeks and moves on at track end
-	Hook      func(dt float64)          // called at the start of every Step, where drive() used to be called
-	OnAction  func(Action)              // called synchronously, inside Key or Step
-	Example   func() string             // hint under the input; enter on an empty input sends it as the query
-	Chips     func(query string) []Chip // plan chips for a query; nil result → words of the query
-	Connected [3]bool                   // steps already connected: 0 Apple Music, 1 agent, 2 Last.fm
-	NoEggs    bool                      // no easter eggs
+	Onboard       bool                      // start with the first-run onboarding
+	SelfPlay      bool                      // no player behind the screen: the stage itself skips, seeks and moves on at track end
+	Hook          func(dt float64)          // called at the start of every Step, where drive() used to be called
+	OnAction      func(Action)              // called synchronously, inside Key or Step
+	Example       func() string             // hint under the input; enter on an empty input sends it as the query
+	Chips         func(query string) []Chip // plan chips for a query; nil result → words of the query
+	Connected     [3]bool                   // steps already connected: 0 Apple Music, 1 agent, 2 Last.fm
+	LastfmAskKeys bool                      // the Last.fm app key or secret is missing: the Last.fm step asks for both
+	LastfmKey     string                    // the Last.fm API key already known, prefilled in that field
+	NoEggs        bool                      // no easter eggs
 }
 
 type chip struct {
@@ -212,6 +214,8 @@ type Model struct {
 	trackT   float64
 	pos      float64
 	playing  bool
+	pause    float64 // 0 playing … 1 paused: the play screen fades to black
+	idleT    float64 // seconds the player has not been playing; a gap between tracks stays lit
 	nowKey   string
 	nowPos   float64
 	skipT    float64
@@ -239,6 +243,7 @@ func New(o Options) *Model {
 	m.reset()
 	if o.Onboard {
 		m.ph, m.ob = PhOnboard, newOnboard()
+		m.ob.lfKey = []rune(m.o.LastfmKey)
 	}
 	return m
 }
@@ -248,6 +253,7 @@ func (m *Model) Onboard(connected [3]bool) {
 	m.reset()
 	m.o.Connected = connected
 	m.ph, m.ob = PhOnboard, newOnboard()
+	m.ob.lfKey = []rune(m.o.LastfmKey)
 }
 
 func (m *Model) reset() {
@@ -873,6 +879,15 @@ func (m *Model) playStep(dt float64) {
 	if m.o.SelfPlay || m.playing {
 		m.pos += dt
 	}
+	m.idleT += dt
+	if m.o.SelfPlay || m.playing {
+		m.idleT = 0
+	}
+	want := 0.0
+	if m.idleT > 0.4 {
+		want = 1
+	}
+	m.pause += (want - m.pause) * (1 - math.Exp(-dt*5))
 	if d := m.curTrack().Dur; d > 0 {
 		m.pos = min(m.pos, d)
 	}
@@ -981,19 +996,18 @@ func (m *Model) Paste(text string) {
 }
 
 // Key handles one key press and reports whether the screen took it: a host with its
-// own player passes the untaken keys through. Quitting became OnAction(Quit{}).
+// own player passes the untaken keys through. Quitting became OnAction(Quit{}); esc
+// never quits, it steps back or clears.
 func (m *Model) Key(k, text string) bool {
 	switch m.ph {
 	case PhOnboard:
-		if m.onboardKey(k, text) {
-			m.send(Quit{})
-		}
+		m.onboardKey(k, text)
 		return true
 	case PhIntro:
 		m.err = ""
 		switch k {
 		case "esc":
-			m.send(Quit{})
+			m.input = nil
 		case "enter":
 			m.launch()
 		case "tab":
@@ -1029,8 +1043,6 @@ func (m *Model) Key(k, text string) bool {
 			}
 		case "enter", "space":
 			m.answer()
-		case "esc":
-			m.send(Quit{})
 		default:
 			if n, err := strconv.Atoi(k); err == nil && !q.Scale && n >= 1 && n <= len(q.Options) {
 				m.selIdx = n - 1
@@ -1044,7 +1056,7 @@ func (m *Model) Key(k, text string) bool {
 		return m.playKey(k, text)
 	default:
 		switch k {
-		case "esc", "q":
+		case "q":
 			m.send(Quit{})
 		case "r":
 			m.reset()
@@ -1089,8 +1101,10 @@ func (m *Model) playKey(k, text string) bool {
 		}
 	}
 	switch k {
-	case "q", "esc":
+	case "q":
 		m.send(Quit{})
+	case "esc":
+		m.help = false
 	case "r":
 		m.reset()
 		m.send(Restart{})

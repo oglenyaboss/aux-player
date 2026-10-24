@@ -95,38 +95,38 @@ func TestOpenSignalsSkipsBrokenLines(t *testing.T) {
 	}
 }
 
-func TestServedBeforeOtherSession(t *testing.T) {
+func TestSkippedBeforeOtherSession(t *testing.T) {
 	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
-	if !sig.servedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
-		t.Error("served в другой сессии: want true")
+	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
+	if !sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
+		t.Error("skip в другой сессии: want true")
 	}
-	if sig.servedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s1") {
-		t.Error("served в той же сессии: want false")
+	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s1") {
+		t.Error("skip в той же сессии: want false")
 	}
 }
 
-func TestServedBeforeOldRecordsIgnored(t *testing.T) {
+func TestSkippedBeforeOldRecordsIgnored(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig,
-		signalRec{Time: testNow.Add(-15 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
-		signalRec{Time: testNow.Add(-13 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Overseas"},
+		signalRec{Time: testNow.Add(-15 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
+		signalRec{Time: testNow.Add(-13 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Overseas"},
 	)
-	if sig.servedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
-		t.Error("served 15 дней назад: want false")
+	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
+		t.Error("skip 15 дней назад: want false")
 	}
-	if !sig.servedBefore(Song{Artist: "Ken Carson", Title: "Overseas"}, "s2") {
-		t.Error("served 13 дней назад: want true")
+	if !sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Overseas"}, "s2") {
+		t.Error("skip 13 дней назад: want true")
 	}
 }
 
-func TestServedBeforePlayedCancels(t *testing.T) {
+func TestSkippedBeforePlayedCancels(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig,
-		signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
+		signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
 		signalRec{Time: testNow, Kind: "played", Session: "s1", PosSec: 10, DurSec: 190, Artist: "Ken Carson", Title: "Yale"},
 	)
-	if sig.servedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
+	if sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
 		t.Error("played снимает запрет: want false")
 	}
 }
@@ -215,17 +215,17 @@ func TestGlobalSkipsOrderAndSingleSession(t *testing.T) {
 	}
 }
 
-func TestServedElsewhere(t *testing.T) {
+func TestSkippedElsewhere(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig,
-		signalRec{Time: testNow.Add(-20 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Old", Title: "Song"},
-		signalRec{Time: testNow.Add(-2 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
-		signalRec{Time: testNow.Add(-24 * time.Hour), Kind: "served", Session: "s2", Artist: "Self", Title: "Own"},
-		signalRec{Time: testNow.Add(-30 * time.Minute), Kind: "served", Session: "s1", Artist: "Played", Title: "Song"},
+		signalRec{Time: testNow.Add(-20 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Old", Title: "Song"},
+		signalRec{Time: testNow.Add(-2 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
+		signalRec{Time: testNow.Add(-24 * time.Hour), Kind: "skip_mid", Session: "s2", Artist: "Self", Title: "Own"},
+		signalRec{Time: testNow.Add(-30 * time.Minute), Kind: "skip_mid", Session: "s1", Artist: "Played", Title: "Song"},
 		signalRec{Time: testNow.Add(-30 * time.Minute), Kind: "played", Session: "s3", Artist: "Played", Title: "Song"},
-		signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "SoFaygo", Title: "Knock Knock"},
+		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "SoFaygo", Title: "Knock Knock"},
 	)
-	got := sig.servedElsewhere("s2")
+	got := sig.skippedElsewhere("s2")
 	want := []Song{{Artist: "SoFaygo", Title: "Knock Knock"}, {Artist: "Ken Carson", Title: "Yale"}}
 	if len(got) != len(want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -234,8 +234,8 @@ func TestServedElsewhere(t *testing.T) {
 		if got[i] != w {
 			t.Errorf("got[%d] = %+v, want %+v", i, got[i], w)
 		}
-		if !sig.servedBefore(w, "s2") {
-			t.Errorf("servedBefore(%+v) = false, want true", w)
+		if !sig.skippedBefore(w, "s2") {
+			t.Errorf("skippedBefore(%+v) = false, want true", w)
 		}
 	}
 }
@@ -385,5 +385,16 @@ func TestEngineRecordRatings(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "more,less,rate_clear" {
 		t.Fatalf("recs = %v, want [more less rate_clear]", got)
+	}
+}
+
+func TestSkippedBeforeNeedsSkip(t *testing.T) {
+	sig := testSignals(t, "")
+	addSignals(t, sig, signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
+	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
+		t.Error("трек только стоял в порции, до него не дошли: want false")
+	}
+	if got := sig.skippedElsewhere("s2"); len(got) != 0 {
+		t.Errorf("skippedElsewhere = %+v, want пусто", got)
 	}
 }

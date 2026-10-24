@@ -1,6 +1,7 @@
 package stage
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -430,5 +431,114 @@ func TestOnboardPasteFilter(t *testing.T) {
 	m.Paste("llama\n")
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "Meta-Llama/Llama-3.1-70B") || strings.Contains(frame, "a/x") {
 		t.Fatalf("вставка в фильтр не сработала:\n%s", frame)
+	}
+}
+
+// lastfmKeys lands on the Last.fm step of an onboarding that asks for the app keys.
+func lastfmKeys(t *testing.T, key string, r *recorder) *Model {
+	t.Helper()
+	m := liveOnboard(t, Options{Connected: [3]bool{true, true, false}, LastfmAskKeys: true, LastfmKey: key}, r)
+	steps(m, 1.5)
+	return m
+}
+
+func TestLastfmAskKeys(t *testing.T) {
+	r := &recorder{}
+	m := lastfmKeys(t, "k1", r)
+	frame := stripANSI(m.View())
+	for _, want := range []string{"API key", "secret", "k1"} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("кадр без %q:\n%s", want, frame)
+		}
+	}
+	m.Key("enter", "")
+	if got := recorded[ConnectLastfm](r); len(got) != 0 {
+		t.Fatalf("enter на ключе не должен подключать, записано %v", r.acts)
+	}
+	m.Paste("s3cret\n")
+	frame = stripANSI(m.View())
+	if strings.Contains(frame, "s3cret") {
+		t.Fatalf("secret виден открытым текстом:\n%s", frame)
+	}
+	if !strings.Contains(frame, "••••••") {
+		t.Fatalf("secret не замаскирован:\n%s", frame)
+	}
+	m.Key("enter", "")
+	want := []ConnectLastfm{{Key: "k1", Secret: "s3cret"}}
+	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("записано %v, ждём %v", got, want)
+	}
+}
+
+func TestLastfmAskKeysEmpty(t *testing.T) {
+	r := &recorder{}
+	m := lastfmKeys(t, "", r)
+	m.Key("enter", "")
+	if got := recorded[ConnectLastfm](r); len(got) != 0 {
+		t.Fatalf("пустой key не должен подключать, записано %v", r.acts)
+	}
+	m.Key("", "k")
+	m.Key("enter", "")
+	m.Key("enter", "")
+	if got := recorded[ConnectLastfm](r); len(got) != 0 {
+		t.Fatalf("пустой secret не должен подключать, записано %v", r.acts)
+	}
+	m.Key("", "s")
+	m.Key("enter", "")
+	want := []ConnectLastfm{{Key: "k", Secret: "s"}}
+	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("записано %v, ждём %v", got, want)
+	}
+}
+
+func TestLastfmAskKeysEsc(t *testing.T) {
+	r := &recorder{}
+	m := lastfmKeys(t, "k1", r)
+	m.Key("enter", "")
+	m.Key("esc", "")
+	if got := recorded[Quit](r); len(got) != 0 {
+		t.Fatalf("esc на secret не должен выходить, записано %v", r.acts)
+	}
+	m.Key("backspace", "")
+	m.Key("", "2")
+	m.Key("enter", "")
+	m.Key("", "s")
+	m.Key("enter", "")
+	want := []ConnectLastfm{{Key: "k2", Secret: "s"}}
+	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("записано %v, ждём %v", got, want)
+	}
+}
+
+func TestLastfmAskKeysRetry(t *testing.T) {
+	r := &recorder{}
+	m := lastfmKeys(t, "k1", r)
+	m.Key("enter", "")
+	m.Paste("s3cret")
+	m.Key("enter", "")
+	first := recorded[ConnectLastfm](r)
+	if len(first) != 1 {
+		t.Fatalf("ждём один ConnectLastfm, записано %v", r.acts)
+	}
+	m.StepDone(2, "bad key")
+	steps(m, 0.2)
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "bad key") {
+		t.Fatalf("кадр без ошибки:\n%s", frame)
+	}
+	m.Key("enter", "")
+	got := recorded[ConnectLastfm](r)
+	if len(got) != 2 || got[1] != got[0] {
+		t.Fatalf("записано %v, ждём повтор %v", got, first[0])
+	}
+}
+
+func TestLastfmAskKeysSkip(t *testing.T) {
+	r := &recorder{}
+	m := lastfmKeys(t, "k1", r)
+	m.Key("tab", "")
+	steps(m, 1)
+	setups := recorded[Setup](r)
+	if len(setups) != 1 || setups[0].Lastfm {
+		t.Fatalf("ждём один Setup без Last.fm, записано %v", r.acts)
 	}
 }

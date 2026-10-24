@@ -190,7 +190,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	answers := r.laterAnswers
 	r.laterAnswers = nil
 	m.appendLog(fmt.Sprintf("[vibe] turn %q (fresh=%v refill=%v)", text, fresh, refill))
-	return func() tea.Msg {
+	turn := func() vibeAIDoneMsg {
 		start := time.Now()
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -218,6 +218,15 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 		}
 		p, err := r.engine.Turn(ctx, text)
 		return vibeAIDoneMsg{gen: gen, tracks: p.Tracks, note: p.Note, later: p.Later, err: err, elapsed: time.Since(start), refill: refill}
+	}
+	// The result rides the event channel behind the turn's picks: the screen
+	// sees every pick before the portion closes.
+	return func() tea.Msg {
+		select {
+		case r.events <- turn():
+		case <-ctx.Done():
+		}
+		return nil
 	}
 }
 
@@ -388,52 +397,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		m.cancelVibeAI()
 
 	case vibeAIDoneMsg:
-		if msg.gen != r.gen {
-			return nil
-		}
-		r.busy = false
-		if msg.err != nil {
-			if len(r.feed) > r.portionStart {
-				r.feed = r.feed[:r.portionStart]
-			}
-			r.autoplay = false
-			m.appendLog(fmt.Sprintf("[vibe] error: %v", msg.err))
-			v.SetError(msg.err)
-			return nil
-		}
-		r.tracks = msg.tracks
-		r.portion++
-		for _, t := range msg.tracks {
-			r.served[t.ID] = t
-		}
-		m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks in %s", r.portion, len(msg.tracks), msg.elapsed.Round(time.Second)))
-		r.feed = append(r.feed[:r.portionStart], msg.tracks...)
-		v.PortionDone(vibeAIViewTracks(msg.tracks), msg.note)
-		v.SetMemory(vibeAIMemoryLines(m.cfg))
-		if msg.later != nil {
-			r.later = msg.later
-			v.AskLater(vibeAIViewQuestion(*msg.later))
-		}
-		if r.autoplay {
-			r.autoplay = false
-			if r.autoplayID == "" {
-				return m.vibeAIPlay(msg.tracks)
-			}
-			rest := make([]vibeai.Track, 0, len(msg.tracks))
-			for _, t := range msg.tracks {
-				if t.ID != r.autoplayID {
-					rest = append(rest, t)
-				}
-			}
-			return m.vibeAIAppend(rest)
-		}
-		if msg.refill || r.stream {
-			cmds := []tea.Cmd{m.vibeAIAppend(msg.tracks)}
-			if msg.refill && r.playlistID != "" {
-				cmds = append(cmds, m.vibeAISaveCmd())
-			}
-			return tea.Batch(cmds...)
-		}
+		return tea.Batch(waitVibeAI(r.events), m.vibeAIDone(msg))
 
 	case views.VibeAIActionMsg:
 		if len(r.feed) == 0 {
@@ -508,6 +472,59 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// vibeAIDone lands a finished turn: the portion goes to the screen and the queue.
+func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
+	r := m.vibeAI
+	v := m.vibeAIP.m
+	if msg.gen != r.gen {
+		return nil
+	}
+	r.busy = false
+	if msg.err != nil {
+		if len(r.feed) > r.portionStart {
+			r.feed = r.feed[:r.portionStart]
+		}
+		r.autoplay = false
+		m.appendLog(fmt.Sprintf("[vibe] error: %v", msg.err))
+		v.SetError(msg.err)
+		return nil
+	}
+	r.tracks = msg.tracks
+	r.portion++
+	for _, t := range msg.tracks {
+		r.served[t.ID] = t
+	}
+	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks in %s", r.portion, len(msg.tracks), msg.elapsed.Round(time.Second)))
+	r.feed = append(r.feed[:r.portionStart], msg.tracks...)
+	v.PortionDone(vibeAIViewTracks(msg.tracks), msg.note)
+	v.SetMemory(vibeAIMemoryLines(m.cfg))
+	if msg.later != nil {
+		r.later = msg.later
+		v.AskLater(vibeAIViewQuestion(*msg.later))
+	}
+	if r.autoplay {
+		r.autoplay = false
+		if r.autoplayID == "" {
+			return m.vibeAIPlay(msg.tracks)
+		}
+		rest := make([]vibeai.Track, 0, len(msg.tracks))
+		for _, t := range msg.tracks {
+			if t.ID != r.autoplayID {
+				rest = append(rest, t)
+			}
+		}
+		return m.vibeAIAppend(rest)
+	}
+	if msg.refill || r.stream {
+		cmds := []tea.Cmd{m.vibeAIAppend(msg.tracks)}
+		if msg.refill && r.playlistID != "" {
+			cmds = append(cmds, m.vibeAISaveCmd())
+		}
+		return tea.Batch(cmds...)
+	}
+	return nil
+}
+
 // vibeAIStreamTick starts a top-up turn while stream mode is on and the
 // currently playing vibe track has vibeAIStreamAhead or fewer tracks left
 // behind it in the queue.
@@ -544,7 +561,7 @@ func vibeAIOutcome(t vibeai.Track, pos time.Duration) vibeai.Outcome {
 	durSec := t.DurationMs / 1000
 	kind := "skip_mid"
 	switch {
-	case (durSec > 0 && posSec*10 >= durSec*7) || (durSec == 0 && posSec >= 120):
+	case (durSec > 0 && posSec*2 >= durSec) || (durSec == 0 && posSec >= 120):
 		kind = "played"
 	case posSec < 30:
 		kind = "skip_early"

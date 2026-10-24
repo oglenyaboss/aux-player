@@ -124,8 +124,8 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		return v
 	}
 	if s.sig != nil {
-		if s.sig.servedBefore(song, s.sessionID) {
-			v.Reason = "уже выдавали раньше"
+		if s.sig.skippedBefore(song, s.sessionID) {
+			v.Reason = "бросал раньше, не дослушав"
 			return v
 		}
 		for _, a := range arts {
