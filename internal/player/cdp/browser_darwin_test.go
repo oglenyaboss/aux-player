@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-func TestFindChromePathUsesVibezOverride(t *testing.T) {
+func TestFindChromePathUsesAuxOverride(t *testing.T) {
 	tmp := t.TempDir()
 	chrome := filepath.Join(tmp, "chrome")
 	if err := os.WriteFile(chrome, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("write chrome fixture: %v", err)
 	}
-	t.Setenv("VIBEZ_CHROME_PATH", chrome)
+	t.Setenv("AUX_CHROME_PATH", chrome)
 	t.Setenv("CHROME_PATH", "")
 
 	got, err := findChromePath()
@@ -36,7 +36,7 @@ func TestFindChromePathUsesChromePathOverride(t *testing.T) {
 	if err := os.WriteFile(chrome, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatalf("write chrome fixture: %v", err)
 	}
-	t.Setenv("VIBEZ_CHROME_PATH", "")
+	t.Setenv("AUX_CHROME_PATH", "")
 	t.Setenv("CHROME_PATH", chrome)
 
 	got, err := findChromePath()
@@ -50,14 +50,14 @@ func TestFindChromePathUsesChromePathOverride(t *testing.T) {
 
 func TestFindChromePathRejectsMissingOverride(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	t.Setenv("VIBEZ_CHROME_PATH", missing)
+	t.Setenv("AUX_CHROME_PATH", missing)
 	t.Setenv("CHROME_PATH", "")
 
 	got, err := findChromePath()
 	if err == nil {
 		t.Fatalf("findChromePath accepted missing override: %q", got)
 	}
-	if !strings.Contains(err.Error(), "VIBEZ_CHROME_PATH") || !strings.Contains(err.Error(), missing) {
+	if !strings.Contains(err.Error(), "AUX_CHROME_PATH") || !strings.Contains(err.Error(), missing) {
 		t.Fatalf("findChromePath error = %q, want override path error", err)
 	}
 }
@@ -84,8 +84,8 @@ func TestChromeLaunchArgs_HasHeadlessNew(t *testing.T) {
 }
 
 func TestCDPLaunchProbeInvalidToken(t *testing.T) {
-	if os.Getenv("VIBEZ_CDP_LAUNCH_PROBE") != "1" {
-		t.Skip("set VIBEZ_CDP_LAUNCH_PROBE=1 to launch Chrome without Apple credentials")
+	if os.Getenv("AUX_CDP_LAUNCH_PROBE") != "1" {
+		t.Skip("set AUX_CDP_LAUNCH_PROBE=1 to launch Chrome without Apple credentials")
 	}
 	if err := EnsureBrowser(func(msg string) { t.Log(msg) }); err != nil {
 		t.Fatalf("EnsureBrowser: %v", err)

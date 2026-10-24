@@ -25,7 +25,7 @@ func TestRenderHTMLRejectsUnsupportedBitrate(t *testing.T) {
 }
 
 // MusicKit v3 has no isExplicitContentAllowed property, so the guarded
-// assignment vibez used before #130 never ran. The flag that actually gates
+// assignment AUX used before #130 never ran. The flag that actually gates
 // explicit playback is restrictedEnabled, which MusicKit otherwise guesses from
 // the storefront country and applies to every queue.
 func TestRenderHTMLLiftsExplicitContentRestriction(t *testing.T) {
@@ -149,8 +149,8 @@ func TestRenderHTMLSyncsAccountStorefrontBeforeReady(t *testing.T) {
 	if meIdx < 0 || syncIdx < 0 || readyIdx < 0 || meIdx > readyIdx || syncIdx > readyIdx {
 		t.Errorf("music.me() at %d, syncAccountStorefront() at %d, goAuthComplete at %d: page must sync account storefront before signalling ready", meIdx, syncIdx, readyIdx)
 	}
-	if !strings.Contains(html, "window.vibezSetUserToken = async function(token)") {
-		t.Error("rendered HTML does not expose window.vibezSetUserToken for mid-session re-auth")
+	if !strings.Contains(html, "window.auxSetUserToken = async function(token)") {
+		t.Error("rendered HTML does not expose window.auxSetUserToken for mid-session re-auth")
 	}
 	if !strings.Contains(html, "aligning storefrontId=") {
 		t.Error("rendered HTML does not log storefrontId fallback via goLog when music.me() fails")

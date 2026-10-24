@@ -66,8 +66,8 @@ func candidatePaths() []string {
 // FindCDM searches the host for an existing libwidevinecdm.so binary and
 // returns the newest valid candidate so revoked older copies are skipped.
 func FindCDM() string {
-	if envPath := os.Getenv("VIBEZ_CDM_PATH"); envPath != "" {
-		if fi, err := os.Stat(envPath); err == nil && !fi.IsDir() && fi.Size() > 100000 { //nolint:gosec // G703: explicit user override via VIBEZ_CDM_PATH
+	if envPath := os.Getenv("AUX_CDM_PATH"); envPath != "" {
+		if fi, err := os.Stat(envPath); err == nil && !fi.IsDir() && fi.Size() > 100000 { //nolint:gosec // G703: explicit user override via AUX_CDM_PATH
 			return envPath
 		}
 	}

@@ -9,7 +9,7 @@ import (
 // launchBrowser starts Chromium and returns the page to drive plus a close
 // function.
 //
-// With a system browser (linux/arm64, or a VIBEZ_CHROME_PATH override) it uses
+// With a system browser (linux/arm64, or a AUX_CHROME_PATH override) it uses
 // a persistent profile (chromiumProfileDir) so the Widevine component "hint
 // file", written during EnsureBrowser's warm-up, is read and the CDM loads. An
 // ephemeral profile (the default Launch) never loads Widevine there because

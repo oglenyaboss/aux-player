@@ -1,12 +1,12 @@
-// vibez token broker.
+// AUX token broker.
 //
-// Signs short-lived Apple Music developer tokens (ES256 JWT) so the vibez
+// Signs short-lived Apple Music developer tokens (ES256 JWT) so the AUX
 // binary does not have to ship one. The MusicKit private key lives only in
 // this Worker's secrets; clients get a token that expires in TOKEN_TTL_SECONDS
 // and fetch a fresh one on demand, so rotating the Apple key never needs a
-// vibez release.
+// AUX release.
 //
-// The token is not secret from whoever runs vibez (MusicKit JS needs it in the
+// The token is not secret from whoever runs AUX (MusicKit JS needs it in the
 // page), so the gate below limits abuse; it does not make the token private.
 //
 // Secrets: APPLE_KEY_ID, APPLE_TEAM_ID, APPLE_PRIVATE_KEY (PEM, PKCS#8 .p8
@@ -94,7 +94,7 @@ export default {
 
     // Shared header: keeps drive-by scanners out. It is baked into release
     // builds, so it is not proof of identity.
-    const given = request.headers.get("x-vibez-client") ?? "";
+    const given = request.headers.get("x-aux-client") ?? "";
     if (!env.CLIENT_KEY || !timingSafeEqual(given, env.CLIENT_KEY)) {
       return json({ error: "unauthorized" }, 401);
     }

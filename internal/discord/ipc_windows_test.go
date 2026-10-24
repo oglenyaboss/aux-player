@@ -34,7 +34,7 @@ func listenTestPipe(t *testing.T, path string) net.Listener {
 // listenTestIPC listens on a fresh, uniquely named pipe and returns the listener and its dial path.
 func listenTestIPC(t *testing.T) (net.Listener, string) {
 	t.Helper()
-	path := fmt.Sprintf(`\\.\pipe\vibez-discord-test-%d-%d`, os.Getpid(), testPipeSeq.Add(1))
+	path := fmt.Sprintf(`\\.\pipe\aux-discord-test-%d-%d`, os.Getpid(), testPipeSeq.Add(1))
 	return listenTestPipe(t, path), path
 }
 

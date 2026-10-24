@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// roundtripIDs parses the JSON string literal embedded in a vibez JS call
+// roundtripIDs parses the JSON string literal embedded in a AUX JS call
 // and returns the decoded []string so we can assert on IDs without caring
 // about whitespace or encoding details.
 func parseIDsFromJS(t *testing.T, expr string, fnName string) []string {
@@ -36,7 +36,7 @@ func TestBuildSetQueueJS_SingleID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezSetQueue")
+	ids := parseIDsFromJS(t, expr, "auxSetQueue")
 	if len(ids) != 1 || ids[0] != "123456789" {
 		t.Errorf("decoded IDs = %v, want [123456789]", ids)
 	}
@@ -48,7 +48,7 @@ func TestBuildSetQueueJS_MultipleIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezSetQueue")
+	ids := parseIDsFromJS(t, expr, "auxSetQueue")
 	if len(ids) != 3 {
 		t.Fatalf("decoded %d IDs, want 3", len(ids))
 	}
@@ -64,7 +64,7 @@ func TestBuildSetQueueJS_EmptySlice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezSetQueue")
+	ids := parseIDsFromJS(t, expr, "auxSetQueue")
 	if len(ids) != 0 {
 		t.Errorf("decoded %d IDs, want 0", len(ids))
 	}
@@ -77,7 +77,7 @@ func TestBuildSetQueueJS_LibraryIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezSetQueue")
+	ids := parseIDsFromJS(t, expr, "auxSetQueue")
 	for i, want := range input {
 		if ids[i] != want {
 			t.Errorf("ids[%d] = %q, want %q", i, ids[i], want)
@@ -92,7 +92,7 @@ func TestBuildSetQueueJS_SpecialChars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezSetQueue")
+	ids := parseIDsFromJS(t, expr, "auxSetQueue")
 	for i, want := range input {
 		if ids[i] != want {
 			t.Errorf("ids[%d] = %q, want %q", i, ids[i], want)
@@ -107,8 +107,8 @@ func TestBuildSetPlaylistJS_CatalogPlaylist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(expr, "vibezSetPlaylist") {
-		t.Errorf("expression does not mention vibezSetPlaylist: %s", expr)
+	if !strings.Contains(expr, "auxSetPlaylist") {
+		t.Errorf("expression does not mention auxSetPlaylist: %s", expr)
 	}
 	if !strings.Contains(expr, `"pl.abc123"`) {
 		t.Errorf("expression does not contain playlist ID: %s", expr)
@@ -157,7 +157,7 @@ func TestBuildPlayNextJS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezQueuePlayNext")
+	ids := parseIDsFromJS(t, expr, "auxQueuePlayNext")
 	if len(ids) != len(input) || ids[0] != input[0] || ids[1] != input[1] {
 		t.Errorf("decoded IDs = %v, want %v", ids, input)
 	}
@@ -170,7 +170,7 @@ func TestBuildAppendQueueJS_SingleID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezAppendQueue")
+	ids := parseIDsFromJS(t, expr, "auxAppendQueue")
 	if len(ids) != 1 || ids[0] != "987654321" {
 		t.Errorf("decoded IDs = %v, want [987654321]", ids)
 	}
@@ -182,7 +182,7 @@ func TestBuildAppendQueueJS_MultipleIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezAppendQueue")
+	ids := parseIDsFromJS(t, expr, "auxAppendQueue")
 	if len(ids) != len(input) {
 		t.Fatalf("decoded %d IDs, want %d", len(ids), len(input))
 	}
@@ -199,7 +199,7 @@ func TestBuildAppendQueueJS_LibraryIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezAppendQueue")
+	ids := parseIDsFromJS(t, expr, "auxAppendQueue")
 	for i, want := range input {
 		if ids[i] != want {
 			t.Errorf("ids[%d] = %q, want %q", i, ids[i], want)
@@ -213,7 +213,7 @@ func TestBuildAppendQueueJS_MixedIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezAppendQueue")
+	ids := parseIDsFromJS(t, expr, "auxAppendQueue")
 	if len(ids) != 3 {
 		t.Fatalf("decoded %d IDs, want 3", len(ids))
 	}
@@ -224,7 +224,7 @@ func TestBuildAppendQueueJS_EmptySlice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	ids := parseIDsFromJS(t, expr, "vibezAppendQueue")
+	ids := parseIDsFromJS(t, expr, "auxAppendQueue")
 	if len(ids) != 0 {
 		t.Errorf("decoded %d IDs, want 0", len(ids))
 	}
@@ -234,21 +234,21 @@ func TestBuildAppendQueueJS_EmptySlice(t *testing.T) {
 
 func TestBuildSetQueueJS_GuardPrefix(t *testing.T) {
 	expr, _ := buildSetQueueJS([]string{"x"})
-	if !strings.HasPrefix(expr, "window.vibezSetQueue && window.vibezSetQueue(") {
+	if !strings.HasPrefix(expr, "window.auxSetQueue && window.auxSetQueue(") {
 		t.Errorf("guard prefix missing in: %s", expr)
 	}
 }
 
 func TestBuildAppendQueueJS_GuardPrefix(t *testing.T) {
 	expr, _ := buildAppendQueueJS([]string{"x"})
-	if !strings.HasPrefix(expr, "window.vibezAppendQueue && window.vibezAppendQueue(") {
+	if !strings.HasPrefix(expr, "window.auxAppendQueue && window.auxAppendQueue(") {
 		t.Errorf("guard prefix missing in: %s", expr)
 	}
 }
 
 func TestBuildSetPlaylistJS_GuardPrefix(t *testing.T) {
 	expr, _ := buildSetPlaylistJS("pl.x", 0)
-	if !strings.HasPrefix(expr, "window.vibezSetPlaylist && window.vibezSetPlaylist(") {
+	if !strings.HasPrefix(expr, "window.auxSetPlaylist && window.auxSetPlaylist(") {
 		t.Errorf("guard prefix missing in: %s", expr)
 	}
 }
@@ -259,7 +259,7 @@ func TestBuildSetAudioBitrateJS_Supported(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildSetAudioBitrateJS(%d): %v", kbps, err)
 		}
-		if !strings.Contains(expr, "vibezSetAudioBitrate") {
+		if !strings.Contains(expr, "auxSetAudioBitrate") {
 			t.Fatalf("expression does not call bitrate setter: %s", expr)
 		}
 	}

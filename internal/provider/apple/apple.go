@@ -22,7 +22,7 @@ import (
 const (
 	defaultBaseURL         = "https://api.music.apple.com/v1"
 	defaultCatalogURL      = "https://amp-api.music.apple.com/v1" // no longer used by search; see newCatalogRequest
-	favoritesPlaylistID    = "vibez:favorites"
+	favoritesPlaylistID    = "aux:favorites"
 	favoritesPlaylistName  = "Favorites"
 	ratingBatchSize        = 100
 	ratingBatchConcurrency = 5
@@ -140,7 +140,7 @@ func (a *AppleProvider) newRequest(ctx context.Context, method, endpoint string)
 // Nothing reaches this any more: #82 moved album and playlist tracks to the
 // standard host, and #93 moved catalog search there too, so every
 // fetchSongsPaginated caller now passes isCatalog=false. Kept rather than
-// deleted because removing it is a judgement call about whether vibez is done
+// deleted because removing it is a judgement call about whether AUX is done
 // with amp-api, not a consequence of either change.
 func (a *AppleProvider) newCatalogRequest(ctx context.Context, method, endpoint string) (*http.Request, error) {
 	u, err := resolveURL(a.catalogBaseURL, endpoint)

@@ -927,7 +927,7 @@ func songJSONNoPlay(id, name, artist, album string, durationMs int) map[string]a
 // empty extendedAssetUrls, the shape of a purchase-only or region-locked
 // track. Search no longer reads that field (the standard catalog endpoint does
 // not send it), so this is kept only to prove such a song now survives the
-// filter rather than being dropped for a field vibez cannot see.
+// filter rather than being dropped for a field AUX cannot see.
 func songJSONNoStream(id, name, artist, album string, durationMs int) map[string]any {
 	s := songJSON(id, name, artist, album, durationMs, "")
 	s["attributes"].(map[string]any)["extendedAssetUrls"] = map[string]any{}
@@ -1019,7 +1019,7 @@ func TestGetLibraryPlaylists_EmptyLibrary404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error on 404 Not Found, got: %v", err)
 	}
-	if len(playlists) != 1 || playlists[0].ID != "vibez:favorites" {
+	if len(playlists) != 1 || playlists[0].ID != "aux:favorites" {
 		t.Errorf("expected exactly 1 playlist (Favorites), got: %+v", playlists)
 	}
 }
@@ -1551,7 +1551,7 @@ func TestGetPlaylistTracks_FavoritesUsesRatings(t *testing.T) {
 	defer srv.Close()
 
 	p := newTestProvider(t, srv)
-	tracks, err := p.GetPlaylistTracks(context.Background(), "vibez:favorites")
+	tracks, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
 	if err != nil {
 		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
 	}
@@ -1593,7 +1593,7 @@ func TestGetPlaylistTracks_FavoritesRatingsBatchesAreBoundedParallel(t *testing.
 	defer srv.Close()
 
 	p := newTestProvider(t, srv)
-	_, err := p.GetPlaylistTracks(context.Background(), "vibez:favorites")
+	_, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
 	if err != nil {
 		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
 	}

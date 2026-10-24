@@ -25,17 +25,17 @@ typedef struct {
 	int done;
 	int playing;
 	uintptr_t goPlayer;
-} vibez_audio_state;
+} aux_audio_state;
 
 // This is called from C back into GO when the track ends
-extern void vibezOnEOS(uintptr_t handle);
+extern void auxOnEOS(uintptr_t handle);
 
 // forward declaration
-static void vibez_audio_callback(void* ctx, AudioQueueRef queue, AudioQueueBufferRef buf);
+static void aux_audio_callback(void* ctx, AudioQueueRef queue, AudioQueueBufferRef buf);
 
-// vibez_fill_buffer reads decoded PCM from ExtAudioFile into an AudioQueue buffer.
+// aux_fill_buffer reads decoded PCM from ExtAudioFile into an AudioQueue buffer.
 // Returns 1 if EOS was reached, 0 otherwise.
-static int vibez_fill_buffer(vibez_audio_state *s, AudioQueueBufferRef buf) {
+static int aux_fill_buffer(aux_audio_state *s, AudioQueueBufferRef buf) {
 	UInt32 numFrames = buf->mAudioDataBytesCapacity / s->format.mBytesPerFrame;
 	AudioBufferList abl;
 	abl.mNumberBuffers = 1;
@@ -48,23 +48,23 @@ static int vibez_fill_buffer(vibez_audio_state *s, AudioQueueBufferRef buf) {
 	return numFrames == 0;
 }
 
-static void vibez_audio_callback(void *ctx, AudioQueueRef queue, AudioQueueBufferRef buf) {
-	vibez_audio_state *s = (vibez_audio_state*)ctx;
+static void aux_audio_callback(void *ctx, AudioQueueRef queue, AudioQueueBufferRef buf) {
+	aux_audio_state *s = (aux_audio_state*)ctx;
 	if(s->done) return;
-	if(vibez_fill_buffer(s, buf)) {
+	if(aux_fill_buffer(s, buf)) {
 		s->done = 1;
 		s->playing = 0;
 		AudioQueueStop(queue, false);
-		vibezOnEOS((uintptr_t)s->goPlayer);
+		auxOnEOS((uintptr_t)s->goPlayer);
 		return;
 	}
 	AudioQueueEnqueueBuffer(queue, buf, 0, NULL);
 }
 
-// vibez_open opens a file:// URI and sets up ExtAudioFile + AudioQueue
+// aux_open opens a file:// URI and sets up ExtAudioFile + AudioQueue
 // Returning NULL on fail
-static vibez_audio_state* vibez_open(const char *uri){
-	vibez_audio_state *s = (vibez_audio_state*)calloc(1, sizeof(vibez_audio_state));
+static aux_audio_state* aux_open(const char *uri){
+	aux_audio_state *s = (aux_audio_state*)calloc(1, sizeof(aux_audio_state));
 	if(!s) return NULL;
 
 	CFStringRef cfPath = CFStringCreateWithCString(NULL, uri, kCFStringEncodingUTF8);
@@ -87,7 +87,7 @@ static vibez_audio_state* vibez_open(const char *uri){
 
 	ExtAudioFileSetProperty(s->file, kExtAudioFileProperty_ClientDataFormat, sizeof(s->format), &s->format);
 
-	err = AudioQueueNewOutput(&s->format, vibez_audio_callback, s, NULL, NULL, 0, &s->queue);
+	err = AudioQueueNewOutput(&s->format, aux_audio_callback, s, NULL, NULL, 0, &s->queue);
 	if(err != noErr){
 		ExtAudioFileDispose(s->file);
 		free(s);
@@ -96,11 +96,11 @@ static vibez_audio_state* vibez_open(const char *uri){
 	return s;
 }
 
-static void vibez_start(vibez_audio_state *s){
+static void aux_start(aux_audio_state *s){
 	// Pre filling all buffers before starting
 	for(int i=0; i<kNumBuffers; i++){
 		AudioQueueAllocateBuffer(s->queue, kBufferSize, &s->bufs[i]);
-		if(vibez_fill_buffer(s, s->bufs[i])){
+		if(aux_fill_buffer(s, s->bufs[i])){
 			s->done = 1;
 			break;
 		}
@@ -110,32 +110,32 @@ static void vibez_start(vibez_audio_state *s){
 	AudioQueueStart(s->queue, NULL);
 }
 
-static void vibez_pause(vibez_audio_state *s){
+static void aux_pause(aux_audio_state *s){
 	s->playing = 0;
 	AudioQueuePause(s->queue);
 }
 
-static void vibez_resume(vibez_audio_state *s){
+static void aux_resume(aux_audio_state *s){
 	s->playing = 1;
 	AudioQueueStart(s->queue, NULL);
 }
 
-static void vibez_stop(vibez_audio_state *s){
+static void aux_stop(aux_audio_state *s){
 	s->playing = 0;
 	AudioQueueStop(s->queue, true);
 }
 
-static void vibez_set_volume(vibez_audio_state *s, float v){
+static void aux_set_volume(aux_audio_state *s, float v){
 	AudioQueueSetParameter(s->queue, kAudioQueueParam_Volume, v);
 }
 
-static SInt64 vibez_get_position(vibez_audio_state *s){
+static SInt64 aux_get_position(aux_audio_state *s){
 	SInt64 frame = 0;
 	ExtAudioFileTell(s->file, &frame);
 	return frame;
 }
 
-static double vibez_get_playback_time(vibez_audio_state *s) {
+static double aux_get_playback_time(aux_audio_state *s) {
 	AudioTimeStamp ts;
 	Boolean discontinuity;
 	OSStatus err = AudioQueueGetCurrentTime(s->queue, NULL, &ts, &discontinuity);
@@ -145,12 +145,12 @@ static double vibez_get_playback_time(vibez_audio_state *s) {
 	return ts.mSampleTime / s->format.mSampleRate;
 }
 
-static void vibez_seek(vibez_audio_state *s, SInt64 frame){
+static void aux_seek(aux_audio_state *s, SInt64 frame){
 	AudioQueueStop(s->queue, true);
 	ExtAudioFileSeek(s->file, frame);
 	s->done = 0;
 	for (int i=0; i< kNumBuffers; i++) {
-		if (vibez_fill_buffer(s, s->bufs[i])) {
+		if (aux_fill_buffer(s, s->bufs[i])) {
 			s->done = 1;
 			break;
 		}
@@ -161,21 +161,21 @@ static void vibez_seek(vibez_audio_state *s, SInt64 frame){
 	}
 }
 
-static SInt64 vibez_get_duration(vibez_audio_state *s) {
+static SInt64 aux_get_duration(aux_audio_state *s) {
 	SInt64 frames = 0;
 	UInt32 size = sizeof(frames);
 	ExtAudioFileGetProperty(s->file, kExtAudioFileProperty_FileLengthFrames, &size, &frames);
 	return frames;
 }
 
-static double vibez_get_sample_rate(vibez_audio_state *s) {
+static double aux_get_sample_rate(aux_audio_state *s) {
 	AudioStreamBasicDescription fileFormat;
 	UInt32 size = sizeof(fileFormat);
 	ExtAudioFileGetProperty(s->file, kExtAudioFileProperty_FileDataFormat, &size, &fileFormat);
 		return fileFormat.mSampleRate;
 }
 
-static void vibez_destroy(vibez_audio_state *s){
+static void aux_destroy(aux_audio_state *s){
 	if(!s) return;
 	AudioQueueDispose(s->queue, true);
 	ExtAudioFileDispose(s->file);
@@ -199,15 +199,15 @@ import (
 
 // audioRef wraps a C audio state with an atomic reference count. It owns the
 // cgo handle stored in s->goPlayer, so the handle lives exactly as long as the
-// C state that can pass it back through vibezOnEOS.
+// C state that can pass it back through auxOnEOS.
 type audioRef struct {
-	s      *C.vibez_audio_state
+	s      *C.aux_audio_state
 	p      *Player
 	handle cgo.Handle
 	refs   int32
 }
 
-func newAudioRef(s *C.vibez_audio_state, p *Player) *audioRef {
+func newAudioRef(s *C.aux_audio_state, p *Player) *audioRef {
 	r := &audioRef{s: s, p: p, refs: 1}
 	r.handle = cgo.NewHandle(r)
 	s.goPlayer = C.uintptr_t(r.handle)
@@ -228,11 +228,11 @@ func (r *audioRef) acquire() bool {
 }
 
 // release decrements the reference count and destroys the C object when it
-// reaches zero. The handle is deleted only after vibez_destroy has disposed of
+// reaches zero. The handle is deleted only after aux_destroy has disposed of
 // the queue, so no callback can still be holding it.
 func (r *audioRef) release() {
 	if atomic.AddInt32(&r.refs, -1) == 0 {
-		C.vibez_destroy(r.s)
+		C.aux_destroy(r.s)
 		r.handle.Delete()
 	}
 }
@@ -281,7 +281,7 @@ func (p *Player) pollState() {
 			if !ref.acquire() {
 				continue
 			}
-			secs := float64(C.vibez_get_playback_time(ref.s))
+			secs := float64(C.aux_get_playback_time(ref.s))
 			ref.release()
 			if secs < 0 {
 				continue
@@ -321,8 +321,8 @@ func (p *Player) eosLoop() {
 	}
 }
 
-//export vibezOnEOS
-func vibezOnEOS(h C.uintptr_t) {
+//export auxOnEOS
+func auxOnEOS(h C.uintptr_t) {
 	r := cgo.Handle(uintptr(h)).Value().(*audioRef)
 	p := r.p
 	// A state that has already been swapped out can still reach its end
@@ -346,7 +346,7 @@ func (p *Player) playTrack(t provider.Track) {
 	cs := C.CString(path)
 	defer C.free(unsafe.Pointer(cs))
 
-	raw := C.vibez_open(cs)
+	raw := C.aux_open(cs)
 	if raw == nil {
 		p.mu.Lock()
 		p.state.Error = fmt.Sprintf("failed to open: %s", path)
@@ -356,12 +356,12 @@ func (p *Player) playTrack(t provider.Track) {
 		return
 	}
 
-	sampleRate := float64(C.vibez_get_sample_rate(raw))
+	sampleRate := float64(C.aux_get_sample_rate(raw))
 	if sampleRate <= 0 {
 		sampleRate = 44100.0
 	}
 
-	frames := int64(C.vibez_get_duration(raw))
+	frames := int64(C.aux_get_duration(raw))
 	duration := time.Duration(float64(frames) / sampleRate * float64(time.Second))
 
 	ref := newAudioRef(raw, p)
@@ -385,7 +385,7 @@ func (p *Player) playTrack(t provider.Track) {
 	if !ref.acquire() {
 		return
 	}
-	C.vibez_start(raw)
+	C.aux_start(raw)
 	ref.release()
 	p.broadcast(s)
 }
@@ -397,7 +397,7 @@ func (p *Player) Play() error {
 	s := p.state
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		C.vibez_resume(ref.s)
+		C.aux_resume(ref.s)
 		ref.release()
 	}
 	p.broadcast(s)
@@ -411,7 +411,7 @@ func (p *Player) Pause() error {
 	s := p.state
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		C.vibez_pause(ref.s)
+		C.aux_pause(ref.s)
 		ref.release()
 	}
 	p.broadcast(s)
@@ -425,7 +425,7 @@ func (p *Player) Stop() error {
 	s := p.state
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		C.vibez_stop(ref.s)
+		C.aux_stop(ref.s)
 		ref.release()
 	}
 	p.broadcast(s)
@@ -491,7 +491,7 @@ func (p *Player) Seek(pos time.Duration) error {
 	s := p.state
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		C.vibez_seek(ref.s, frames)
+		C.aux_seek(ref.s, frames)
 		ref.release()
 	}
 	p.broadcast(s)
@@ -505,7 +505,7 @@ func (p *Player) SetVolume(v float64) error {
 	s := p.state
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		C.vibez_set_volume(ref.s, C.float(v))
+		C.aux_set_volume(ref.s, C.float(v))
 		ref.release()
 	}
 	p.broadcast(s)
@@ -645,7 +645,7 @@ func (p *Player) GetState() (*player.State, error) {
 	ref := p.audio
 	p.mu.Unlock()
 	if ref != nil && ref.acquire() {
-		secs := float64(C.vibez_get_playback_time(ref.s))
+		secs := float64(C.aux_get_playback_time(ref.s))
 		ref.release()
 		if secs >= 0 {
 			p.mu.Lock()

@@ -11,9 +11,9 @@ import (
 // config.Save("") → ConfigPath(""). Without
 // this guard, running `go test ./...` silently overwrites the developer's real
 // config with test fixtures (e.g. the bogus "embedded-takes-priority" developer
-// token), which then makes `vibez` fail to launch with an "invalid token" error.
+// token), which then makes `AUX` fail to launch with an "invalid token" error.
 func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "vibez-auth-test-home-*")
+	tmp, err := os.MkdirTemp("", "aux-auth-test-home-*")
 	if err != nil {
 		panic("creating temp HOME for auth tests: " + err.Error())
 	}

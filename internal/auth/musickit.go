@@ -26,7 +26,7 @@ var loginHTML []byte
 // stateHeader carries the per-login state on the /callback request. A custom
 // header also forces a CORS preflight, so a page on another origin cannot
 // post a token to the callback even if it learns the port.
-const stateHeader = "X-Vibez-State"
+const stateHeader = "X-Aux-State"
 
 // maxCallbackBody bounds the /callback request body.
 const maxCallbackBody = 64 << 10

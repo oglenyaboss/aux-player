@@ -10,7 +10,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
 const sandbox = {};
 vm.runInNewContext(source, sandbox, { filename: 'engine.js' });
-const createEngine = sandbox.vibezLocalEngine;
+const createEngine = sandbox.auxLocalEngine;
 
 // ─── Harness ─────────────────────────────────────────────────────────────────
 let passed = 0, failed = 0;

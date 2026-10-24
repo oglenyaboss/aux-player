@@ -2,7 +2,7 @@
 
 // Package webkit provides an Apple Music player backed by an embedded
 // WebKit2GTK WebView running MusicKit JS. This eliminates the dependency on
-// Cider or any external MPRIS player — vibez owns the full playback stack.
+// Cider or any external MPRIS player — AUX owns the full playback stack.
 //
 // Threading model:
 //
@@ -113,7 +113,7 @@ func New(devToken, userToken, storefront string, audioBitrateKbps int) (*Player,
 	p.gst = gstPlayer
 	p.gst.OnEOS(func() {
 		// When GStreamer finishes a track, advance to the next one in the JS queue.
-		p.dispatch(`window.vibezNext && window.vibezNext()`)
+		p.dispatch(`window.auxNext && window.auxNext()`)
 	})
 	p.gst.OnError(func(e error) {
 		p.mu.RLock()
@@ -186,33 +186,33 @@ func (p *Player) WaitReady(ctx context.Context) error {
 // Play resumes GStreamer and keeps MusicKit in sync.
 func (p *Player) Play() error {
 	p.gst.Play()
-	p.dispatch(`window.vibezPlay && window.vibezPlay()`)
+	p.dispatch(`window.auxPlay && window.auxPlay()`)
 	return nil
 }
 
 // Pause pauses GStreamer and keeps MusicKit in sync.
 func (p *Player) Pause() error {
 	p.gst.Pause()
-	p.dispatch(`window.vibezPause && window.vibezPause()`)
+	p.dispatch(`window.auxPause && window.auxPause()`)
 	return nil
 }
 
 // Stop halts GStreamer and MusicKit.
 func (p *Player) Stop() error {
 	p.gst.Stop()
-	p.dispatch(`window.vibezPause && window.vibezPause()`)
+	p.dispatch(`window.auxPause && window.auxPause()`)
 	return nil
 }
 
 // Next advances the MusicKit queue; the audio interceptor fires the next URL to GStreamer.
 func (p *Player) Next() error {
-	p.dispatch(`window.vibezNext && window.vibezNext()`)
+	p.dispatch(`window.auxNext && window.auxNext()`)
 	return nil
 }
 
 // Previous goes back in the MusicKit queue.
 func (p *Player) Previous() error {
-	p.dispatch(`window.vibezPrev && window.vibezPrev()`)
+	p.dispatch(`window.auxPrev && window.auxPrev()`)
 	return nil
 }
 
@@ -240,13 +240,13 @@ func (p *Player) SetQueue(ids []string) error {
 	if err != nil {
 		return fmt.Errorf("marshalling queue ids: %w", err)
 	}
-	js := fmt.Sprintf(`window.vibezSetQueue && window.vibezSetQueue(%s)`, jsonStringLiteral(string(b)))
+	js := fmt.Sprintf(`window.auxSetQueue && window.auxSetQueue(%s)`, jsonStringLiteral(string(b)))
 	p.dispatch(js)
 	return nil
 }
 
 func (p *Player) SetPlaylist(playlistID string, startIdx int) error {
-	js := fmt.Sprintf(`window.vibezSetPlaylist && window.vibezSetPlaylist(%s, %d)`,
+	js := fmt.Sprintf(`window.auxSetPlaylist && window.auxSetPlaylist(%s, %d)`,
 		jsonStringLiteral(playlistID), startIdx)
 	p.dispatch(js)
 	return nil
@@ -257,7 +257,7 @@ func (p *Player) AppendQueue(ids []string) error {
 	if err != nil {
 		return fmt.Errorf("webkit: marshal append ids: %w", err)
 	}
-	js := fmt.Sprintf(`window.vibezAppendQueue && window.vibezAppendQueue(%s)`,
+	js := fmt.Sprintf(`window.auxAppendQueue && window.auxAppendQueue(%s)`,
 		jsonStringLiteral(string(b)))
 	p.dispatch(js)
 	return nil
@@ -269,14 +269,14 @@ func (p *Player) PlayNext(ids []string) error {
 	if err != nil {
 		return fmt.Errorf("webkit: marshal play-next ids: %w", err)
 	}
-	js := fmt.Sprintf(`window.vibezQueuePlayNext && window.vibezQueuePlayNext(%s)`,
+	js := fmt.Sprintf(`window.auxQueuePlayNext && window.auxQueuePlayNext(%s)`,
 		jsonStringLiteral(string(b)))
 	p.dispatch(js)
 	return nil
 }
 
 func (p *Player) SetRepeat(mode int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezSetRepeat && window.vibezSetRepeat(%d)`, mode))
+	p.dispatch(fmt.Sprintf(`window.auxSetRepeat && window.auxSetRepeat(%d)`, mode))
 	return nil
 }
 
@@ -285,7 +285,7 @@ func (p *Player) SetShuffle(on bool) error {
 	if on {
 		v = 1
 	}
-	p.dispatch(fmt.Sprintf(`window.vibezSetShuffle && window.vibezSetShuffle(%d)`, v))
+	p.dispatch(fmt.Sprintf(`window.auxSetShuffle && window.auxSetShuffle(%d)`, v))
 	return nil
 }
 
@@ -294,17 +294,17 @@ func (p *Player) SetEqualizer(_ []player.EQBand) error {
 }
 
 func (p *Player) RemoveFromQueue(idx int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezQueueRemove && window.vibezQueueRemove(%d)`, idx))
+	p.dispatch(fmt.Sprintf(`window.auxQueueRemove && window.auxQueueRemove(%d)`, idx))
 	return nil
 }
 
 func (p *Player) MoveInQueue(from, to int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezQueueMove && window.vibezQueueMove(%d,%d)`, from, to))
+	p.dispatch(fmt.Sprintf(`window.auxQueueMove && window.auxQueueMove(%d,%d)`, from, to))
 	return nil
 }
 
 func (p *Player) ClearQueue() error {
-	p.dispatch(`window.vibezQueueClear && window.vibezQueueClear()`)
+	p.dispatch(`window.auxQueueClear && window.auxQueueClear()`)
 	return nil
 }
 

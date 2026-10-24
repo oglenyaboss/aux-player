@@ -1,4 +1,4 @@
-// Audio engine for vibez's Chrome-backed local file playback (Windows).
+// Audio engine for AUX's Chrome-backed local file playback (Windows).
 //
 // Go owns the queue and decides what plays next. This engine plays the one
 // track it was told to load and reports what the audio element is actually
@@ -192,5 +192,5 @@
     };
   }
 
-  root.vibezLocalEngine = createEngine;
+  root.auxLocalEngine = createEngine;
 })(globalThis);

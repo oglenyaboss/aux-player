@@ -16,7 +16,6 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/stage"
 	"github.com/oglenyaboss/aux-player/internal/vibeai"
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
-	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 type vibeAIPanel struct{ m *stageScreen }
@@ -168,7 +167,6 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	if fresh {
 		r.tracks, r.portion, r.feed = nil, 0, nil
 		r.playlistID, r.playlistName, r.savedPortion = "", "", 0
-		m.vibeAIP.m.SetPlaylist("")
 		r.autoplay, r.autoplayID, r.later, r.laterAnswers = true, "", nil, nil
 	} else {
 		r.autoplay = false
@@ -252,7 +250,6 @@ func (m *Model) cancelVibeAI() {
 		r.feed = r.feed[:r.portionStart]
 	}
 	r.autoplay = false
-	m.vibeAIP.m.Cancelled()
 	m.appendLog("[vibe] cancelled")
 }
 
@@ -372,7 +369,6 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 
 	case VibeAISubmitMsg:
-		m.vibeAIP.m.SetWorking("")
 		return m.vibeAITurnCmd(msg.Text, msg.Fresh, false)
 
 	case VibeAICancelMsg:
@@ -404,7 +400,6 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		case VibeAIStream:
 			r.stream = !r.stream
 			r.streamForID = ""
-			v.SetStream(r.stream)
 			if r.stream {
 				v.SetNotice(stage.Tr("поток включён: новые порции сами встают в очередь", "stream on: new batches join the queue"))
 			} else {
@@ -443,7 +438,6 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		r.playlistID, r.playlistName = msg.id, msg.name
-		v.SetPlaylist(msg.name)
 		if msg.created {
 			v.SetNotice(fmt.Sprintf(stage.Tr("создан ♫ %s · %d треков", "created ♫ %s · %d tracks"), msg.name, msg.n))
 		} else {
@@ -479,7 +473,6 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks in %s", r.portion, len(msg.tracks), msg.elapsed.Round(time.Second)))
 	r.feed = append(r.feed[:r.portionStart], msg.tracks...)
 	v.PortionDone(vibeAIViewTracks(msg.tracks), msg.note)
-	v.SetMemory(vibeAIMemoryLines(m.cfg))
 	if msg.later != nil {
 		r.later = msg.later
 		v.AskLater(vibeAIViewQuestion(*msg.later))
@@ -530,7 +523,6 @@ func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 		return nil
 	}
 	r.streamForID = s.Track.ID
-	m.vibeAIP.m.SetWorking("")
 	return m.vibeAITurnCmd("", false, true)
 }
 
@@ -567,12 +559,6 @@ func (m *Model) vibeAIOnState(s player.State) {
 	if s.Position > 0 {
 		r.heardPos = s.Position
 	}
-	if _, ok := r.served[id]; ok {
-		m.vibeAIP.m.SetPlaying(id)
-		if changed {
-			m.vibeAIP.m.FollowPlaying(id)
-		}
-	}
 }
 
 // vibeAINoteLeave writes the outcome for the heard track captured by vibeAIOnState, resetting it before any return.
@@ -589,11 +575,6 @@ func (m *Model) vibeAINoteLeave() {
 	}
 	out := vibeAIOutcome(t, pos)
 	r.pending = append(r.pending, out)
-	if out.Kind == "played" {
-		m.vibeAIP.m.SetPlayed(t.ID)
-	} else {
-		m.vibeAIP.m.SetSkipped(t.ID, out.PosSec)
-	}
 	m.appendLog(fmt.Sprintf("[vibe] %s — %s: %s at %ds", t.Artist, t.Title, out.Kind, out.PosSec))
 }
 
@@ -700,19 +681,6 @@ func vibeAIViewTracks(ts []vibeai.Track) []VibeAITrack {
 
 func vibeAIViewQuestion(q vibeai.Question) VibeAIQuestion {
 	return VibeAIQuestion{Question: q.Question, Kind: q.Kind, Options: q.Options, Left: q.Left, Right: q.Right, Steps: q.Steps, Default: q.Default}
-}
-
-func vibeAIMemoryLines(cfg *config.Config) []string {
-	store, err := memory.Open(vibeAIConfig(cfg).MemoryPath, memory.DefaultLimit)
-	if err != nil {
-		return nil
-	}
-	entries := store.Entries()
-	lines := make([]string, len(entries))
-	for i, e := range entries {
-		lines[i] = e.Text
-	}
-	return lines
 }
 
 func vibeAIProviderTracks(ts []vibeai.Track) []provider.Track {

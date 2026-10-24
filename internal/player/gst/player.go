@@ -10,18 +10,18 @@ package gst
 #include <gst/gst.h>
 #include <stdlib.h>
 
-static void vibez_gst_init(void) {
+static void aux_gst_init(void) {
     if (!gst_is_initialized())
         gst_init(NULL, NULL);
 }
 
-// vibez_gst_new creates a playbin3 pipeline, falling back to playbin, and
+// aux_gst_new creates a playbin3 pipeline, falling back to playbin, and
 // attaches a 10-band equalizer audio-filter when gstreamer1.0-plugins-good is installed.
-static GstElement* vibez_gst_new(GstElement** eqOut) {
-    GstElement* p = gst_element_factory_make("playbin3", "vibez-audio");
-    if (!p) p = gst_element_factory_make("playbin", "vibez-audio");
+static GstElement* aux_gst_new(GstElement** eqOut) {
+    GstElement* p = gst_element_factory_make("playbin3", "aux-audio");
+    if (!p) p = gst_element_factory_make("playbin", "aux-audio");
     if (p && eqOut) {
-        GstElement* eq = gst_element_factory_make("equalizer-10bands", "vibez-eq");
+        GstElement* eq = gst_element_factory_make("equalizer-10bands", "aux-eq");
         if (eq) {
             g_object_set(G_OBJECT(p), "audio-filter", eq, NULL);
             *eqOut = eq;
@@ -30,7 +30,7 @@ static GstElement* vibez_gst_new(GstElement** eqOut) {
     return p;
 }
 
-static void vibez_gst_set_eq_band(GstElement* eq, gint idx, gdouble gain) {
+static void aux_gst_set_eq_band(GstElement* eq, gint idx, gdouble gain) {
     if (!eq || idx < 0 || idx > 9) return;
     char prop[8];
     g_snprintf(prop, sizeof(prop), "band%d", idx);
@@ -39,7 +39,7 @@ static void vibez_gst_set_eq_band(GstElement* eq, gint idx, gdouble gain) {
     g_object_set(G_OBJECT(eq), prop, gain, NULL);
 }
 
-static void vibez_gst_set_uri(GstElement* p, const char* uri) {
+static void aux_gst_set_uri(GstElement* p, const char* uri) {
     // Use READY (not NULL) to release the current media while keeping the
     // pipeline and its PipeWire/PulseAudio connection alive. Going to NULL
     // would tear down the audio sink and create a new OS-level player entry
@@ -49,35 +49,35 @@ static void vibez_gst_set_uri(GstElement* p, const char* uri) {
     g_object_set(G_OBJECT(p), "uri", uri, NULL);
 }
 
-static void vibez_gst_play(GstElement* p)  { gst_element_set_state(p, GST_STATE_PLAYING); }
-static void vibez_gst_pause(GstElement* p) { gst_element_set_state(p, GST_STATE_PAUSED);  }
-static void vibez_gst_stop(GstElement* p)  { gst_element_set_state(p, GST_STATE_NULL);    }
+static void aux_gst_play(GstElement* p)  { gst_element_set_state(p, GST_STATE_PLAYING); }
+static void aux_gst_pause(GstElement* p) { gst_element_set_state(p, GST_STATE_PAUSED);  }
+static void aux_gst_stop(GstElement* p)  { gst_element_set_state(p, GST_STATE_NULL);    }
 
-static void vibez_gst_seek(GstElement* p, gint64 pos_ns) {
+static void aux_gst_seek(GstElement* p, gint64 pos_ns) {
     gst_element_seek_simple(p, GST_FORMAT_TIME,
         (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT), pos_ns);
 }
 
-static void vibez_gst_set_volume(GstElement* p, gdouble v) {
+static void aux_gst_set_volume(GstElement* p, gdouble v) {
     g_object_set(G_OBJECT(p), "volume", v, NULL);
 }
 
-static gint64 vibez_gst_position(GstElement* p) {
+static gint64 aux_gst_position(GstElement* p) {
     gint64 v = GST_CLOCK_TIME_NONE;
     gst_element_query_position(p, GST_FORMAT_TIME, &v);
     return v;
 }
 
-static gint64 vibez_gst_duration(GstElement* p) {
+static gint64 aux_gst_duration(GstElement* p) {
     gint64 v = GST_CLOCK_TIME_NONE;
     gst_element_query_duration(p, GST_FORMAT_TIME, &v);
     return v;
 }
 
-// vibez_gst_pop_bus pops one message from the pipeline bus.
+// aux_gst_pop_bus pops one message from the pipeline bus.
 // Returns the GstMessageType (0 = no message).
 // For ERROR messages, *errOut is set to a g_strdup'd string (caller frees).
-static gint vibez_gst_pop_bus(GstElement* p, gchar** errOut) {
+static gint aux_gst_pop_bus(GstElement* p, gchar** errOut) {
     GstBus* bus = gst_element_get_bus(p);
     if (!bus) return 0;
     GstMessage* msg = gst_bus_pop(bus);
@@ -93,9 +93,9 @@ static gint vibez_gst_pop_bus(GstElement* p, gchar** errOut) {
     return t;
 }
 
-static void vibez_gst_free(gchar* s) { g_free(s); }
+static void aux_gst_free(gchar* s) { g_free(s); }
 
-static void vibez_gst_destroy(GstElement* p) {
+static void aux_gst_destroy(GstElement* p) {
     gst_element_set_state(p, GST_STATE_NULL);
     gst_object_unref(p);
 }
@@ -124,9 +124,9 @@ type Player struct {
 
 // New initialises GStreamer once and returns a ready Player.
 func New() (*Player, error) {
-	once.Do(func() { C.vibez_gst_init() })
+	once.Do(func() { C.aux_gst_init() })
 	var eq *C.GstElement
-	pl := C.vibez_gst_new(&eq) //nolint:gocritic // CGO wrapper triggers false-positive dupSubExpr
+	pl := C.aux_gst_new(&eq) //nolint:gocritic // CGO wrapper triggers false-positive dupSubExpr
 	if pl == nil {
 		return nil, fmt.Errorf("gst: playbin3/playbin element unavailable — is gstreamer1.0-plugins-base installed?")
 	}
@@ -155,43 +155,43 @@ func (p *Player) PlayURI(uri string) {
 	cs := C.CString(uri)
 	defer C.free(unsafe.Pointer(cs))
 	p.mu.Lock()
-	C.vibez_gst_set_uri(p.pipeline, cs)
-	C.vibez_gst_play(p.pipeline)
+	C.aux_gst_set_uri(p.pipeline, cs)
+	C.aux_gst_play(p.pipeline)
 	p.mu.Unlock()
 }
 
 // Play resumes a paused pipeline.
 func (p *Player) Play() {
 	p.mu.Lock()
-	C.vibez_gst_play(p.pipeline)
+	C.aux_gst_play(p.pipeline)
 	p.mu.Unlock()
 }
 
 // Pause pauses the pipeline.
 func (p *Player) Pause() {
 	p.mu.Lock()
-	C.vibez_gst_pause(p.pipeline)
+	C.aux_gst_pause(p.pipeline)
 	p.mu.Unlock()
 }
 
 // Stop resets the pipeline to NULL state, releasing network connections.
 func (p *Player) Stop() {
 	p.mu.Lock()
-	C.vibez_gst_stop(p.pipeline)
+	C.aux_gst_stop(p.pipeline)
 	p.mu.Unlock()
 }
 
 // Seek seeks to the given position within the current stream.
 func (p *Player) Seek(pos time.Duration) {
 	p.mu.Lock()
-	C.vibez_gst_seek(p.pipeline, C.gint64(pos.Nanoseconds()))
+	C.aux_gst_seek(p.pipeline, C.gint64(pos.Nanoseconds()))
 	p.mu.Unlock()
 }
 
 // SetVolume sets playback volume in [0.0, 1.0].
 func (p *Player) SetVolume(v float64) {
 	p.mu.Lock()
-	C.vibez_gst_set_volume(p.pipeline, C.gdouble(v))
+	C.aux_gst_set_volume(p.pipeline, C.gdouble(v))
 	p.mu.Unlock()
 }
 
@@ -208,14 +208,14 @@ func (p *Player) SetEqualizer(gains []float64) {
 		if i < len(gains) {
 			gain = gains[i]
 		}
-		C.vibez_gst_set_eq_band(p.eq, C.gint(i), C.gdouble(gain))
+		C.aux_gst_set_eq_band(p.eq, C.gint(i), C.gdouble(gain))
 	}
 }
 
 // Position returns the current playback position (0 if unknown).
 func (p *Player) Position() time.Duration {
 	p.mu.Lock()
-	ns := int64(C.vibez_gst_position(p.pipeline))
+	ns := int64(C.aux_gst_position(p.pipeline))
 	p.mu.Unlock()
 	if ns < 0 {
 		return 0
@@ -226,7 +226,7 @@ func (p *Player) Position() time.Duration {
 // Duration returns total stream duration (0 if unknown or live).
 func (p *Player) Duration() time.Duration {
 	p.mu.Lock()
-	ns := int64(C.vibez_gst_duration(p.pipeline))
+	ns := int64(C.aux_gst_duration(p.pipeline))
 	p.mu.Unlock()
 	if ns < 0 {
 		return 0
@@ -239,7 +239,7 @@ func (p *Player) Destroy() {
 	close(p.stop)
 	p.wg.Wait()
 	p.mu.Lock()
-	C.vibez_gst_destroy(p.pipeline)
+	C.aux_gst_destroy(p.pipeline)
 	p.pipeline = nil
 	p.mu.Unlock()
 }
@@ -262,7 +262,7 @@ func (p *Player) drainBus() {
 	for {
 		var errMsg *C.gchar
 		p.mu.Lock()
-		t := C.vibez_gst_pop_bus(p.pipeline, &errMsg) //nolint:gocritic // false positive: CGO AST confuses dupSubExpr
+		t := C.aux_gst_pop_bus(p.pipeline, &errMsg) //nolint:gocritic // false positive: CGO AST confuses dupSubExpr
 		p.mu.Unlock()
 
 		if t == 0 {
@@ -280,7 +280,7 @@ func (p *Player) drainBus() {
 			var msg string
 			if errMsg != nil {
 				msg = C.GoString((*C.char)(unsafe.Pointer(errMsg)))
-				C.vibez_gst_free(errMsg)
+				C.aux_gst_free(errMsg)
 			}
 			p.mu.Lock()
 			cb := p.onError

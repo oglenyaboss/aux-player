@@ -12,7 +12,7 @@ import (
 // The arm64 backend discovers a system Chromium/Chrome and a system-registered
 // Widevine CDM instead of downloading Google Chrome (which Google does not
 // publish for Linux/arm64). Tests drive discovery through the
-// VIBEZ_CHROME_PATH override and an overridable widevineSystemDirs list so they
+// AUX_CHROME_PATH override and an overridable widevineSystemDirs list so they
 // never depend on what is actually installed on the host; the helpers live in
 // browser_system_test.go, shared with the amd64 override tests.
 
@@ -28,9 +28,9 @@ func TestFindSystemBrowser_EnvOverride(t *testing.T) {
 }
 
 func TestFindSystemBrowser_EnvOverrideInvalid(t *testing.T) {
-	t.Setenv("VIBEZ_CHROME_PATH", filepath.Join(t.TempDir(), "does-not-exist"))
+	t.Setenv("AUX_CHROME_PATH", filepath.Join(t.TempDir(), "does-not-exist"))
 	if _, err := findSystemBrowser(); err == nil {
-		t.Error("expected error for non-existent VIBEZ_CHROME_PATH, got nil")
+		t.Error("expected error for non-existent AUX_CHROME_PATH, got nil")
 	}
 }
 
@@ -51,7 +51,7 @@ func TestHelperPath_EqualsChromePath(t *testing.T) {
 func TestLinkHelper_NoOpOnARM64(t *testing.T) {
 	bin := fakeBrowser(t)
 	linkHelper() // must not panic and must not create a sibling helper
-	if _, err := os.Stat(filepath.Join(filepath.Dir(bin), "vibez-helper")); err == nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(bin), "aux-helper")); err == nil {
 		t.Error("linkHelper() created a helper link on arm64; expected no-op")
 	}
 }

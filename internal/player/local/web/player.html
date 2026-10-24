@@ -10,7 +10,7 @@
 <script>
   'use strict';
   // goLocalEvent is exposed by Go before this page loads.
-  window.vibezLocal = vibezLocalEngine({
+  window.auxLocal = auxLocalEngine({
     audioContext: new AudioContext({ latencyHint: 'playback' }),
     createAudio: () => new Audio(),
     emit: (ev) => { window.goLocalEvent(JSON.stringify(ev)).catch(() => {}); },

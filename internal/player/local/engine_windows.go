@@ -76,7 +76,7 @@ func openPage(media *mediaServer, p *Player) (*pageEngine, error) {
 		closeBrowser()
 		return nil, fmt.Errorf("open player page: %w", err)
 	}
-	ready, err := page.Evaluate(`() => typeof window.vibezLocal === 'object'`)
+	ready, err := page.Evaluate(`() => typeof window.auxLocal === 'object'`)
 	if err != nil || ready != true {
 		closeBrowser()
 		return nil, fmt.Errorf("player page did not start (ready=%v): %v", ready, err)
@@ -88,7 +88,7 @@ func (e *pageEngine) call(method string, args ...any) (snapshot, error) {
 	if args == nil {
 		args = []any{}
 	}
-	v, err := e.page.Evaluate(`([method, args]) => window.vibezLocal.call(method, args)`, []any{method, args})
+	v, err := e.page.Evaluate(`([method, args]) => window.auxLocal.call(method, args)`, []any{method, args})
 	if err != nil {
 		return snapshot{}, fmt.Errorf("chrome %s: %w", method, err)
 	}

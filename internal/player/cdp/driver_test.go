@@ -20,7 +20,7 @@ import (
 const outdatedPlaywrightVersion = "1.57.0"
 
 func TestMain(m *testing.M) {
-	if os.Getenv("VIBEZ_DRIVER_TEST_NODE") == "1" {
+	if os.Getenv("AUX_DRIVER_TEST_NODE") == "1" {
 		data, err := os.ReadFile(os.Args[1]) //nolint:gosec // helper reads the driver fixture passed by its parent test
 		if err != nil {
 			os.Exit(1)
@@ -73,7 +73,7 @@ func setVersionReportingNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("locate test executable: %v", err)
 	}
-	t.Setenv("VIBEZ_DRIVER_TEST_NODE", "1")
+	t.Setenv("AUX_DRIVER_TEST_NODE", "1")
 	t.Setenv("PLAYWRIGHT_NODEJS_PATH", node)
 }
 

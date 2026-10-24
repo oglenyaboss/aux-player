@@ -47,7 +47,7 @@ type InitErrMsg struct{ Err error }
 // AppleLoginMsg is the outcome of the Apple Music sign-in the onboarding asked for.
 type AppleLoginMsg struct{ Err error }
 
-// RestartMsg is sent when vibez has self-updated and needs to re-exec.
+// RestartMsg is sent when AUX has self-updated and needs to re-exec.
 // The model handles it by quitting cleanly so the caller can exec the new binary.
 type RestartMsg struct{}
 

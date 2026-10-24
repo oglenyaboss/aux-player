@@ -71,18 +71,8 @@ func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 
 // ── adapter surface: what the agent bridge calls ──────────────────────────
 
-func (s *stageScreen) SetSize(w, h int)       {}
-func (s *stageScreen) SetPlaylist(string)     {}
-func (s *stageScreen) SetStream(bool)         {}
-func (s *stageScreen) SetMemory([]string)     {}
-func (s *stageScreen) SetPlaying(string)      {}
-func (s *stageScreen) FollowPlaying(string)   {}
-func (s *stageScreen) SetPlayed(string)       {}
-func (s *stageScreen) SetSkipped(string, int) {}
-func (s *stageScreen) Cancelled()             {}
-func (s *stageScreen) SetWorking(string)      {}
-func (s *stageScreen) Query() string          { return s.query }
-func (s *stageScreen) View() string           { return s.st.View() }
+func (s *stageScreen) Query() string { return s.query }
+func (s *stageScreen) View() string  { return s.st.View() }
 
 // Frame renders the screen at full terminal size; Model.View() calls it while
 // the screen is open.
@@ -146,7 +136,7 @@ func (s *stageScreen) SetError(err error) {
 func (s *stageScreen) SetNotice(text string) { s.st.Toast(text) }
 
 // HandleKey hands the key to the scene first; keys the scene declines reach the
-// vibez globals (pause, next, seek). Actions collected meanwhile ship as a cmd.
+// AUX globals (pause, next, seek). Actions collected meanwhile ship as a cmd.
 func (s *stageScreen) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	handled := s.st.Key(msg.String(), msg.Text)
 	return s.flush(), handled
@@ -158,7 +148,7 @@ func (s *stageScreen) Paste(text string) tea.Cmd {
 	return s.flush()
 }
 
-// seekCmd seeks the vibez player: the scene declines left/right (they belong to
+// seekCmd seeks the AUX player: the scene declines left/right (they belong to
 // the player, not the screen), and the host forwards them to the active panel.
 func (s *stageScreen) seekCmd(right bool) tea.Cmd {
 	h := s.host

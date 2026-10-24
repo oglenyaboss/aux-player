@@ -11,7 +11,7 @@ import (
 // installed. Windows has no exec, so exe starts as a child with this process's
 // arguments, environment, working directory and standard handles, and this
 // process only waits for it and then exits with its status. Exiting straight
-// away instead would tell the shell that started vibez it had finished, and
+// away instead would tell the shell that started AUX it had finished, and
 // the shell would take the console back while the new TUI still needs it. It
 // returns only when the child cannot be started or waited for.
 func restartProcess(exe string) error {

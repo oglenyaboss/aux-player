@@ -6,13 +6,13 @@
 #     https://raw.githubusercontent.com/oglenyaboss/aux-player/main/scripts/install.sh | sh
 #
 # Override the install directory:
-#   VIBEZ_INSTALL_DIR=/usr/local/bin curl ... | sh
+#   AUX_INSTALL_DIR=/usr/local/bin curl ... | sh
 
 set -eu
 
 REPO="oglenyaboss/aux-player"
 BIN="aux"
-INSTALL_DIR="${VIBEZ_INSTALL_DIR:-${HOME}/.local/bin}"
+INSTALL_DIR="${AUX_INSTALL_DIR:-${HOME}/.local/bin}"
 
 # ── colours ───────────────────────────────────────────────────────────────────
 
@@ -234,7 +234,7 @@ if [ "${OS}" = "darwin" ]; then
 
     CHROME=""
     for candidate in \
-        "${VIBEZ_CHROME_PATH:-}" \
+        "${AUX_CHROME_PATH:-}" \
         "${CHROME_PATH:-}" \
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
         "${HOME}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"

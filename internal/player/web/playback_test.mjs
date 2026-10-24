@@ -21,8 +21,8 @@ function setup(music) {
   _runPending: () => {}, errName: e => e.message,
   goError: text => { errors.push(text); return Promise.resolve(); },
  };
- const start = html.indexOf('window.vibezPlay = async () =>');
- const end = html.indexOf('window.vibezPause = async () =>', start);
+ const start = html.indexOf('window.auxPlay = async () =>');
+ const end = html.indexOf('window.auxPause = async () =>', start);
  runInNewContext(functionSource('_ensurePlaying') + '\n' + html.slice(start, end) + '\n' + functionSource('_doPlayNativeAt'), env);
  return {env, errors};
 }
@@ -42,17 +42,17 @@ function music(state) {
 }
 test('play on an already playing track is a no-op', async () => {
  const m=music(2); const {env,errors}=setup(m);
- await env.window.vibezPlay();
+ await env.window.auxPlay();
  assert.deepEqual(errors, []); assert.equal(m.plays,0);
 });
 test('concurrent resume requests call MusicKit play once', async () => {
  const m=music(3); const {env,errors}=setup(m);
- await Promise.all([env.window.vibezPlay(),env.window.vibezPlay()]);
+ await Promise.all([env.window.auxPlay(),env.window.auxPlay()]);
  assert.deepEqual(errors, []); assert.equal(m.plays,1); assert.equal(m.stops,0);
 });
 test('resume from loading pauses before play without resetting the track', async () => {
  const m=music(1); const {env,errors}=setup(m);
- await env.window.vibezPlay();
+ await env.window.auxPlay();
  assert.deepEqual(errors, []); assert.equal(m.pauses,1); assert.equal(m.stops,0);
  assert.equal(m.playbackState,2);
 });
@@ -62,7 +62,7 @@ test('native setQueue auto-play does not trigger a duplicate play and fallback',
  assert.equal(env._nativeQueue,true); assert.equal(m.plays,0);
 });
 
-// ─── vibezQueuePlayNext (#161) ───────────────────────────────────────────────
+// ─── auxQueuePlayNext (#161) ───────────────────────────────────────────────
 const libSongs = {
  'i.L1': { id: 'i.L1', attributes: { playParams: { id: 'i.L1', kind: 'song', catalogId: '901' } } },
  'i.U1': { id: 'i.U1', attributes: { playParams: { id: 'i.U1', kind: 'song' } } }, // upload, no catalog copy
@@ -90,14 +90,14 @@ function setupPlayNext({ native, mirrors = true, qi = 1, playNextFails = false, 
   _playAt: idx => calls.push(['playAt', idx]), _warmLibItems: () => {},
   errName: e => e.message, goError: () => Promise.resolve(),
  };
- const start = html.indexOf('window.vibezQueuePlayNext = async function');
- const end = html.indexOf('window.vibezQueueRemove = function', start);
+ const start = html.indexOf('window.auxQueuePlayNext = async function');
+ const end = html.indexOf('window.auxQueueRemove = function', start);
  runInNewContext(html.slice(start, end), env);
  return { env, calls, ids: () => env._q.map(i => i.id).join(',') };
 }
 test('playNext in native mode inserts after the current item in both queues', async () => {
  const { env, calls, ids } = setupPlayNext({ native: true });
- await env.window.vibezQueuePlayNext('["x","y"]');
+ await env.window.auxQueuePlayNext('["x","y"]');
  assert.equal(ids(), 'a,b,x,y,c');
  assert.deepEqual(calls.map(c => c.join(':')), ['playNext:x,y']);
  assert.equal(env._nativeMirrors, true, 'MusicKit inserted at the same place, so _q still mirrors it');
@@ -105,25 +105,25 @@ test('playNext in native mode inserts after the current item in both queues', as
 });
 test('playNext in one-item mode only touches _q', async () => {
  const { env, calls, ids } = setupPlayNext({ native: false });
- await env.window.vibezQueuePlayNext('["x"]');
+ await env.window.auxQueuePlayNext('["x"]');
  assert.equal(ids(), 'a,b,x,c');
  assert.equal(calls.length, 0);
 });
 test('playNext falls back to playLater and drops mirroring when playNext throws', async () => {
  const { env, calls } = setupPlayNext({ native: true, playNextFails: true });
- await env.window.vibezQueuePlayNext('["x"]');
+ await env.window.auxQueuePlayNext('["x"]');
  assert.deepEqual(calls.map(c => c.join(':')), ['playNext:x', 'playLater:x']);
  assert.equal(env._nativeMirrors, false);
 });
 test('playNext with nothing playing appends and starts', async () => {
  const { env, calls, ids } = setupPlayNext({ native: false, qi: -1 });
- await env.window.vibezQueuePlayNext('["x"]');
+ await env.window.auxQueuePlayNext('["x"]');
  assert.equal(ids(), 'a,b,c,x');
  assert.deepEqual(calls.map(c => c.join(':')), ['playAt:0']);
 });
 test('playNext in native mode swaps a library item for its playable catalog version', async () => {
  const { env, calls, ids } = setupPlayNext({ native: true, catalog: { '901': catalogSong('901') } });
- await env.window.vibezQueuePlayNext('["i.L1","i.U1","x"]');
+ await env.window.auxQueuePlayNext('["i.L1","i.U1","x"]');
  assert.equal(ids(), 'a,b,901,i.U1,x,c', '_q must hold the same objects MusicKit does');
  assert.deepEqual(calls.map(c => c.join(':')), ['lookup:901', 'playNext:901,i.U1,x']);
  assert.equal(env._libMap['901'], 'i.L1', 'CONTENT_UNAVAILABLE fallback must still find the library copy');
@@ -131,26 +131,26 @@ test('playNext in native mode swaps a library item for its playable catalog vers
 });
 test('playNext keeps the library item when the catalog version is not playable', async () => {
  const { env, calls, ids } = setupPlayNext({ native: true, catalog: {} });
- await env.window.vibezQueuePlayNext('["i.L1"]');
+ await env.window.auxQueuePlayNext('["i.L1"]');
  assert.equal(ids(), 'a,b,i.L1,c');
  assert.deepEqual(calls.map(c => c.join(':')), ['lookup:901', 'playNext:i.L1']);
 });
 test('playNext keeps library items when the catalog lookup fails', async () => {
  const { env, calls, ids } = setupPlayNext({ native: true, lookupFails: true });
- await env.window.vibezQueuePlayNext('["i.L1"]');
+ await env.window.auxQueuePlayNext('["i.L1"]');
  assert.equal(ids(), 'a,b,i.L1,c');
  assert.deepEqual(calls.map(c => c.join(':')), ['lookup:901', 'playNext:i.L1']);
 });
 test('playNext appends and starts when playback stops during the catalog lookup', async () => {
  const { env, calls, ids } = setupPlayNext({ native: true, catalog: { '901': catalogSong('901') },
   onLookup: env => { env._q = []; env._qi = -1; } });
- await env.window.vibezQueuePlayNext('["i.L1"]');
+ await env.window.auxQueuePlayNext('["i.L1"]');
  assert.equal(ids(), 'i.L1');
  assert.deepEqual(calls.map(c => c.join(':')), ['lookup:901', 'playAt:0'], 'no playNext on a stopped queue');
 });
 test('playNext in one-item mode does not swap library items', async () => {
  const { env, calls, ids } = setupPlayNext({ native: false, catalog: { '901': catalogSong('901') } });
- await env.window.vibezQueuePlayNext('["i.L1"]');
+ await env.window.auxQueuePlayNext('["i.L1"]');
  assert.equal(ids(), 'a,b,i.L1,c');
  assert.equal(calls.length, 0);
 });
@@ -198,8 +198,8 @@ function setupFollow({ q, qi = 0, native, position = qi, mirrors = true }) {
  runInNewContext([
   between('        // Following _q: MusicKit plays', "music.addEventListener('nowPlayingItemDidChange', _syncQueueIndex);"),
   between('        let _stallTimer = null;', "music.addEventListener('playbackStateDidChange'"),
-  between('window.vibezNext  = () =>', 'const _repeatName'),
-  between('window.vibezQueueRemove = function', 'window.vibezQueueClear'),
+  between('window.auxNext  = () =>', 'const _repeatName'),
+  between('window.auxQueueRemove = function', 'window.auxQueueClear'),
  ].join('\n'), env);
  const ids = () => env._q.map(i => i.id).join(',');
  // Let MusicKit advance on its own, as at a natural track boundary.
@@ -213,7 +213,7 @@ function setupFollow({ q, qi = 0, native, position = qi, mirrors = true }) {
 
 test('a move makes MusicKit play the moved track next without touching the current one', async () => {
  const { env, m, calls, ids } = setupFollow({ q: ['a', 'b', 'c', 'd'] });
- env.window.vibezQueueMove(3, 1);
+ env.window.auxQueueMove(3, 1);
  await env._syncNext();
  assert.equal(ids(), 'a,d,b,c');
  assert.deepEqual(calls, ['playNext:d']);
@@ -222,8 +222,8 @@ test('a move makes MusicKit play the moved track next without touching the curre
 });
 test('playback follows the reordered _q to the end, and the stale tail is dropped', async () => {
  const { env, m, calls, advance } = setupFollow({ q: ['a', 'b', 'c', 'd'] });
- env.window.vibezQueueMove(3, 1);   // a,d,b,c
- env.window.vibezQueueMove(3, 2);   // a,d,c,b
+ env.window.auxQueueMove(3, 1);   // a,d,b,c
+ env.window.auxQueueMove(3, 2);   // a,d,c,b
  await env._syncNext();
  const played = [m.nowPlayingItem.id];
  for (let i = 0; i < 3; i++) { await advance(); played.push(m.nowPlayingItem.id); }
@@ -278,7 +278,7 @@ test('repeat-all at the last item makes the first item next', async () => {
 });
 test('removing the next item replaces it in MusicKit', async () => {
  const { env, calls, ids } = setupFollow({ q: ['a', 'b', 'c'] });
- env.window.vibezQueueRemove('1');
+ env.window.auxQueueRemove('1');
  await env._syncNext();
  assert.equal(ids(), 'a,c');
  assert.deepEqual(calls, ['playNext:c']);
@@ -299,18 +299,18 @@ test('arrivals during a rebuild are left to the rebuild', async () => {
 });
 test('next at the end of _q does not skip into a stale item', () => {
  const { env, calls } = setupFollow({ q: ['a', 'b'], qi: 1, native: ['a', 'b', 'x'], mirrors: false });
- env.window.vibezNext();
+ env.window.auxNext();
  assert.deepEqual(calls, []);
 });
 test('prev steps back natively when MusicKit history matches _q, and rebuilds otherwise', () => {
  const agree = setupFollow({ q: ['a', 'b', 'c'], qi: 1, native: ['a', 'b', 'c'], mirrors: false });
- agree.env.window.vibezPrev();
+ agree.env.window.auxPrev();
  assert.deepEqual(agree.calls, ['skipToPrevious']);
  agree.env._syncQueueIndex();
  assert.equal(agree.env._qi, 0);
  // a was moved after b while b played: MusicKit's history still says a.
  const moved = setupFollow({ q: ['c', 'b', 'a'], qi: 1, native: ['a', 'b', 'c'], mirrors: false });
- moved.env.window.vibezPrev();
+ moved.env.window.auxPrev();
  assert.deepEqual(moved.calls, ['rebuild:0']);
 });
 test('a stall at the end of a track rebuilds at the next index', async (t) => {
@@ -351,16 +351,16 @@ function setupQueue(resolveItems) {
   _m: () => ({ async playLater() {} }),
   _resolveItems: resolveItems,
  };
- const start = html.indexOf('window.vibezSetQueue = async function');
- const end = html.indexOf('window.vibezQueueRemove = function', start);
+ const start = html.indexOf('window.auxSetQueue = async function');
+ const end = html.indexOf('window.auxQueueRemove = function', start);
  runInNewContext(html.slice(start, end), env);
  return { env, calls, errors, ids: () => env._q.map(i => i.id).join(',') };
 }
 test('setQueue then appendQueue keeps call order when append resolves first', async () => {
  const { env, calls, ids } = setupQueue(ids => new Promise(resolve =>
   setTimeout(() => resolve(ids.map(id => ({ id }))), ids[0] === 'a' ? 20 : 1)));
- const p1 = env.window.vibezSetQueue('["a"]');
- const p2 = env.window.vibezAppendQueue('["b","c"]');
+ const p1 = env.window.auxSetQueue('["a"]');
+ const p2 = env.window.auxAppendQueue('["b","c"]');
  await Promise.all([p1, p2]);
  assert.equal(ids(), 'a,b,c');
  assert.deepEqual(calls, [['playAt', 0]]);
@@ -370,8 +370,8 @@ test('a failed queue operation does not break the chain', async () => {
   if (ids.includes('bad')) throw new Error('nope');
   return ids.map(id => ({ id }));
  });
- const p1 = env.window.vibezSetQueue('["bad"]');
- const p2 = env.window.vibezAppendQueue('["x"]');
+ const p1 = env.window.auxSetQueue('["bad"]');
+ const p2 = env.window.auxAppendQueue('["x"]');
  await Promise.all([p1, p2]);
  assert.equal(ids(), 'x');
  assert.equal(errors.length, 1);
@@ -380,9 +380,9 @@ test('three queue calls run strictly in call order', async () => {
  const delay = { a: 30, b: 10, c: 1 };
  const { env, ids } = setupQueue(ids => new Promise(resolve =>
   setTimeout(() => resolve(ids.map(id => ({ id }))), delay[ids[0]])));
- const p1 = env.window.vibezSetQueue('["a"]');
- const p2 = env.window.vibezAppendQueue('["b"]');
- const p3 = env.window.vibezAppendQueue('["c"]');
+ const p1 = env.window.auxSetQueue('["a"]');
+ const p2 = env.window.auxAppendQueue('["b"]');
+ const p3 = env.window.auxAppendQueue('["c"]');
  await Promise.all([p1, p2, p3]);
  assert.equal(ids(), 'a,b,c');
 });

@@ -23,7 +23,7 @@ const driverOutputLimit = 64 << 10
 // keeps the logger in package state: `var logger = slog.Default()` (run.go:36)
 // is reassigned from RunOptions.Logger on every transformRunOptions that
 // supplies one (run.go:455). Its default writes to stderr, and it is used for
-// things vibez cannot predict the timing of (navigation errors, WebSocket
+// things AUX cannot predict the timing of (navigation errors, WebSocket
 // failures, BindingCall rejections), so leaving it at the default lets the
 // library write over the TUI at any point in a session.
 var playwrightLogger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))

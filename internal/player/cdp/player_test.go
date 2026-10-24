@@ -103,8 +103,8 @@ func TestSandboxPossible(t *testing.T) {
 }
 
 func TestSandboxEnabled_EnvOverride(t *testing.T) {
-	t.Setenv("VIBEZ_NO_SANDBOX", "1")
+	t.Setenv("AUX_NO_SANDBOX", "1")
 	if sandboxEnabled() {
-		t.Error("VIBEZ_NO_SANDBOX=1 must disable the sandbox")
+		t.Error("AUX_NO_SANDBOX=1 must disable the sandbox")
 	}
 }

@@ -13,16 +13,16 @@ import (
 	playwright "github.com/mxschmitt/playwright-go"
 )
 
-// These tests cover the amd64 layout, where vibez downloads Google Chrome into
-// its private cache and hard-links a vibez-helper alias, and the override that
+// These tests cover the amd64 layout, where AUX downloads Google Chrome into
+// its private cache and hard-links a aux-helper alias, and the override that
 // swaps in a system browser instead. The arm64 backend always uses a system
 // browser (see browser_arm64_test.go).
 
-// noBrowserOverride clears VIBEZ_CHROME_PATH and CHROME_PATH so the bundled
+// noBrowserOverride clears AUX_CHROME_PATH and CHROME_PATH so the bundled
 // layout is what gets tested, whatever the developer's shell exports.
 func noBrowserOverride(t *testing.T) {
 	t.Helper()
-	t.Setenv("VIBEZ_CHROME_PATH", "")
+	t.Setenv("AUX_CHROME_PATH", "")
 	t.Setenv("CHROME_PATH", "")
 }
 
@@ -51,8 +51,8 @@ func TestHelperPath_IsAbsolute(t *testing.T) {
 	if !filepath.IsAbs(got) {
 		t.Errorf("HelperPath() = %q, want absolute path", got)
 	}
-	if filepath.Base(got) != "vibez-helper" {
-		t.Errorf("HelperPath() base = %q, want %q", filepath.Base(got), "vibez-helper")
+	if filepath.Base(got) != "aux-helper" {
+		t.Errorf("HelperPath() base = %q, want %q", filepath.Base(got), "aux-helper")
 	}
 }
 
@@ -71,11 +71,11 @@ func TestLinkHelper_CreatesHardLink(t *testing.T) {
 		t.Fatalf("write chrome: %v", err)
 	}
 
-	// Call linkHelper — should create vibez-helper.
+	// Call linkHelper — should create aux-helper.
 	linkHelper()
 
 	if _, err := os.Stat(HelperPath()); err != nil {
-		t.Errorf("vibez-helper not created by linkHelper(): %v", err)
+		t.Errorf("aux-helper not created by linkHelper(): %v", err)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestChromePath_HonoursOverride(t *testing.T) {
 		t.Errorf("HelperPath() = %q, want == override %q", got, bin)
 	}
 	linkHelper()
-	if _, err := os.Stat(filepath.Join(filepath.Dir(bin), "vibez-helper")); err == nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(bin), "aux-helper")); err == nil {
 		t.Error("linkHelper() hard-linked next to the override; expected no-op")
 	}
 	if _, err := os.Stat(chromeInstallDir()); err == nil {
@@ -164,11 +164,11 @@ func TestChromePath_HonoursOverride(t *testing.T) {
 
 func TestEnsureBrowser_InvalidOverrideFailsBeforeDownload(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("VIBEZ_CHROME_PATH", filepath.Join(t.TempDir(), "does-not-exist"))
+	t.Setenv("AUX_CHROME_PATH", filepath.Join(t.TempDir(), "does-not-exist"))
 	var progress []string
 	err := EnsureBrowser(func(s string) { progress = append(progress, s) })
 	if err == nil {
-		t.Fatal("EnsureBrowser with an unusable VIBEZ_CHROME_PATH returned nil; want error")
+		t.Fatal("EnsureBrowser with an unusable AUX_CHROME_PATH returned nil; want error")
 	}
 	if len(progress) > 0 {
 		t.Errorf("EnsureBrowser reported progress %v before failing on the override; want none", progress)
@@ -213,7 +213,7 @@ func TestChromeLaunchArgs_BundledCDMByDefault(t *testing.T) {
 func TestSystemBrowserHelp_OverrideAdviceSuitsAMD64(t *testing.T) {
 	fakeBrowser(t)
 	got := systemBrowserHelp()
-	if !strings.Contains(got, "VIBEZ_CHROME_PATH") {
+	if !strings.Contains(got, "AUX_CHROME_PATH") {
 		t.Errorf("systemBrowserHelp() = %q, want it to name the override in force", got)
 	}
 	if !strings.Contains(got, "unset") {
@@ -242,7 +242,7 @@ func TestEnsureBrowser_MissingCDMBlamesTheOverride(t *testing.T) {
 	if err == nil {
 		t.Fatal("EnsureBrowser with an override and no Widevine CDM returned nil; want error")
 	}
-	if !strings.Contains(err.Error(), "VIBEZ_CHROME_PATH") {
+	if !strings.Contains(err.Error(), "AUX_CHROME_PATH") {
 		t.Errorf("EnsureBrowser error = %q, want it to name the override in force", err)
 	}
 	if strings.Contains(err.Error(), "Arch Linux ARM") {

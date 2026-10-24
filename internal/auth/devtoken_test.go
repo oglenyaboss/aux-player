@@ -21,7 +21,7 @@ func brokerServer(t *testing.T, key, token string, exp time.Time, hits *atomic.I
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		if r.Header.Get("X-Vibez-Client") != key {
+		if r.Header.Get("X-Aux-Client") != key {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

@@ -11,12 +11,12 @@ import (
 // sandboxEnabled reports whether Chromium should run with its sandbox on.
 //
 // The sandbox is what stops a compromised renderer from acting as the user, and
-// vibez's Chrome holds a logged-in Apple session, so it is on by default. It
+// AUX's Chrome holds a logged-in Apple session, so it is on by default. It
 // is off only where Chromium cannot create one: inside Flatpak (which forbids
 // nested user namespaces), as root, and on kernels with unprivileged user
-// namespaces disabled or restricted. VIBEZ_NO_SANDBOX=1 forces it off.
+// namespaces disabled or restricted. AUX_NO_SANDBOX=1 forces it off.
 func sandboxEnabled() bool {
-	if os.Getenv("VIBEZ_NO_SANDBOX") == "1" {
+	if os.Getenv("AUX_NO_SANDBOX") == "1" {
 		return false
 	}
 	return sandboxPossible(os.Geteuid(), fileExists("/.flatpak-info"), procValue)

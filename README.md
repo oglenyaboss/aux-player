@@ -50,8 +50,6 @@ The onboarding walks through four screens before playback starts:
 - `~/.config/aux/vibe-memory.md` — what the agent remembers about your taste.
 - `~/.cache/aux/` — library cache, agent session logs under `vibe/runs`, and the browser.
 
-On first run AUX moves data from the old vibez locations: `~/.config/vibez` is copied to `~/.config/aux`, and `~/.cache/vibez` is renamed to `~/.cache/aux`.
-
 ## Credits
 
 AUX is based on [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi, released under the MIT license. See `LICENSE` and `NOTICE`.

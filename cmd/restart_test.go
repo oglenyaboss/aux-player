@@ -16,9 +16,9 @@ import (
 
 // restartRoleEnv tells a copy of this test binary which side of a restart it
 // plays in TestRestartProcess_HandsOverToTheNewBinary.
-const restartRoleEnv = "VIBEZ_TEST_RESTART_ROLE"
+const restartRoleEnv = "AUX_TEST_RESTART_ROLE"
 
-// To whoever started vibez, the process an update restarts into has to be the
+// To whoever started AUX, the process an update restarts into has to be the
 // same program carrying on: same arguments, environment and standard streams,
 // and its exit status is the one they get back.
 func TestRestartProcess_HandsOverToTheNewBinary(t *testing.T) {

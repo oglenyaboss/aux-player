@@ -12,7 +12,7 @@ import (
 	playwright "github.com/mxschmitt/playwright-go"
 )
 
-const chromeInstallHelp = "install Google Chrome from https://www.google.com/chrome/ or set VIBEZ_CHROME_PATH/CHROME_PATH"
+const chromeInstallHelp = "install Google Chrome from https://www.google.com/chrome/ or set AUX_CHROME_PATH/CHROME_PATH"
 
 func driverDir() string { return filepath.Join(baseDir(), "driver") }
 
@@ -24,8 +24,8 @@ func ChromePath() string {
 func HelperPath() string { return ChromePath() }
 
 func findChromePath() (string, error) {
-	if path := os.Getenv("VIBEZ_CHROME_PATH"); path != "" {
-		return validateChromePath("VIBEZ_CHROME_PATH", path)
+	if path := os.Getenv("AUX_CHROME_PATH"); path != "" {
+		return validateChromePath("AUX_CHROME_PATH", path)
 	}
 	if path := os.Getenv("CHROME_PATH"); path != "" {
 		return validateChromePath("CHROME_PATH", path)

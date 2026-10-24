@@ -125,7 +125,7 @@
         status.textContent = "Sending token to AUX…";
         const resp = await fetch("/callback", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Vibez-State": callbackState },
+          headers: { "Content-Type": "application/json", "X-Aux-State": callbackState },
           body: JSON.stringify({ user_token: userToken }),
         });
 

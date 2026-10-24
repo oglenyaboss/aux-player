@@ -33,12 +33,7 @@ var rootCmd = &cobra.Command{
 	Use:   "aux",
 	Short: "AUX — a vibe-driven music player for your terminal",
 	Long:  "AUX — a vibe-driven music player for your terminal.\n\nRun without arguments to open the TUI.",
-	PersistentPreRun: func(*cobra.Command, []string) {
-		if err := config.MigrateLegacy(); err != nil {
-			fmt.Fprintf(os.Stderr, "aux: moving data from vibez: %v\n", err)
-		}
-	},
-	RunE: runTUI,
+	RunE:  runTUI,
 }
 
 func Execute() {

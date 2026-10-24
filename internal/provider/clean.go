@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// Clean makes text from outside vibez - Apple Music metadata, file tags and
+// Clean makes text from outside AUX - Apple Music metadata, file tags and
 // names, lyrics - safe to print in a terminal. Control characters, which
 // include the ESC that starts an escape sequence, are dropped (tab and newline
 // become a space), and so are the Unicode bidirectional overrides that reorder

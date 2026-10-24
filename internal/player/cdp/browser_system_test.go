@@ -10,10 +10,10 @@ import (
 
 // Helpers for the system-browser path, shared by the arm64 tests (where it is
 // the only path) and the amd64 override tests. They drive discovery through
-// VIBEZ_CHROME_PATH and an emptied widevineSystemDirs list so nothing depends
+// AUX_CHROME_PATH and an emptied widevineSystemDirs list so nothing depends
 // on what is installed on the host.
 
-// fakeBrowser writes an executable stub and points VIBEZ_CHROME_PATH at it,
+// fakeBrowser writes an executable stub and points AUX_CHROME_PATH at it,
 // isolating HOME and the fixed CDM search list so discovery is hermetic.
 func fakeBrowser(t *testing.T) string {
 	t.Helper()
@@ -22,7 +22,7 @@ func fakeBrowser(t *testing.T) string {
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil { //nolint:gosec // test fixture
 		t.Fatalf("write fake browser: %v", err)
 	}
-	t.Setenv("VIBEZ_CHROME_PATH", bin)
+	t.Setenv("AUX_CHROME_PATH", bin)
 	t.Setenv("CHROME_PATH", "")
 	t.Setenv("HOME", dir)
 

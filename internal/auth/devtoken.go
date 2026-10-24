@@ -259,7 +259,7 @@ func fetchTokenWithTimeout(endpoint, key string, now time.Time, timeout time.Dur
 	if err != nil {
 		return cachedToken{}, err
 	}
-	req.Header.Set("X-Vibez-Client", key)
+	req.Header.Set("X-Aux-Client", key)
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{

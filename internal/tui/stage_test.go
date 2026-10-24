@@ -93,7 +93,7 @@ func TestStagePassesSpace(t *testing.T) {
 	m := openVibeWithPortion(t)
 	stageIntoPlayer(m)
 	if _, handled := m.vibeAIP.m.HandleKey(tea.KeyPressMsg{Code: tea.KeySpace}); handled {
-		t.Fatal("the scene must pass space through so vibez can pause")
+		t.Fatal("the scene must pass space through so AUX can pause")
 	}
 }
 

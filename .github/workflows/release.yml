@@ -33,12 +33,12 @@ jobs:
 
       - name: Check token broker configuration
         env:
-          VIBEZ_TOKEN_URL: ${{ vars.VIBEZ_TOKEN_URL }}
-          VIBEZ_CLIENT_KEY: ${{ secrets.VIBEZ_CLIENT_KEY }}
+          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
+          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
         run: |
           # Without these a build has no developer token and cannot reach Apple Music.
-          [ -n "$VIBEZ_TOKEN_URL" ] || { echo "VIBEZ_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$VIBEZ_CLIENT_KEY" ] || { echo "VIBEZ_CLIENT_KEY secret is not set"; exit 1; }
+          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
+          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
 
       - name: Build darwin archives
         uses: goreleaser/goreleaser-action@v6
@@ -46,10 +46,10 @@ jobs:
           version: '~> v2'
           args: release --clean --skip=publish
         env:
-          VIBEZ_TOKEN_URL: ${{ vars.VIBEZ_TOKEN_URL }}
-          VIBEZ_CLIENT_KEY: ${{ secrets.VIBEZ_CLIENT_KEY }}
-          VIBEZ_SKIP_LINUX: '1'
-          VIBEZ_SKIP_WINDOWS: '1'
+          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
+          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
+          AUX_SKIP_LINUX: '1'
+          AUX_SKIP_WINDOWS: '1'
           GOTOOLCHAIN: local
 
       - name: Upload darwin archives
@@ -110,12 +110,12 @@ jobs:
 
       - name: Check token broker configuration
         env:
-          VIBEZ_TOKEN_URL: ${{ vars.VIBEZ_TOKEN_URL }}
-          VIBEZ_CLIENT_KEY: ${{ secrets.VIBEZ_CLIENT_KEY }}
+          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
+          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
         run: |
           # Without these a build has no developer token and cannot reach Apple Music.
-          [ -n "$VIBEZ_TOKEN_URL" ] || { echo "VIBEZ_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$VIBEZ_CLIENT_KEY" ] || { echo "VIBEZ_CLIENT_KEY secret is not set"; exit 1; }
+          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
+          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -124,8 +124,8 @@ jobs:
           args: release --clean --release-notes=release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VIBEZ_TOKEN_URL: ${{ vars.VIBEZ_TOKEN_URL }}
-          VIBEZ_CLIENT_KEY: ${{ secrets.VIBEZ_CLIENT_KEY }}
+          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
+          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
           PROJECT_DIR: ${{ github.workspace }}
-          VIBEZ_SKIP_DARWIN: '1'
+          AUX_SKIP_DARWIN: '1'
           GOTOOLCHAIN: local

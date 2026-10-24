@@ -66,16 +66,6 @@ func installedDesktopEntry() bool {
 	return false
 }
 
-// removeLegacy deletes a file that versions before the AppID rename wrote
-// under ~/.local/share on every launch. Nothing resolves those names now.
-func removeLegacy(rel ...string) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	_ = os.Remove(filepath.Join(append([]string{home, ".local", "share"}, rel...)...))
-}
-
 // InstallIcon makes sure an AppID icon is available to the desktop and returns
 // its absolute path (used for notifications), or "" if none could be found or
 // written. An icon a package, a Flatpak, or the install script already put in
@@ -83,8 +73,6 @@ func removeLegacy(rel ...string) {
 // no icon of their own, such as `make install` or a plain `go build`. All
 // operations are best-effort; errors are silently ignored.
 func InstallIcon() string {
-	removeLegacy("icons", "hicolor", "scalable", "apps", "vibez.svg")
-	removeLegacy("icons", "hicolor", "scalable", "apps", "io.github.simonepelosi.vibez.svg")
 	if p := installedIcon(); p != "" {
 		return p
 	}
@@ -113,8 +101,6 @@ func InstallIcon() string {
 // and once written is itself found on the next launch and left alone. All
 // operations are best-effort; errors are silently ignored.
 func InstallDesktopEntry() {
-	removeLegacy("applications", "vibez.desktop")
-	removeLegacy("applications", "io.github.simonepelosi.vibez.desktop")
 	if installedDesktopEntry() {
 		return
 	}

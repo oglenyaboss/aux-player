@@ -55,7 +55,7 @@ test("signToken produces a JWT Apple accepts the shape of, verifiable with the p
 
 test("serves a token to a client with the shared header", async () => {
   const { env } = makeEnv();
-  const res = await worker.fetch(req({ "x-vibez-client": "client-key" }), env);
+  const res = await worker.fetch(req({ "x-aux-client": "client-key" }), env);
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("cache-control"), "no-store");
   const body = await res.json();
@@ -66,17 +66,17 @@ test("serves a token to a client with the shared header", async () => {
 test("rejects a missing or wrong shared header", async () => {
   const { env } = makeEnv();
   assert.equal((await worker.fetch(req(), env)).status, 401);
-  assert.equal((await worker.fetch(req({ "x-vibez-client": "nope" }), env)).status, 401);
+  assert.equal((await worker.fetch(req({ "x-aux-client": "nope" }), env)).status, 401);
 });
 
 test("rejects every request when CLIENT_KEY is unset", async () => {
   const { env } = makeEnv({ CLIENT_KEY: undefined });
-  assert.equal((await worker.fetch(req({ "x-vibez-client": "" }), env)).status, 401);
+  assert.equal((await worker.fetch(req({ "x-aux-client": "" }), env)).status, 401);
 });
 
 test("returns 429 when the rate limiter says no", async () => {
   const { env } = makeEnv({ RATE_LIMITER: { limit: async () => ({ success: false }) } });
-  const res = await worker.fetch(req({ "x-vibez-client": "client-key" }), env);
+  const res = await worker.fetch(req({ "x-aux-client": "client-key" }), env);
   assert.equal(res.status, 429);
   assert.equal(res.headers.get("retry-after"), "60");
 });
@@ -86,14 +86,14 @@ test("rate limits per client IP", async () => {
   const { env } = makeEnv({
     RATE_LIMITER: { limit: async ({ key }) => (keys.push(key), { success: true }) },
   });
-  await worker.fetch(req({ "x-vibez-client": "client-key", "cf-connecting-ip": "203.0.113.9" }), env);
+  await worker.fetch(req({ "x-aux-client": "client-key", "cf-connecting-ip": "203.0.113.9" }), env);
   assert.deepEqual(keys, ["203.0.113.9"]);
 });
 
 test("only GET /v1/token is served", async () => {
   const { env } = makeEnv();
   assert.equal((await worker.fetch(req({}, "/"), env)).status, 404);
-  assert.equal((await worker.fetch(req({ "x-vibez-client": "client-key" }, "/v1/token", "POST"), env)).status, 405);
+  assert.equal((await worker.fetch(req({ "x-aux-client": "client-key" }, "/v1/token", "POST"), env)).status, 405);
 });
 
 test("a bad key yields a generic 503 and leaks nothing", async () => {
@@ -101,7 +101,7 @@ test("a bad key yields a generic 503 and leaks nothing", async () => {
   // The module caches a signed token per isolate; import a fresh copy so an
   // earlier test's cached token cannot mask the bad key.
   const fresh = await import(`../src/index.js?bad=${Date.now()}`);
-  const res = await fresh.default.fetch(req({ "x-vibez-client": "client-key" }), env);
+  const res = await fresh.default.fetch(req({ "x-aux-client": "client-key" }), env);
   assert.equal(res.status, 503);
   assert.deepEqual(await res.json(), { error: "token unavailable" });
 });

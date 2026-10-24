@@ -77,7 +77,6 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	}
 	m.vibeAI = newVibeAIRun()
 	m.vibeAIP = &vibeAIPanel{m: newStageScreen(m)}
-	m.vibeAIP.m.SetMemory(vibeAIMemoryLines(cfg))
 	for _, line := range opts.InitialLogs {
 		m.appendLog(line)
 	}

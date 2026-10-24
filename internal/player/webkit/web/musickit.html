@@ -13,7 +13,7 @@
                      URLs are sent to Go's GStreamer pipeline for audio output.
 
     Go ↔ JS bridge:
-      Go → JS : page.Evaluate for vibez*() commands
+      Go → JS : page.Evaluate for aux*() commands
       JS → Go : goNeedsAuth, goAuthComplete, goPlayerStateChange,
                 goUserTokenChanged, goStorefrontChanged, goStreamURL*, goError
                 (* GStreamer mode only)
@@ -115,7 +115,7 @@
         const _m = () => MusicKit.getInstance();
 
         // Update the W3C MediaSession so OS notifications / MPRIS show the
-        // current track under the "vibez" player identity.
+        // current track under the "AUX" player identity.
         function updateMediaSession(item, isPlaying) {
           if (item) {
             const artwork = item.attributes.artwork;
@@ -319,28 +319,28 @@
           // else: end of queue — stay stopped cleanly
         });
 
-        window.vibezPlay = async () => {
+        window.auxPlay = async () => {
           const m = _m();
           // Restart from _qi if nothing is loaded (queue ended or fresh start).
           if (!m.nowPlayingItem && _qi >= 0 && _q.length > 0) { _playAt(_qi); return; }
           try { await m.play(); } catch(e) { if (e?.name !== 'CONTENT_EQUIVALENT') goError('play: '+errName(e)).catch(()=>{}); }
         };
-        window.vibezPause = async () => { try { await _m().pause(); } catch(e) { goError('pause: '+errName(e)).catch(()=>{}); } };
-        window.vibezNext  = () => { if (_qi < _q.length - 1) _playAt(_qi + 1); };
-        window.vibezPrev  = () => { _playAt(_qi > 0 ? _qi - 1 : 0); };
-        window.vibezSeek      = (t) => _m().seekToTime(t);
-        window.vibezSetVolume = (v) => { _m().volume = v; };
-        window.vibezSetRepeat  = (mode) => { _m().repeatMode  = mode; };
-        window.vibezSetShuffle = (on)   => { _m().shuffleMode = on ? 1 : 0; };
+        window.auxPause = async () => { try { await _m().pause(); } catch(e) { goError('pause: '+errName(e)).catch(()=>{}); } };
+        window.auxNext  = () => { if (_qi < _q.length - 1) _playAt(_qi + 1); };
+        window.auxPrev  = () => { _playAt(_qi > 0 ? _qi - 1 : 0); };
+        window.auxSeek      = (t) => _m().seekToTime(t);
+        window.auxSetVolume = (v) => { _m().volume = v; };
+        window.auxSetRepeat  = (mode) => { _m().repeatMode  = mode; };
+        window.auxSetShuffle = (on)   => { _m().shuffleMode = on ? 1 : 0; };
 
         // Wire OS media keys / MPRIS back to our own functions.
-        navigator.mediaSession.setActionHandler('play',          () => window.vibezPlay());
-        navigator.mediaSession.setActionHandler('pause',         () => window.vibezPause());
-        navigator.mediaSession.setActionHandler('nexttrack',     () => window.vibezNext());
-        navigator.mediaSession.setActionHandler('previoustrack', () => window.vibezPrev());
+        navigator.mediaSession.setActionHandler('play',          () => window.auxPlay());
+        navigator.mediaSession.setActionHandler('pause',         () => window.auxPause());
+        navigator.mediaSession.setActionHandler('nexttrack',     () => window.auxNext());
+        navigator.mediaSession.setActionHandler('previoustrack', () => window.auxPrev());
         navigator.mediaSession.setActionHandler('seekto', (d) => _m().seekToTime(d.seekTime));
 
-        window.vibezSetQueue = async function(idsJSON) {
+        window.auxSetQueue = async function(idsJSON) {
           try {
             const ids = (JSON.parse(idsJSON) || []).filter(Boolean);
             const items = await _resolveItems(ids);
@@ -351,7 +351,7 @@
           } catch(e) { goError('setQueue failed: '+errName(e)).catch(()=>{}); }
         };
 
-        window.vibezSetPlaylist = async function(playlistID, startIdx) {
+        window.auxSetPlaylist = async function(playlistID, startIdx) {
           try {
             const m   = _m();
             const sf  = m.storefrontId || 'us';
@@ -371,7 +371,7 @@
           } catch(e) { goError('setPlaylist failed: '+errName(e)).catch(()=>{}); }
         };
 
-        window.vibezAppendQueue = async function(idsJSON) {
+        window.auxAppendQueue = async function(idsJSON) {
           try {
             const ids   = (JSON.parse(idsJSON) || []).filter(Boolean);
             const items = await _resolveItems(ids);
@@ -385,7 +385,7 @@
         // Each queue call resolves its ids asynchronously; chain them so a later
         // call never lands before an earlier one (setQueue then appendQueue).
         let _qChain = Promise.resolve();
-        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue']) {
+        for (const name of ['auxSetQueue', 'auxSetPlaylist', 'auxAppendQueue']) {
           const fn = window[name];
           window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
         }
@@ -410,14 +410,14 @@
           notifyStateFromItem(item, true);
         }
 
-        window.vibezPlay  = () => { notifyStateFromItem(_queue[_idx], true);  };
-        window.vibezPause = () => { notifyStateFromItem(_queue[_idx], false); };
-        window.vibezNext  = () => { if (_idx < _queue.length - 1) playIdx(_idx + 1); };
-        window.vibezPrev  = () => { if (_idx > 0) playIdx(_idx - 1); };
-        window.vibezSeek      = () => {};
-        window.vibezSetVolume = () => {};
+        window.auxPlay  = () => { notifyStateFromItem(_queue[_idx], true);  };
+        window.auxPause = () => { notifyStateFromItem(_queue[_idx], false); };
+        window.auxNext  = () => { if (_idx < _queue.length - 1) playIdx(_idx + 1); };
+        window.auxPrev  = () => { if (_idx > 0) playIdx(_idx - 1); };
+        window.auxSeek      = () => {};
+        window.auxSetVolume = () => {};
 
-        window.vibezSetQueue = async function(idsJSON) {
+        window.auxSetQueue = async function(idsJSON) {
           try {
             const ids = JSON.parse(idsJSON);
             const m = MusicKit.getInstance();
@@ -448,7 +448,7 @@
           } catch(e) { goError('setQueue failed: ' + errName(e)).catch(() => {}); }
         };
 
-        window.vibezSetPlaylist = async function(playlistID, startIdx) {
+        window.auxSetPlaylist = async function(playlistID, startIdx) {
           try {
             const m = MusicKit.getInstance();
             const sf = m.storefrontId || 'us';
@@ -470,7 +470,7 @@
         // Each queue call resolves its ids asynchronously; chain them so a later
         // call never lands before an earlier one (setQueue then setPlaylist).
         let _qChain = Promise.resolve();
-        for (const name of ['vibezSetQueue', 'vibezSetPlaylist']) {
+        for (const name of ['auxSetQueue', 'auxSetPlaylist']) {
           const fn = window[name];
           window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
         }
@@ -501,7 +501,7 @@
         }
       }
 
-      window.vibezSetUserToken = async function(token) {
+      window.auxSetUserToken = async function(token) {
         music.musicUserToken = token;
         await syncAccountStorefront();
       };

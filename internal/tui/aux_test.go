@@ -28,7 +28,7 @@ func auxPress(m *Model, k string) tea.Cmd {
 	return cmd
 }
 
-// auxModel is what `vibez` starts with: the scene owns the terminal and the
+// auxModel is what `aux` starts with: the scene owns the terminal and the
 // Apple Music sign-in waits for the onboarding to ask.
 func auxModel(t *testing.T, plyr player.Player, cfg *config.Config, opts Options) *Model {
 	t.Helper()
@@ -51,7 +51,7 @@ func TestAUXView(t *testing.T) {
 		t.Fatalf("frame has %d lines, want 30", len(lines))
 	}
 	if plain := ansi.Strip(content); strings.Contains(plain, "NORMAL") {
-		t.Errorf("the vibez status bar leaked into the AUX-only view:\n%s", plain)
+		t.Errorf("the old status bar leaked into the AUX-only view:\n%s", plain)
 	}
 }
 
@@ -311,8 +311,8 @@ func TestAUXOtherKeysInert(t *testing.T) {
 	if strings.TrimSpace(frame) == "" {
 		t.Fatal("View() must still draw the scene")
 	}
-	if strings.Contains(frame, "vibez") {
-		t.Errorf("the old vibez UI leaked into the view:\n%s", frame)
+	if strings.Contains(frame, "NORMAL") {
+		t.Errorf("the old status bar leaked into the view:\n%s", frame)
 	}
 }
 

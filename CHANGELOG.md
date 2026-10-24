@@ -5,4 +5,4 @@ The vibez history up to the fork is in git.
 
 ## Unreleased
 
-- AUX is a standalone app: binary `aux`, data in `~/.config/aux` and `~/.cache/aux` (moved from vibez on first run).
+- AUX is a standalone app: binary `aux`, data in `~/.config/aux` and `~/.cache/aux`.

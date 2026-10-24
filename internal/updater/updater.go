@@ -237,7 +237,7 @@ func update(api, current string, install bool, log func(string)) Result {
 
 	log(fmt.Sprintf("Downloading update %s…", rel.TagName))
 
-	tmpDir, err := os.MkdirTemp("", "vibez-update-*")
+	tmpDir, err := os.MkdirTemp("", "aux-update-*")
 	if err != nil {
 		return res
 	}

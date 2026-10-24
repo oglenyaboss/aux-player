@@ -19,7 +19,7 @@ import (
 )
 
 // Player drives Apple Music playback through a Playwright-managed Chrome
-// browser. Linux uses vibez's cached Chrome binary; macOS and Windows use
+// browser. Linux uses AUX's cached Chrome binary; macOS and Windows use
 // installed Google Chrome. Chrome's Widevine CDM enables full-track DRM
 // playback, and GStreamer is not used in this path.
 //
@@ -198,7 +198,7 @@ func New(devToken, userToken, storefront string, wsl bool, audioBitrateKbps int)
 	// Apple accepts the web developer token only from the music.apple.com
 	// origin, so the page is fulfilled in-browser at a random path there
 	// rather than served from 127.0.0.1.
-	pageURL := "https://music.apple.com/vibez/" + rand.Text() + "/"
+	pageURL := "https://music.apple.com/aux/" + rand.Text() + "/"
 	if err := pg.Route(pageURL, func(r playwright.Route) {
 		_ = r.Fulfill(playwright.RouteFulfillOptions{
 			Status:      playwright.Int(200),
@@ -248,7 +248,7 @@ func (p *Player) SetUserToken(token string) error {
 	p.mu.Lock()
 	p.userToken = token
 	p.mu.Unlock()
-	_, err := p.page.Evaluate(fmt.Sprintf(`window.vibezSetUserToken ? window.vibezSetUserToken(%q) : (MusicKit.getInstance().musicUserToken = %q)`, token, token))
+	_, err := p.page.Evaluate(fmt.Sprintf(`window.auxSetUserToken ? window.auxSetUserToken(%q) : (MusicKit.getInstance().musicUserToken = %q)`, token, token))
 	return err
 }
 
@@ -350,37 +350,37 @@ func (p *Player) WaitReady(ctx context.Context) error {
 // ── player.Player interface ───────────────────────────────────────────────
 
 func (p *Player) Play() error {
-	p.dispatch(`window.vibezPlay && window.vibezPlay()`)
+	p.dispatch(`window.auxPlay && window.auxPlay()`)
 	return nil
 }
 
 func (p *Player) Pause() error {
-	p.dispatch(`window.vibezPause && window.vibezPause()`)
+	p.dispatch(`window.auxPause && window.auxPause()`)
 	return nil
 }
 
 func (p *Player) Stop() error {
-	p.dispatch(`window.vibezPause && window.vibezPause()`)
+	p.dispatch(`window.auxPause && window.auxPause()`)
 	return nil
 }
 
 func (p *Player) Next() error {
-	p.dispatch(`window.vibezNext && window.vibezNext()`)
+	p.dispatch(`window.auxNext && window.auxNext()`)
 	return nil
 }
 
 func (p *Player) Previous() error {
-	p.dispatch(`window.vibezPrev && window.vibezPrev()`)
+	p.dispatch(`window.auxPrev && window.auxPrev()`)
 	return nil
 }
 
 func (p *Player) Seek(position time.Duration) error {
-	p.dispatch(fmt.Sprintf(`window.vibezSeek && window.vibezSeek(%f)`, position.Seconds()))
+	p.dispatch(fmt.Sprintf(`window.auxSeek && window.auxSeek(%f)`, position.Seconds()))
 	return nil
 }
 
 func (p *Player) SetVolume(v float64) error {
-	p.dispatch(fmt.Sprintf(`window.vibezSetVolume && window.vibezSetVolume(%f)`, v))
+	p.dispatch(fmt.Sprintf(`window.auxSetVolume && window.auxSetVolume(%f)`, v))
 	return nil
 }
 
@@ -421,7 +421,7 @@ func (p *Player) AppendQueue(ids []string) error {
 }
 
 func (p *Player) SetRepeat(mode int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezSetRepeat && window.vibezSetRepeat(%d)`, mode))
+	p.dispatch(fmt.Sprintf(`window.auxSetRepeat && window.auxSetRepeat(%d)`, mode))
 	return nil
 }
 
@@ -430,7 +430,7 @@ func (p *Player) SetShuffle(on bool) error {
 	if on {
 		v = 1
 	}
-	p.dispatch(fmt.Sprintf(`window.vibezSetShuffle && window.vibezSetShuffle(%d)`, v))
+	p.dispatch(fmt.Sprintf(`window.auxSetShuffle && window.auxSetShuffle(%d)`, v))
 	return nil
 }
 
@@ -454,17 +454,17 @@ func (p *Player) PlayNext(ids []string) error {
 }
 
 func (p *Player) RemoveFromQueue(idx int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezQueueRemove && window.vibezQueueRemove(%d)`, idx))
+	p.dispatch(fmt.Sprintf(`window.auxQueueRemove && window.auxQueueRemove(%d)`, idx))
 	return nil
 }
 
 func (p *Player) MoveInQueue(from, to int) error {
-	p.dispatch(fmt.Sprintf(`window.vibezQueueMove && window.vibezQueueMove(%d,%d)`, from, to))
+	p.dispatch(fmt.Sprintf(`window.auxQueueMove && window.auxQueueMove(%d,%d)`, from, to))
 	return nil
 }
 
 func (p *Player) ClearQueue() error {
-	p.dispatch(`window.vibezQueueClear && window.vibezQueueClear()`)
+	p.dispatch(`window.auxQueueClear && window.auxQueueClear()`)
 	return nil
 }
 

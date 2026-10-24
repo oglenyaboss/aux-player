@@ -56,21 +56,21 @@ build-with-token:
 
 # release builds a release binary wired to the token broker and Last.fm API keys.
 # Requires:
-#   VIBEZ_TOKEN_URL, VIBEZ_CLIENT_KEY
+#   AUX_TOKEN_URL, AUX_CLIENT_KEY
 #   LASTFM_API_KEY, LASTFM_API_SECRET (from https://www.last.fm/api/account/create)
-# Usage: make release VIBEZ_TOKEN_URL=https://.../v1/token VIBEZ_CLIENT_KEY=... \
+# Usage: make release AUX_TOKEN_URL=https://.../v1/token AUX_CLIENT_KEY=... \
 #                     LASTFM_API_KEY=... LASTFM_API_SECRET=...
 release: check-deps
-	@test -n "$$VIBEZ_TOKEN_URL"   || { echo "VIBEZ_TOKEN_URL is not set";   exit 1; }
-	@test -n "$$VIBEZ_CLIENT_KEY"  || { echo "VIBEZ_CLIENT_KEY is not set";  exit 1; }
+	@test -n "$$AUX_TOKEN_URL"   || { echo "AUX_TOKEN_URL is not set";   exit 1; }
+	@test -n "$$AUX_CLIENT_KEY"  || { echo "AUX_CLIENT_KEY is not set";  exit 1; }
 	@test -n "$$LASTFM_API_KEY"    || { echo "LASTFM_API_KEY is not set";    exit 1; }
 	@test -n "$$LASTFM_API_SECRET" || { echo "LASTFM_API_SECRET is not set"; exit 1; }
 	@set -e; \
 	echo "Building release binary..."; \
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build \
 		-ldflags "-s -w \
-		          -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=$$VIBEZ_TOKEN_URL' \
-		          -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=$$VIBEZ_CLIENT_KEY' \
+		          -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=$$AUX_TOKEN_URL' \
+		          -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=$$AUX_CLIENT_KEY' \
 		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY' \
 		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'" \
 		-o aux . && echo "Done."

@@ -1,6 +1,6 @@
 # AUX
 
-Самостоятельное приложение `aux` (модуль `github.com/oglenyaboss/aux-player`), выросло из форка `simonepelosi/vibez` (Apple Music TUI на Go/Bubble Tea). Сцена — `internal/stage/`, подборщик — `internal/vibeai/`, хост сцены и мост к агенту — `internal/tui/` (`model.go`, `stage.go`, `vibeai.go`). Плеер и Apple-провайдер — код vibez: правим минимально, фиксы из `upstream` переносим вручную (пути модуля разошлись).
+Самостоятельное приложение `aux` (модуль `github.com/oglenyaboss/aux-player`), выросло из форка `simonepelosi/vibez` (Apple Music TUI на Go/Bubble Tea). Сцена — `internal/stage/`, подборщик — `internal/vibeai/`, хост сцены и мост к агенту — `internal/tui/` (`model.go`, `stage.go`, `vibeai.go`). Плеер и Apple-провайдер — код предка: правим минимально, фиксы из `upstream` переносим вручную (пути модуля разошлись).
 
 ## GitHub
 

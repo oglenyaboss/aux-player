@@ -25,7 +25,7 @@ const errName = (e) => {
   return msg || name || String(e);
 };
 
-// ID routing helpers (inlined from vibezSetQueue / vibezAppendQueue).
+// ID routing helpers (inlined from auxSetQueue / auxAppendQueue).
 const isLibraryID = (id) => id.startsWith('i.');
 const isCatalogID = (id) => !isLibraryID(id);
 const partitionIDs = (allIds) => ({
@@ -156,7 +156,7 @@ test('playAt: stores wantIdx while busy', () => {
   eq(t.busy, false);
 });
 
-test('vibezNext simulation: advances qi', async () => {
+test('auxNext simulation: advances qi', async () => {
   const t = makeTracker();
   t.q = ['a', 'b', 'c'];
   await t.playAt(0);
@@ -164,7 +164,7 @@ test('vibezNext simulation: advances qi', async () => {
   eq(t.qi, 1);
 });
 
-test('vibezNext simulation: no-op at last item', async () => {
+test('auxNext simulation: no-op at last item', async () => {
   const t = makeTracker();
   t.q = ['a'];
   await t.playAt(0);
@@ -174,7 +174,7 @@ test('vibezNext simulation: no-op at last item', async () => {
   eq(t.qi, 0);
 });
 
-test('vibezPrev simulation: goes back', async () => {
+test('auxPrev simulation: goes back', async () => {
   const t = makeTracker();
   t.q = ['a', 'b', 'c'];
   await t.playAt(2);
@@ -182,7 +182,7 @@ test('vibezPrev simulation: goes back', async () => {
   eq(t.qi, 1);
 });
 
-test('vibezPrev simulation: at index 0 restarts', async () => {
+test('auxPrev simulation: at index 0 restarts', async () => {
   const t = makeTracker();
   t.q = ['a', 'b'];
   await t.playAt(0);
@@ -358,7 +358,7 @@ test('loading state: playbackState 1/7/8 maps to Loading=true', () => {
   eq(isLoading(9), false, 'completed is not loading');
 });
 
-test('vibezSetShuffle: shuffles tail of queue, keeps current item', () => {
+test('auxSetShuffle: shuffles tail of queue, keeps current item', () => {
   let _q = [{id:'a'},{id:'b'},{id:'c'},{id:'d'},{id:'e'}];
   let _qi = 1; // currently playing 'b'
   let _qUnshuffled = [];
@@ -383,7 +383,7 @@ test('vibezSetShuffle: shuffles tail of queue, keeps current item', () => {
   eq(_qi, 1, '_qi resynced to correct position');
 });
 
-test('vibezSetShuffle: setQueue resets shuffle snapshot', () => {
+test('auxSetShuffle: setQueue resets shuffle snapshot', () => {
   let _qUnshuffled = [{id:'old'}];
   // Simulating setQueue clearing the snapshot
   _qUnshuffled = [];
@@ -437,9 +437,9 @@ test('mid-queue with repeat off → true', () =>
   eq(_nativeHasNext({ repeatMode: 0, queue: { position: 0, length: 3 } }), true));
 test('last item with repeat off → false', () =>
   eq(_nativeHasNext({ repeatMode: 0, queue: { position: 2, length: 3 } }), false));
-test('missing queue → false (vibez takes over)', () =>
+test('missing queue → false (AUX takes over)', () =>
   eq(_nativeHasNext({ repeatMode: 0 }), false));
-test('non-numeric queue shape → false (vibez takes over)', () => {
+test('non-numeric queue shape → false (AUX takes over)', () => {
   eq(_nativeHasNext({ repeatMode: 0, queue: { position: '1', length: 3 } }), false);
   eq(_nativeHasNext({ repeatMode: 0, queue: { position: 1, length: null } }), false);
 });
@@ -477,18 +477,18 @@ const onCompleted = (s) => {
 };
 const base = { nativeQueue: false, nativeMirrors: false, busy: false, qi: 0, q: ['a', 'b', 'c'] };
 
-test('native with a next: vibez does not advance (no double advance)', () => {
+test('native with a next: AUX does not advance (no double advance)', () => {
   const r = onCompleted({ ...base, nativeQueue: true, nativeMirrors: true,
                           m: { repeatMode: 0, queue: { position: 0, length: 3 } } });
   eq(r.advanced, false);
   eq(r.clearedNative, false, 'authority must stay with MusicKit while it has a next');
 });
-test('native repeat-all at the last item: MusicKit laps, vibez stays out', () => {
+test('native repeat-all at the last item: MusicKit laps, AUX stays out', () => {
   const r = onCompleted({ ...base, nativeQueue: true, nativeMirrors: true, qi: 2,
                           m: { repeatMode: 2, queue: { position: 2, length: 3 } } });
   eq(r.advanced, false);
 });
-test('native exhausted while mirroring: vibez resumes at _qi+1', () => {
+test('native exhausted while mirroring: AUX resumes at _qi+1', () => {
   const r = onCompleted({ ...base, nativeQueue: true, nativeMirrors: true, qi: 1,
                           m: { repeatMode: 0, queue: { position: 2, length: 2 } } });
   eq(r.playAt, 2, 'should pick up the appended tail');
@@ -499,7 +499,7 @@ test('native exhausted while shuffled: stops instead of playing an arbitrary ind
   eq(r.advanced, false, 'must not resume at _qi+1 after a shuffle');
   eq(r.clearedNative, true, 'safe to drop authority: MusicKit has nowhere to go');
 });
-test('native exhausted while following a reordered _q: vibez resumes at _qi+1', () => {
+test('native exhausted while following a reordered _q: AUX resumes at _qi+1', () => {
   const r = onCompleted({ ...base, nativeQueue: true, nativeMirrors: false, qi: 1,
                           m: { repeatMode: 0, shuffleMode: 0, queue: { position: 2, length: 2 } } });
   eq(r.playAt, 2, '_qi tracks _q while following, so _qi+1 is the right track');
@@ -630,7 +630,7 @@ test('clearing the queue drops authority together with a stop', () => {
 });
 test('reorder is view-only: authority kept, mirroring broken', () => {
   const s = makeQueueState();
-  s.nativeMirrors = false; // vibezQueueMove leaves _nativeQueue alone
+  s.nativeMirrors = false; // auxQueueMove leaves _nativeQueue alone
   eq([s.nativeQueue, s.nativeMirrors], [true, false]);
 });
 

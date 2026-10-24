@@ -313,7 +313,7 @@ func (s *Server) Update(st player.State) {
 
 // seekThreshold is the position jump beyond which a change is treated as a
 // deliberate seek rather than normal playback drift or timing jitter. Position
-// updates arrive roughly once per second and vibez seeks in ±10s steps, so this
+// updates arrive roughly once per second and AUX seeks in ±10s steps, so this
 // sits safely between the two.
 const seekThreshold = 2 * time.Second
 
@@ -343,7 +343,7 @@ func (s *Server) setProperty(name string, value any) {
 }
 
 // emitChanged publishes one batched PropertiesChanged. MPRIS is optional, so a
-// lost session bus marks the server unavailable rather than terminating vibez.
+// lost session bus marks the server unavailable rather than terminating AUX.
 func (s *Server) emitChanged(changed map[string]dbus.Variant) bool {
 	if err := s.props.emitChanged(mprisPlayerIface, changed); err != nil {
 		s.markUnavailable()

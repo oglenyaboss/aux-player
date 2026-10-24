@@ -710,7 +710,7 @@ func TestRemoveAside_TakesOnlyWhatWasMovedAside(t *testing.T) {
 
 // updaterHelperEnv makes a copy of this test binary sit in
 // TestInstallBinary_ReplacesARunningBinary until its stdin closes.
-const updaterHelperEnv = "VIBEZ_TEST_UPDATER_HELPER"
+const updaterHelperEnv = "AUX_TEST_UPDATER_HELPER"
 
 // Every self-update replaces the binary that is running, which Windows only
 // allows by moving it aside. This installs over a copy of the test binary while

@@ -11,7 +11,8 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/player"
 )
 
-// DefaultClientID is the registered Discord Application ID for vibez.
+// DefaultClientID is the registered Discord Application ID for AUX.
+// ponytail: Discord application of upstream vibez; register an AUX app to change the name and logo shown in Discord.
 const DefaultClientID = "1553056382482129088"
 
 // reconnectCooldown is the time to wait before retrying to connect after a failure.

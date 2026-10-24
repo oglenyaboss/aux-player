@@ -81,7 +81,7 @@ func TestMediaServerListensOnLoopbackOnly(t *testing.T) {
 		t.Fatalf("page: %d %q", resp.StatusCode, body)
 	}
 	resp, body = get(t, m.pageURL()+"engine.js", nil)
-	if resp.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("vibezLocalEngine")) {
+	if resp.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("auxLocalEngine")) {
 		t.Fatalf("engine.js: %d", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
@@ -171,7 +171,7 @@ func TestMediaServerExposesNothingElse(t *testing.T) {
 		}
 	}
 
-	resp, _ := get(t, good, map[string]string{"Host": "vibez.attacker.example"})
+	resp, _ := get(t, good, map[string]string{"Host": "aux.attacker.example"})
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("foreign Host: %d, want 404", resp.StatusCode)
 	}

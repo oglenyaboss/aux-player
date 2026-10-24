@@ -15,7 +15,7 @@ import (
 )
 
 // trackFrames is 0.7s at 44.1kHz: long enough that EOS arrives through the
-// queue callback rather than during vibez_start's pre-fill.
+// queue callback rather than during aux_start's pre-fill.
 const trackFrames = 44100 * 7 / 10
 
 // writeSilentWAV writes trackFrames of 16-bit stereo 44.1kHz silence.

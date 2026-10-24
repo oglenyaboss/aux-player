@@ -3,7 +3,7 @@
 // signed token to stdout so CI can capture and inject it at build time.
 //
 // With -write it instead writes the token into apple_developer_token in the
-// vibez config file, which is handy for local (non-embedded) builds.
+// AUX config file, which is handy for local (non-embedded) builds.
 //
 // Required env vars:
 //
@@ -26,8 +26,8 @@ import (
 )
 
 func main() {
-	write := flag.Bool("write", false, "write the token into apple_developer_token in the vibez config instead of printing it to stdout")
-	configPath := flag.String("config", "", "config file to update with -write (default: ~/.config/vibez/config.json; Windows: %APPDATA%\\vibez\\config.json)")
+	write := flag.Bool("write", false, "write the token into apple_developer_token in the AUX config instead of printing it to stdout")
+	configPath := flag.String("config", "", "config file to update with -write (default: ~/.config/aux/config.json; Windows: %APPDATA%\\aux\\config.json)")
 	flag.Parse()
 
 	keyID := mustEnv("APPLE_KEY_ID")
@@ -63,7 +63,7 @@ func main() {
 // build time, so a short TTL means a binary stops reaching the catalog long
 // before it stops being the newest release: the ceiling is the useful value
 // here. A rejected token is no longer destructive to the user's session, and
-// vibez tells them the build is stale rather than clearing their login.
+// AUX tells them the build is stale rather than clearing their login.
 const tokenTTL = 15777000 * time.Second
 
 // generateToken signs an Apple Music developer JWT valid for tokenTTL.

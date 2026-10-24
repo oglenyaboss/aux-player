@@ -13,7 +13,7 @@
                      URLs are sent to Go's GStreamer pipeline for audio output.
 
     Go ↔ JS bridge:
-      Go → JS : page.Evaluate for vibez*() commands
+      Go → JS : page.Evaluate for aux*() commands
       JS → Go : goNeedsAuth, goAuthComplete, goPlayerStateChange,
                 goUserTokenChanged, goStorefrontChanged, goStreamURL*, goError,
                 goGetUserToken (Chrome mode only: user token is not in the HTML),
@@ -47,18 +47,18 @@
       //
       // MusicKit keeps a `restrictedEnabled` flag, and with no stored preference
       // it guesses one from the storefront country alone: br, ch, gt, hu, id,
-      // in, it, kr, la, lt, my, ru, sg and tr are restricted by default. vibez
+      // in, it, kr, la, lt, my, ru, sg and tr are restricted by default. AUX
       // drives Chrome with an ephemeral profile, so that storage is empty on
       // every launch and the guess is made afresh every time. Each setQueue then
       // copies the flag onto the queue, whose setter drops every explicit item
-      // and raises CONTENT_RESTRICTED once the queue is left empty. vibez reads
+      // and raises CONTENT_RESTRICTED once the queue is left empty. AUX reads
       // that as an unavailable track and skips it without a word, so an explicit
       // track is unplayable in those storefronts (#130).
       //
       // Assigning the property routes to storekit.overrideRestrictEnabled(),
       // which latches the value so the country guess cannot re-derive it. Apple
       // still enforces genuine account restrictions server-side; dropping the
-      // guess only stops vibez filtering on a value it cannot confirm and gives
+      // guess only stops AUX filtering on a value it cannot confirm and gives
       // the user no way to change.
       //
       // This must run before musicUserToken is set below. Applying the token
@@ -173,7 +173,7 @@
         const _m = () => MusicKit.getInstance();
 
         // Update the W3C MediaSession so OS notifications / MPRIS show the
-        // current track under the "vibez" player identity.
+        // current track under the "AUX" player identity.
         function updateMediaSession(item, isPlaying) {
           if (item) {
             const artwork = item.attributes.artwork;
@@ -260,7 +260,7 @@
         //             repeats and shuffles it by itself. Navigation is
         //             skipToNextItem / skipToPreviousItem; new songs go through
         //             playLater().
-        //   one-item: setQueue({...}) per track, vibez advances on `completed`.
+        //   one-item: setQueue({...}) per track, AUX advances on `completed`.
         //             This is the recovery mode. It is the only mode that sees a
         //             per-item failure, so it is the only one that can run the
         //             CONTENT_UNAVAILABLE to library-copy fallback.
@@ -373,7 +373,7 @@
         }
 
         // MusicKit cannot reorder a live queue without stopping playback (see
-        // vibezSetShuffle), but it only ever needs to know what plays next.
+        // auxSetShuffle), but it only ever needs to know what plays next.
         // playNext inserts after the current item without interrupting it, so
         // whenever MusicKit's next item differs from _q's, insert _q's. The
         // items it displaces stay behind and are never reached, because a
@@ -423,13 +423,13 @@
           catch(e) { _log(`[js:sync] queue.remove failed: ${errName(e)}`); }
         }
 
-        // Set by vibezPrev just before it steps MusicKit back. A step back has
+        // Set by auxPrev just before it steps MusicKit back. A step back has
         // to be asked for: a stale item reached going forward can just as well
         // be _q[_qi-1].
         let _stepBack = false;
 
         // Settle _qi on a track change while following _q. Next, previous and
-        // the repeat-all wrap are the moves _syncNext and vibezPrev set up;
+        // the repeat-all wrap are the moves _syncNext and auxPrev set up;
         // anything else means a correction did not land in time (a reorder
         // right at the end of a track, a failed playNext, a removed item) and
         // is rebuilt from _q at the index that should be playing.
@@ -505,7 +505,7 @@
         // Does MusicKit have somewhere to go on its own when the current item
         // completes?  Asked of MusicKit's queue rather than _qi so the answer
         // cannot depend on whether nowPlayingItemDidChange or the completed
-        // event fires first.  Unknown queue shape → false, so vibez takes over.
+        // event fires first.  Unknown queue shape → false, so AUX takes over.
         function _nativeHasNext(m) {
           if (m.repeatMode === 1 || m.repeatMode === 2) return true; // repeats itself
           const q = m.queue;
@@ -926,7 +926,7 @@
           ap.preloadItem(next).catch(e => _log(`[js:preload] failed: ${errName(e)}`));
         }, 500);
 
-        window.vibezPlay = async () => {
+        window.auxPlay = async () => {
           if (_busy) return; // An in-flight queue change starts playback itself.
           const m = _m();
           _log(`[js:play] state=${_stateN[m.playbackState]||m.playbackState} item=${m.nowPlayingItem?.id||'null'} _qi=${_qi}`);
@@ -948,7 +948,7 @@
             }
           }
         };
-        window.vibezPause = async () => {
+        window.auxPause = async () => {
           _log(`[js:pause] state=${_stateN[_m().playbackState]||_m().playbackState}`);
           try { await _m().pause(); _log('[js:pause] paused ✓'); }
           catch(e) { _log(`[js:pause] error: ${errName(e)}`); goError('pause: '+errName(e)).catch(()=>{}); }
@@ -957,7 +957,7 @@
         // _syncQueueIndex resettle _qi afterwards: under native shuffle _qi ± 1
         // is not the neighbouring item, so the bounds have to come from
         // MusicKit's queue rather than from _q.
-        window.vibezNext  = () => {
+        window.auxNext  = () => {
           const m = _m();
           _log(`[js:next] _qi=${_qi} len=${_q.length} busy=${_busy} native=${_nativeQueue}`);
           // Following _q, MusicKit's next past the end of _q is a stale item.
@@ -969,7 +969,7 @@
           if (_qi < _q.length - 1) _playAt(_qi + 1);
           else _log(`[js:next] already at end of queue`);
         };
-        window.vibezPrev  = () => {
+        window.auxPrev  = () => {
           const m = _m();
           _log(`[js:prev] _qi=${_qi} native=${_nativeQueue}`);
           // Following _q, MusicKit's history is what played, which is not
@@ -995,9 +995,9 @@
           _playAt(_qi > 0 ? _qi - 1 : 0);
         };
         const _repeatName = ['off', 'one', 'all'];
-        window.vibezSeek      = (t) => { _log(`[js:seek] → ${t.toFixed(1)}s`); _m().seekToTime(t); };
-        window.vibezSetVolume = (v) => { _log(`[js:volume] → ${Math.round(v*100)}%`); _m().volume = v; };
-        window.vibezSetAudioBitrate = (kbps) => {
+        window.auxSeek      = (t) => { _log(`[js:seek] → ${t.toFixed(1)}s`); _m().seekToTime(t); };
+        window.auxSetVolume = (v) => { _log(`[js:volume] → ${Math.round(v*100)}%`); _m().volume = v; };
+        window.auxSetAudioBitrate = (kbps) => {
           applyAudioBitrate(kbps);
           _log(`[js:bitrate] → ${Number(kbps)} kbps AAC`);
           notifyState();
@@ -1017,7 +1017,7 @@
           _eqSource.connect(_eqCtx.destination);
         }
 
-        window.vibezSetEqualizer = async function(bandsJSON) {
+        window.auxSetEqualizer = async function(bandsJSON) {
           const bands = JSON.parse(bandsJSON);
           _log(`[js:eq] apply ${bands.length} band(s)`);
           await _ensureEQContext();
@@ -1045,8 +1045,8 @@
           _eqNodes[_eqNodes.length - 1].connect(_eqCtx.destination);
           if (_eqCtx.state === 'suspended') _eqCtx.resume();
         };
-        window.vibezSetRepeat  = (mode) => { _log(`[js:repeat] → ${_repeatName[mode]||mode}`); _m().repeatMode  = mode; };
-        window.vibezSetShuffle = (on) => {
+        window.auxSetRepeat  = (mode) => { _log(`[js:repeat] → ${_repeatName[mode]||mode}`); _m().repeatMode  = mode; };
+        window.auxSetShuffle = (on) => {
           _log(`[js:shuffle] → ${on ? 'on' : 'off'}`);
           // _nativeQueue is deliberately left alone: in native mode the
           // shuffleMode below is what actually reorders playback and MusicKit
@@ -1099,13 +1099,13 @@
         let _qUnshuffled = []; // original order snapshot while shuffle is on
 
         // Wire OS media keys / MPRIS back to our own functions.
-        navigator.mediaSession.setActionHandler('play',          () => window.vibezPlay());
-        navigator.mediaSession.setActionHandler('pause',         () => window.vibezPause());
-        navigator.mediaSession.setActionHandler('nexttrack',     () => window.vibezNext());
-        navigator.mediaSession.setActionHandler('previoustrack', () => window.vibezPrev());
+        navigator.mediaSession.setActionHandler('play',          () => window.auxPlay());
+        navigator.mediaSession.setActionHandler('pause',         () => window.auxPause());
+        navigator.mediaSession.setActionHandler('nexttrack',     () => window.auxNext());
+        navigator.mediaSession.setActionHandler('previoustrack', () => window.auxPrev());
         navigator.mediaSession.setActionHandler('seekto', (d) => _m().seekToTime(d.seekTime));
 
-        window.vibezSetQueue = async function(idsJSON) {
+        window.auxSetQueue = async function(idsJSON) {
           try {
             const ids = (JSON.parse(idsJSON) || []).filter(Boolean);
             _log(`[js:setQueue] resolving ${ids.length} id(s)`);
@@ -1120,7 +1120,7 @@
           } catch(e) { goError('setQueue failed: '+errName(e)).catch(()=>{}); }
         };
 
-        window.vibezSetPlaylist = async function(playlistID, startIdx) {
+        window.auxSetPlaylist = async function(playlistID, startIdx) {
           try {
             _log(`[js:setPlaylist] loading ${playlistID} startIdx=${startIdx||0}`);
             const m   = _m();
@@ -1144,7 +1144,7 @@
           } catch(e) { goError('setPlaylist failed: '+errName(e)).catch(()=>{}); }
         };
 
-        window.vibezAppendQueue = async function(idsJSON) {
+        window.auxAppendQueue = async function(idsJSON) {
           try {
             const ids   = (JSON.parse(idsJSON) || []).filter(Boolean);
             _log(`[js:append] resolving id=${ids[0]}`);
@@ -1175,7 +1175,7 @@
         // items after everything else (#161). playNext inserts after the
         // current item of MusicKit's own queue, so if _q mirrored it before,
         // it still does.
-        window.vibezQueuePlayNext = async function(idsJSON) {
+        window.auxQueuePlayNext = async function(idsJSON) {
           try {
             const ids   = (JSON.parse(idsJSON) || []).filter(Boolean);
             _log(`[js:playNext] resolving ${ids.length} id(s)`);
@@ -1190,7 +1190,7 @@
             if (!_nativeQueue) return; // one-item mode advances through _q itself
             try { await _m().playNext({ items: insert.slice() }); _warmLibItems(); }
             catch(e) {
-              // Same fallback as vibezAppendQueue: MusicKit gets them at the
+              // Same fallback as auxAppendQueue: MusicKit gets them at the
               // end, and _q no longer mirrors its order.
               _log(`[js:playNext] native playNext failed: ${errName(e)} — appending`);
               _nativeMirrors = false;
@@ -1236,12 +1236,12 @@
         // Each queue call resolves its ids asynchronously; chain them so a later
         // call never lands before an earlier one (setQueue then appendQueue).
         let _qChain = Promise.resolve();
-        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue', 'vibezQueuePlayNext']) {
+        for (const name of ['auxSetQueue', 'auxSetPlaylist', 'auxAppendQueue', 'auxQueuePlayNext']) {
           const fn = window[name];
           window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
         }
 
-        window.vibezQueueRemove = function(idxStr) {
+        window.auxQueueRemove = function(idxStr) {
           const idx = parseInt(idxStr);
           if (idx < 0 || idx >= _q.length) return;
           const name = _q[idx]?.attributes?.name || '?';
@@ -1275,12 +1275,12 @@
           }
         };
 
-        window.vibezQueueMove = function(fromStr, toStr) {
+        window.auxQueueMove = function(fromStr, toStr) {
           const from = parseInt(fromStr);
           const to   = parseInt(toStr);
           if (from < 0 || from >= _q.length || to < 0 || to >= _q.length || from === to) return;
           // _nativeQueue is deliberately left alone: a live queue cannot be
-          // reordered without stopping playback (see vibezSetShuffle), so the
+          // reordered without stopping playback (see auxSetShuffle), so the
           // move lands in _q and _syncNext makes MusicKit's next item follow.
           _nativeMirrors = false;
           const name = _q[from]?.attributes?.name || '?';
@@ -1293,7 +1293,7 @@
           _syncNext();
         };
 
-        window.vibezQueueClear = function() {
+        window.auxQueueClear = function() {
           _log(`[js:clear] queue (${_q.length} item(s))`);
           _q  = [];
           _qi = -1;
@@ -1323,14 +1323,14 @@
           notifyStateFromItem(item, true);
         }
 
-        window.vibezPlay  = () => { notifyStateFromItem(_queue[_idx], true);  };
-        window.vibezPause = () => { notifyStateFromItem(_queue[_idx], false); };
-        window.vibezNext  = () => { if (_idx < _queue.length - 1) playIdx(_idx + 1); };
-        window.vibezPrev  = () => { if (_idx > 0) playIdx(_idx - 1); };
-        window.vibezSeek      = () => {};
-        window.vibezSetVolume = () => {};
+        window.auxPlay  = () => { notifyStateFromItem(_queue[_idx], true);  };
+        window.auxPause = () => { notifyStateFromItem(_queue[_idx], false); };
+        window.auxNext  = () => { if (_idx < _queue.length - 1) playIdx(_idx + 1); };
+        window.auxPrev  = () => { if (_idx > 0) playIdx(_idx - 1); };
+        window.auxSeek      = () => {};
+        window.auxSetVolume = () => {};
 
-        window.vibezSetQueue = async function(idsJSON) {
+        window.auxSetQueue = async function(idsJSON) {
           try {
             const ids = JSON.parse(idsJSON);
             const m = MusicKit.getInstance();
@@ -1361,7 +1361,7 @@
           } catch(e) { goError('setQueue failed: ' + errName(e)).catch(() => {}); }
         };
 
-        window.vibezSetPlaylist = async function(playlistID, startIdx) {
+        window.auxSetPlaylist = async function(playlistID, startIdx) {
           try {
             const m = MusicKit.getInstance();
             const sf = m.storefrontId || 'us';
@@ -1376,7 +1376,7 @@
           } catch(e) { goError('setPlaylist failed: ' + errName(e)).catch(() => {}); }
         };
 
-        window.vibezAppendQueue = async function(idsJSON) {
+        window.auxAppendQueue = async function(idsJSON) {
           try {
             const ids = JSON.parse(idsJSON);
             const m = MusicKit.getInstance();
@@ -1408,24 +1408,24 @@
           } catch(e) { goError('appendQueue failed: ' + errName(e)).catch(() => {}); }
         };
 
-        // vibez owns this queue outright, so append-then-move is exact here.
-        window.vibezQueuePlayNext = async function(idsJSON) {
+        // AUX owns this queue outright, so append-then-move is exact here.
+        window.auxQueuePlayNext = async function(idsJSON) {
           const before = _queue.length;
           const at     = _idx + 1;
-          await window.vibezAppendQueue(idsJSON);
+          await window.auxAppendQueue(idsJSON);
           if (before === 0) return; // the append started playback at item 0
-          for (let i = before; i < _queue.length; i++) window.vibezQueueMove(i, at + (i - before));
+          for (let i = before; i < _queue.length; i++) window.auxQueueMove(i, at + (i - before));
         };
 
         // Each queue call resolves its ids asynchronously; chain them so a later
         // call never lands before an earlier one (setQueue then appendQueue).
         let _qChain = Promise.resolve();
-        for (const name of ['vibezSetQueue', 'vibezSetPlaylist', 'vibezAppendQueue']) {
+        for (const name of ['auxSetQueue', 'auxSetPlaylist', 'auxAppendQueue']) {
           const fn = window[name];
           window[name] = (...args) => (_qChain = _qChain.then(() => fn(...args), () => fn(...args)));
         }
 
-        window.vibezQueueRemove = function(idxStr) {
+        window.auxQueueRemove = function(idxStr) {
           const idx = parseInt(idxStr);
           if (idx < 0 || idx >= _queue.length) return;
           _queue.splice(idx, 1);
@@ -1437,7 +1437,7 @@
           }
         };
 
-        window.vibezQueueMove = function(fromStr, toStr) {
+        window.auxQueueMove = function(fromStr, toStr) {
           const from = parseInt(fromStr);
           const to   = parseInt(toStr);
           if (from < 0 || from >= _queue.length || to < 0 || to >= _queue.length || from === to) return;
@@ -1448,7 +1448,7 @@
           else if (from > _idx && to <= _idx) _idx++;
         };
 
-        window.vibezQueueClear = function() {
+        window.auxQueueClear = function() {
           _queue = [];
           _idx   = -1;
         };
@@ -1484,7 +1484,7 @@
         }
       }
 
-      window.vibezSetUserToken = async function(token) {
+      window.auxSetUserToken = async function(token) {
         music.musicUserToken = token;
         await syncAccountStorefront();
       };

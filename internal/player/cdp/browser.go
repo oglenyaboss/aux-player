@@ -1,7 +1,7 @@
 //go:build linux
 
 // Package cdp provides an Apple Music player backed by a private Chrome
-// installation managed entirely by vibez. On first run, vibez downloads the
+// installation managed entirely by AUX. On first run, AUX downloads the
 // Google Chrome .deb (~130 MB) from Google's public CDN, extracts it without
 // requiring dpkg-deb or root (using a pure-Go ar parser + system tar), and
 // caches the result in ~/.cache/aux/chrome/.
@@ -9,7 +9,7 @@
 // no apt-get, no sudo, invisible to the rest of the OS.
 // Widevine CDM is bundled inside Chrome and is available automatically.
 //
-// Setting VIBEZ_CHROME_PATH (or CHROME_PATH) to a browser binary makes vibez
+// Setting AUX_CHROME_PATH (or CHROME_PATH) to a browser binary makes AUX
 // launch that browser instead and download nothing; see useSystemBrowser.
 package cdp
 
@@ -44,11 +44,11 @@ func chromeInstallDir() string { return filepath.Join(baseDir(), "chrome") }
 func driverDir() string { return filepath.Join(baseDir(), "driver") }
 
 // browserOverride returns the environment variable and browser path a user
-// set to bypass discovery, VIBEZ_CHROME_PATH taking precedence over
+// set to bypass discovery, AUX_CHROME_PATH taking precedence over
 // CHROME_PATH, or two empty strings when neither is set. The path is not
 // validated here; findSystemBrowser does that.
 func browserOverride() (string, string) {
-	for _, name := range []string{"VIBEZ_CHROME_PATH", "CHROME_PATH"} {
+	for _, name := range []string{"AUX_CHROME_PATH", "CHROME_PATH"} {
 		if p := os.Getenv(name); p != "" {
 			return name, p
 		}
@@ -56,10 +56,10 @@ func browserOverride() (string, string) {
 	return "", ""
 }
 
-// useSystemBrowser reports whether vibez launches a browser it does not own:
+// useSystemBrowser reports whether AUX launches a browser it does not own:
 // always on arm64, where Google publishes no Linux Chrome, and on any arch
 // when browserOverride names one. In that mode nothing is downloaded, the
-// vibez-helper hard link is skipped, and Widevine is looked up on the system
+// aux-helper hard link is skipped, and Widevine is looked up on the system
 // instead of inside the private Chrome.
 func useSystemBrowser() bool {
 	if runtime.GOARCH == "arm64" {
@@ -69,7 +69,7 @@ func useSystemBrowser() bool {
 	return p != ""
 }
 
-// ChromePath returns the path to the Chrome/Chromium binary vibez launches:
+// ChromePath returns the path to the Chrome/Chromium binary AUX launches:
 // the privately downloaded Google Chrome, or a system Chromium/Chrome when
 // useSystemBrowser says so.
 func ChromePath() string {
@@ -85,21 +85,21 @@ func bundledChromePath() string {
 	return filepath.Join(chromeInstallDir(), "opt", "google", "chrome", "chrome")
 }
 
-// HelperPath returns the path to the vibez-helper hard link of the Chrome
+// HelperPath returns the path to the aux-helper hard link of the Chrome
 // binary. Launching Chrome via this path causes the process (and child
-// processes that re-exec via /proc/self/exe) to appear as "vibez-helper"
-// in ps/top instead of "chrome". A system browser lives somewhere vibez cannot
+// processes that re-exec via /proc/self/exe) to appear as "aux-helper"
+// in ps/top instead of "chrome". A system browser lives somewhere AUX cannot
 // hard-link into, so there it equals ChromePath().
 func HelperPath() string {
 	if useSystemBrowser() {
 		return ChromePath()
 	}
-	return filepath.Join(chromeInstallDir(), "opt", "google", "chrome", "vibez-helper")
+	return filepath.Join(chromeInstallDir(), "opt", "google", "chrome", "aux-helper")
 }
 
-// linkHelper creates a hard link vibez-helper → chrome so the spawned
-// process shows as "vibez-helper" in process listings. Idempotent. No-op for
-// a system browser, which vibez does not own.
+// linkHelper creates a hard link aux-helper → chrome so the spawned
+// process shows as "aux-helper" in process listings. Idempotent. No-op for
+// a system browser, which AUX does not own.
 func linkHelper() {
 	if useSystemBrowser() {
 		return
@@ -111,17 +111,17 @@ func linkHelper() {
 }
 
 // systemBrowserHelp guides a user past a missing browser or Widevine CDM on
-// the system-browser path. Which advice applies turns on how vibez got here.
+// the system-browser path. Which advice applies turns on how AUX got here.
 // An override the user set is theirs to correct or to drop, and telling them
 // to set the variable they already set, or to install a distro Chromium they
-// never asked vibez to use, helps with neither. Dropping the override on amd64
-// returns them to the Google Chrome vibez downloads, which carries its own
+// never asked AUX to use, helps with neither. Dropping the override on amd64
+// returns them to the Google Chrome AUX downloads, which carries its own
 // CDM; arm64 has no such fallback, so there the advice stays "install one".
 func systemBrowserHelp() string {
 	env, _ := browserOverride()
 	switch {
 	case env == "":
-		return "install Chromium and a Widevine CDM (e.g. `pacman -S chromium widevine` on Arch Linux ARM, or your distro's equivalent), or set VIBEZ_CHROME_PATH to a browser binary"
+		return "install Chromium and a Widevine CDM (e.g. `pacman -S chromium widevine` on Arch Linux ARM, or your distro's equivalent), or set AUX_CHROME_PATH to a browser binary"
 	case runtime.GOARCH == "amd64":
 		return "point " + env + " at a browser with a Widevine CDM, or unset it to use the Google Chrome aux downloads, which bundles one"
 	default:
@@ -138,7 +138,7 @@ func systemBrowserCandidates() []string {
 // systemBrowserRealBinaries lists absolute paths to real browser binaries,
 // preferred over PATH entries. On several distros the PATH `chromium` is a
 // launcher wrapper that injects flags from config files; launching the real
-// binary avoids that and matches how vibez launches Chrome on amd64/macOS.
+// binary avoids that and matches how AUX launches Chrome on amd64/macOS.
 func systemBrowserRealBinaries() []string {
 	return []string{
 		"/usr/lib/chromium/chromium",
@@ -150,12 +150,12 @@ func systemBrowserRealBinaries() []string {
 }
 
 func usableExecutable(p string) bool {
-	st, err := os.Stat(p) //nolint:gosec // G703: path is an operator-provided (VIBEZ_CHROME_PATH) or fixed system browser path, not attacker input
+	st, err := os.Stat(p) //nolint:gosec // G703: path is an operator-provided (AUX_CHROME_PATH) or fixed system browser path, not attacker input
 	return err == nil && !st.IsDir() && st.Mode()&0o111 != 0
 }
 
 // findSystemBrowser locates a Chromium/Chrome executable for the
-// system-browser path. Order: the VIBEZ_CHROME_PATH / CHROME_PATH override,
+// system-browser path. Order: the AUX_CHROME_PATH / CHROME_PATH override,
 // then known real binaries, then whatever launcher is on PATH.
 func findSystemBrowser() (string, error) {
 	if env, p := browserOverride(); p != "" {
@@ -229,8 +229,8 @@ func widevineCDMDir() string {
 }
 
 // Available reports whether the full-track Chrome/CDP backend can run on this
-// host. On amd64 vibez downloads Google Chrome, so it is always available; a
-// VIBEZ_CHROME_PATH override is not checked here, so an unusable one fails in
+// host. On amd64 AUX downloads Google Chrome, so it is always available; a
+// AUX_CHROME_PATH override is not checked here, so an unusable one fails in
 // EnsureBrowser, where the user sees why. On arm64 it requires a system
 // Chromium/Chrome plus a Widevine CDM. Every other Linux arch uses the WebKit
 // + GStreamer preview fallback.
@@ -248,7 +248,7 @@ func Available() bool {
 	}
 }
 
-// EnsureBrowser downloads and extracts Google Chrome into vibez's private
+// EnsureBrowser downloads and extracts Google Chrome into AUX's private
 // cache directory if not already present. Never calls apt-get or sudo.
 // onProgress is called with human-readable status strings (e.g. "Downloading
 // Chrome… 42%", "Extracting Chrome…"). Pass func(string){} to silence.
@@ -259,9 +259,9 @@ func EnsureBrowser(onProgress func(string)) error {
 	return ensureBrowserAMD64(onProgress)
 }
 
-// ensureSystemBrowser prepares the full-track backend around a browser vibez
+// ensureSystemBrowser prepares the full-track backend around a browser AUX
 // does not own: always on arm64, where Google publishes no Linux Chrome, and
-// wherever VIBEZ_CHROME_PATH / CHROME_PATH points at one. Rather than download
+// wherever AUX_CHROME_PATH / CHROME_PATH points at one. Rather than download
 // a browser it verifies a Chromium/Chrome and a Widevine CDM are present, then
 // fetches only the arch-aware Playwright Node driver.
 func ensureSystemBrowser(onProgress func(string)) error {
@@ -285,7 +285,7 @@ func ensureSystemBrowser(onProgress func(string)) error {
 	return nil
 }
 
-// chromiumProfileDir is the persistent Chromium profile vibez uses with a
+// chromiumProfileDir is the persistent Chromium profile AUX uses with a
 // system browser: chromium-arm64 on arm64, as before, chromium-amd64 for an
 // override there. A persistent profile is required because the system
 // Chromium registers its Widevine CDM through the component-updater, which
@@ -339,7 +339,7 @@ func warmUpWidevine(onProgress func(string)) error {
 	return fmt.Errorf("timed out waiting for the Widevine CDM to register; %s", systemBrowserHelp())
 }
 
-// ensureBrowserAMD64 downloads and extracts Google Chrome into vibez's private
+// ensureBrowserAMD64 downloads and extracts Google Chrome into AUX's private
 // cache directory if not already present. Never calls apt-get or sudo.
 func ensureBrowserAMD64(onProgress func(string)) error {
 	driverUpToDate := isDriverUpToDate()
@@ -421,7 +421,7 @@ func extractDeb(debPath, destDir string) error {
 		if strings.HasPrefix(name, "data.tar") {
 			// Write the embedded data.tar.* into a sibling temp file so that
 			// tar can seek it (some tar builds require a seekable input).
-			tmp, err := os.CreateTemp(filepath.Dir(debPath), "vibez-data.tar.*")
+			tmp, err := os.CreateTemp(filepath.Dir(debPath), "aux-data.tar.*")
 			if err != nil {
 				return fmt.Errorf("create temp: %w", err)
 			}
