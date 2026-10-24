@@ -253,6 +253,10 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 	a.askedThisTurn = false
 	a.Note = ""
 	a.Later = nil
+	if picked := a.drainReserve(); len(picked) > 0 {
+		user += fmt.Sprintf("\n\nИз запаса прошлой порции уже приняты: %s. Порция %d/%d, нужно ещё %d.",
+			strings.Join(picked, "; "), len(a.Session.Portion()), a.Session.Size, a.Session.Need())
+	}
 	a.msgs = append(a.msgs, llm.Message{Role: "user", Content: user})
 	hints := 0
 	start := time.Now()
@@ -268,7 +272,7 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 		}
 		a.msgs = append(a.msgs, resp.Message)
 		if len(resp.Message.ToolCalls) == 0 {
-			if a.Session.Need() == 0 {
+			if a.Session.Done() {
 				break
 			}
 			if hints < 2 {
@@ -287,11 +291,32 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 			a.logf("← %s", truncateRunes(res, 1500))
 			a.msgs = append(a.msgs, llm.Message{Role: "tool", ToolCallID: call.ID, Content: res})
 		}
-		if a.Session.Need() == 0 {
+		if a.Session.Done() {
 			break
 		}
 	}
 	return a.Session.ClosePortion(), nil
+}
+
+func (a *Agent) drainReserve() []string {
+	accepted := make([]string, 0)
+	for _, v := range a.Session.DrainReserve() {
+		if !v.Accepted {
+			continue
+		}
+		name := v.Song.Artist + " — " + v.Song.Title
+		accepted = append(accepted, name)
+		a.logf("запас: %s", name)
+		if a.UI != nil {
+			portion := a.Session.Portion()
+			a.UI.Picked(Pick{
+				Track:    toTrack(portion[len(portion)-1]),
+				Name:     name,
+				Accepted: true,
+			})
+		}
+	}
+	return accepted
 }
 
 func (a *Agent) Reset() { a.msgs = a.msgs[:1] }

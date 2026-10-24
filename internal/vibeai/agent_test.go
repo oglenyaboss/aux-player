@@ -382,6 +382,110 @@ func TestTurnDispatchesAllCallsEvenWhenFull(t *testing.T) {
 	}
 }
 
+func TestTurnDrainsReserveFirst(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(
+			call("p1", "set_plan", `{"seeds":[],"exclusions":[]}`),
+			call("s1", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+		),
+		toolResp(call("s2", "submit_candidates", `{"tracks":[
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+	}}
+	be := &fakeBackend{}
+	ui := &fakeUI{}
+	st, err := memory.Open(filepath.Join(t.TempDir(), "memory.md"), memory.DefaultLimit)
+	if err != nil {
+		t.Fatalf("memory.Open: %v", err)
+	}
+	a := NewAgent(ch, be, NewSession(nil, nil, 2), st, ui, nil, nil)
+
+	entries, err := a.Turn(context.Background(), "в духе X")
+	if err != nil {
+		t.Fatalf("ход 1: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Song.Artist != "A" || entries[1].Song.Artist != "B" {
+		t.Fatalf("ход 1: %+v, want [A, B]", entries)
+	}
+
+	entries2, err := a.Turn(context.Background(), "ещё")
+	if err != nil {
+		t.Fatalf("ход 2: %v", err)
+	}
+	if len(entries2) != 2 || entries2[0].Song.Artist != "C" || entries2[1].Song.Artist != "D" {
+		t.Fatalf("ход 2: %+v, want [C, D]", entries2)
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat вызван %d раз, want 2", len(ch.got))
+	}
+	user := ch.got[1][len(ch.got[1])-1]
+	if user.Role != "user" {
+		t.Fatalf("последнее сообщение хода 2: %q", user.Role)
+	}
+	want := "\n\nИз запаса прошлой порции уже приняты: C — T3. Порция 1/2, нужно ещё 1."
+	if !strings.HasSuffix(user.Content, want) {
+		t.Errorf("user не заканчивается на %q:\n%s", want, user.Content)
+	}
+	cIdx, dIdx := -1, -1
+	for i, p := range ui.picks {
+		if !p.Accepted {
+			continue
+		}
+		switch p.Name {
+		case "C — T3":
+			if cIdx < 0 {
+				cIdx = i
+			}
+		case "D — T4":
+			dIdx = i
+		}
+	}
+	if cIdx < 0 || dIdx < 0 {
+		t.Fatalf("picks: %+v, want принятые C и D", ui.picks)
+	}
+	if dIdx < cIdx {
+		t.Errorf("D (%d) раньше C (%d) в picks: %+v", dIdx, cIdx, ui.picks)
+	}
+}
+
+func TestTurnStopsAtSlack(t *testing.T) {
+	tracks := make([]string, 0, 18)
+	for i := 0; i < 18; i++ {
+		tracks = append(tracks, fmt.Sprintf(`{"artist":"A%d","title":"T%d","why":"w"}`, i, i))
+	}
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(call("s", "submit_candidates", `{"tracks":[`+strings.Join(tracks, ",")+`]}`)),
+	}}
+	st, err := memory.Open(filepath.Join(t.TempDir(), "memory.md"), memory.DefaultLimit)
+	if err != nil {
+		t.Fatalf("memory.Open: %v", err)
+	}
+	a := NewAgent(ch, &fakeBackend{}, NewSession(nil, nil, 20), st, &fakeUI{}, nil, nil)
+
+	entries, err := a.Turn(context.Background(), "запрос")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 18 {
+		t.Fatalf("entries: %d, want 18", len(entries))
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat вызван %d раз, want 2", len(ch.got))
+	}
+	for _, msgs := range ch.got {
+		for _, m := range msgs {
+			if m.Role == "user" && strings.HasPrefix(m.Content, "Порция не заполнена") {
+				t.Error("есть подсказка «Порция не заполнена», ход должен закончиться на недоборе ≤10%")
+			}
+		}
+	}
+}
+
 func TestRunLogStepsAndCalls(t *testing.T) {
 	ch := &fakeChatter{resps: []llm.Response{
 		toolResp(call("d", "describe", `{"kind":"artist","artist":"Yeat"}`)),

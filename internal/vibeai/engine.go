@@ -127,7 +127,10 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		e.log.f("время: %s", e.start.Format(time.RFC3339))
 		e.log.f("память на старте: %d/%d", e.mem.Size(), e.mem.Limit)
 		if block := globalBlock(e.sig.globalSkips()); block != "" {
-			message = text + "\n\n" + block
+			message += "\n\n" + block
+		}
+		if block := servedBlock(e.sig.servedElsewhere(e.sessionID)); block != "" {
+			message += "\n\n" + block
 		}
 	} else {
 		if text == "" {
@@ -139,6 +142,7 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		tail := "Продолжи поток: следующая порция. Держись ядра запроса. ▲ — главный ориентир, ищи близкое по звучанию; дослушанное — слабый плюс; от ▼ и скипнутого уходи."
 		if text != "" {
 			tail = "Новая реплика владельца: «" + text + "». Учти её в следующей порции."
+			e.session.ClearReserve()
 		}
 		message = e.history() + "\n\n" + tail
 		if text != "" {
@@ -237,6 +241,10 @@ func (e *Engine) history() string {
 		b.WriteString("\n")
 		b.WriteString(block)
 	}
+	if block := servedBlock(e.sig.servedElsewhere(e.sessionID)); block != "" {
+		b.WriteString("\n")
+		b.WriteString(block)
+	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
@@ -275,6 +283,31 @@ func globalBlock(stats []skipStat) string {
 		}
 	}
 	b.WriteString("\nЕсли у них есть общее звучание или направление — запиши его в память одной записью (memory_add или memory_replace), evidence — эти цифры. Об отдельных артистах в память не пиши.")
+	return b.String()
+}
+
+func servedBlock(songs []Song) string {
+	if len(songs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Уже выдавали в прошлых сессиях (код их отклонит, не предлагай):")
+	idx := make(map[string]int, len(songs))
+	artists := make([]string, 0, len(songs))
+	titles := make([][]string, 0, len(songs))
+	for _, s := range songs {
+		i, ok := idx[s.Artist]
+		if !ok {
+			i = len(artists)
+			idx[s.Artist] = i
+			artists = append(artists, s.Artist)
+			titles = append(titles, nil)
+		}
+		titles[i] = append(titles[i], s.Title)
+	}
+	for i, artist := range artists {
+		fmt.Fprintf(&b, "\n- %s: %s", artist, strings.Join(titles[i], ", "))
+	}
 	return b.String()
 }
 

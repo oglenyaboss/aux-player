@@ -173,6 +173,60 @@ func TestTurnFirstTurnGlobalBlock(t *testing.T) {
 	}
 }
 
+func TestServedBlock(t *testing.T) {
+	if got := servedBlock(nil); got != "" {
+		t.Errorf("servedBlock(nil) = %q, want \"\"", got)
+	}
+	got := servedBlock([]Song{
+		{Artist: "Ken Carson", Title: "Yale"},
+		{Artist: "SoFaygo", Title: "Knock Knock"},
+		{Artist: "Ken Carson", Title: "Freestyle 2"},
+	})
+	want := "Уже выдавали в прошлых сессиях (код их отклонит, не предлагай):\n" +
+		"- Ken Carson: Yale, Freestyle 2\n" +
+		"- SoFaygo: Knock Knock"
+	if got != want {
+		t.Errorf("servedBlock:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestTurnFirstTurnServedBlock(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("c1", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "served", Session: "other", Artist: "Ken Carson", Title: "Yale"})
+	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
+		t.Fatalf("ход 1: %v", err)
+	}
+	user := ch.got[0][1].Content
+	want := "в духе X\n\n" + servedBlock(e.sig.servedElsewhere("s1"))
+	if user != want {
+		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
+	}
+}
+
+func TestHistoryServedBlock(t *testing.T) {
+	e := newTestEngine(t, &fakeChatter{})
+	if h := e.history(); strings.Contains(h, "Уже выдавали в прошлых сессиях") {
+		t.Fatalf("history без записей содержит блок:\n%s", h)
+	}
+	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "served", Session: "other", Artist: "SoFaygo", Title: "Knock Knock"})
+	h := e.history()
+	want := servedBlock(e.sig.servedElsewhere("s1"))
+	if want == "" {
+		t.Fatal("servedBlock пуст, тест бессмыслен")
+	}
+	if !strings.HasSuffix(h, want) {
+		t.Errorf("history не заканчивается на блок:\n%s\nwant suffix:\n%s", h, want)
+	}
+}
+
 func TestGlobalBlock(t *testing.T) {
 	if got := globalBlock(nil); got != "" {
 		t.Errorf("globalBlock(nil) = %q, want \"\"", got)
@@ -443,5 +497,37 @@ func TestTurnTailAndPromptMentionRatings(t *testing.T) {
 	}
 	if !strings.Contains(promptRules, "явные оценки владельца") {
 		t.Error("promptRules не содержит «явные оценки владельца»")
+	}
+}
+
+func TestTurnReplyClearsReserve(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("c1", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"},
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+		toolResp(call("c3", "submit_candidates", `{"tracks":[
+			{"artist":"E","title":"T5","why":"w"},
+			{"artist":"F","title":"T6","why":"w"},
+			{"artist":"G","title":"T7","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	if _, err := e.Turn(context.Background(), "запрос"); err != nil {
+		t.Fatalf("ход 1: %v", err)
+	}
+	p, err := e.Turn(context.Background(), "чето мимо")
+	if err != nil {
+		t.Fatalf("ход 2: %v", err)
+	}
+	if len(p.Tracks) != 3 || p.Tracks[0].Artist != "E" {
+		t.Errorf("порция 2: %+v, want E, F, G", p.Tracks)
+	}
+	user := ch.got[2][len(ch.got[2])-1].Content
+	if strings.Contains(user, "Из запаса") {
+		t.Errorf("после реплики запас не сброшен:\n%s", user)
 	}
 }

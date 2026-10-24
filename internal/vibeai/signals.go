@@ -106,6 +106,32 @@ func (s *Signals) servedBefore(song Song, session string) bool {
 	return served && !played
 }
 
+func (s *Signals) servedElsewhere(session string) []Song {
+	cutoff := s.now().Add(-14 * 24 * time.Hour)
+	played := make(map[string]bool)
+	for _, r := range s.recs {
+		if r.Kind == "played" {
+			played[songKey(Song{Artist: r.Artist, Title: r.Title})] = true
+		}
+	}
+	seen := make(map[string]bool)
+	out := make([]Song, 0, 8)
+	for i := len(s.recs) - 1; i >= 0 && len(out) < 100; i-- {
+		r := s.recs[i]
+		if r.Kind != "served" || r.Session == session || r.Time.Before(cutoff) {
+			continue
+		}
+		song := Song{Artist: r.Artist, Title: r.Title}
+		k := songKey(song)
+		if seen[k] || played[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, song)
+	}
+	return out
+}
+
 func (s *Signals) blockedArtist(artist, session string) string {
 	for _, r := range s.recs {
 		if r.Kind != "skip_early" || r.Session != session {

@@ -29,6 +29,11 @@ type Verdict struct {
 	Reason     string // "" если принят
 }
 
+type reserved struct {
+	sug  Suggestion
+	song Song
+}
+
 type Session struct {
 	lib, favs       *Library
 	known           map[string]bool
@@ -39,6 +44,7 @@ type Session struct {
 	portion         []Entry
 	inPortion       map[string]bool
 	portionArts     map[string]int
+	reserve         []reserved
 	knownCount      int
 	sig             *Signals
 	sessionID       string
@@ -96,6 +102,7 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 	v.Song = song
 	if s.Need() == 0 {
 		v.Reason = "порция заполнена"
+		s.addReserve(sug, song)
 		return v
 	}
 	arts := songArtists(song)
@@ -131,7 +138,7 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			}
 		}
 	}
-	if s.lib.Has(song) && !s.favs.Has(song) {
+	if s.lib.Has(song) && !s.favs.Has(song) && !s.hasSeedArtist(arts) {
 		v.Reason = "известный трек (библиотека)"
 		return v
 	}
@@ -176,6 +183,44 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 	}
 	v.Accepted = true
 	return v
+}
+
+func (s *Session) addReserve(sug Suggestion, song Song) {
+	if len(s.reserve) >= s.Size {
+		return
+	}
+	k := songKey(song)
+	for _, r := range s.reserve {
+		if songKey(r.song) == k {
+			return
+		}
+	}
+	s.reserve = append(s.reserve, reserved{sug: sug, song: song})
+}
+
+func (s *Session) DrainReserve() []Verdict {
+	reserve := s.reserve
+	s.reserve = nil
+	verdicts := make([]Verdict, 0, len(reserve))
+	for _, r := range reserve {
+		verdicts = append(verdicts, s.Offer(r.sug, r.song, true))
+	}
+	return verdicts
+}
+
+func (s *Session) ClearReserve() { s.reserve = nil }
+
+func (s *Session) Done() bool {
+	return s.Need() <= s.Size/10
+}
+
+func (s *Session) hasSeedArtist(arts []string) bool {
+	for _, a := range arts {
+		if m := s.seeds[a]; m == "want_it" || m == "and_similar" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Session) maxKnown() int {

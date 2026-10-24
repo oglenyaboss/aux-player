@@ -110,6 +110,25 @@ func TestOfferLibraryAndFavorite(t *testing.T) {
 	}
 }
 
+func TestOfferSeedLibraryTrack(t *testing.T) {
+	lib := []Song{
+		{ID: "1", Artist: "Don Toliver", Title: "BANDIT"},
+		{ID: "2", Artist: "Travis Scott", Title: "FE!N (feat. Playboi Carti)"},
+		{ID: "3", Artist: "Yeat", Title: "Talk"},
+	}
+	s := NewSession(lib, nil, 20)
+	s.SetPlan(Plan{Seeds: []Seed{{Artist: "Don Toliver", Mode: "and_similar"}, {Artist: "Playboi Carti", Mode: "want_it"}}})
+	for _, song := range lib[:2] {
+		if v := s.Offer(Suggestion{Artist: song.Artist, Title: song.Title}, song, true); !v.Accepted {
+			t.Errorf("%s — %s: rejected: %s", song.Artist, song.Title, v.Reason)
+		}
+	}
+	v := s.Offer(Suggestion{Artist: "Yeat", Title: "Talk"}, lib[2], true)
+	if v.Accepted || v.Reason != "известный трек (библиотека)" {
+		t.Errorf("non-seed library track: got (%v, %q), want (false, \"известный трек (библиотека)\")", v.Accepted, v.Reason)
+	}
+}
+
 func TestOfferArtistLimit(t *testing.T) {
 	s := NewSession(nil, nil, 20)
 	for i, title := range []string{"A", "B"} {
@@ -262,6 +281,168 @@ func TestOfferSignalsBlockedViaFeatArtist(t *testing.T) {
 	v := s.Offer(Suggestion{Artist: "Cochise & $NOT", Title: "Tell Em"}, song, true)
 	if v.Accepted || v.Reason != "скипнут в этой сессии" {
 		t.Errorf("got (%v, %q), want (false, \"скипнут в этой сессии\")", v.Accepted, v.Reason)
+	}
+}
+
+func TestReserveOverflowDrains(t *testing.T) {
+	s := NewSession(nil, nil, 1)
+	v1 := s.Offer(Suggestion{Artist: "Yeat", Title: "A"}, Song{ID: "1", Artist: "Yeat", Title: "A"}, true)
+	if !v1.Accepted {
+		t.Fatalf("first: rejected: %s", v1.Reason)
+	}
+	v2 := s.Offer(Suggestion{Artist: "Don Toliver", Title: "B"}, Song{ID: "2", Artist: "Don Toliver", Title: "B"}, true)
+	if v2.Accepted || v2.Reason != "порция заполнена" {
+		t.Fatalf("second: got (%v, %q), want (false, \"порция заполнена\")", v2.Accepted, v2.Reason)
+	}
+	s.ClosePortion()
+	out := s.DrainReserve()
+	if len(out) != 1 {
+		t.Fatalf("drain: %d вердиктов, want 1", len(out))
+	}
+	if !out[0].Accepted || out[0].Song.Artist != "Don Toliver" || out[0].Song.Title != "B" {
+		t.Fatalf("drain: got (%v, %+v), want принятый Don Toliver — B", out[0].Accepted, out[0].Song)
+	}
+	portion := s.Portion()
+	if len(portion) != 1 || portion[0].Song.Artist != "Don Toliver" || portion[0].Song.Title != "B" {
+		t.Fatalf("portion: %+v, want [Don Toliver — B]", portion)
+	}
+}
+
+func TestReserveSkipsNotFoundAndOtherRejects(t *testing.T) {
+	s := NewSession(nil, nil, 1)
+	v1 := s.Offer(Suggestion{Artist: "Yeat", Title: "A"}, Song{ID: "1", Artist: "Yeat", Title: "A"}, true)
+	if !v1.Accepted {
+		t.Fatalf("first: rejected: %s", v1.Reason)
+	}
+	v2 := s.Offer(Suggestion{Artist: "C", Title: "T3"}, Song{}, false)
+	if v2.Accepted || v2.Reason != "нет в Apple" {
+		t.Fatalf("not found: got (%v, %q), want (false, \"нет в Apple\")", v2.Accepted, v2.Reason)
+	}
+	s.ClosePortion()
+	if out := s.DrainReserve(); len(out) != 0 {
+		t.Fatalf("drain: %d вердиктов, want 0: %+v", len(out), out)
+	}
+	if got := s.Portion(); len(got) != 0 {
+		t.Errorf("portion после слива: %+v, want пусто", got)
+	}
+
+	w := NewSession(nil, nil, 2)
+	w.SetPlan(Plan{Exclusions: []string{"Xeno"}})
+	if v := w.Offer(Suggestion{Artist: "A", Title: "T1"}, Song{ID: "1", Artist: "A", Title: "T1"}, true); !v.Accepted {
+		t.Fatalf("A: rejected: %s", v.Reason)
+	}
+	xeno := Song{ID: "x", Artist: "Xeno", Title: "X"}
+	if v := w.Offer(Suggestion{Artist: "Xeno", Title: "X"}, xeno, true); v.Accepted || v.Reason != "исключение: Xeno" {
+		t.Fatalf("xeno: got (%v, %q), want (false, \"исключение: Xeno\")", v.Accepted, v.Reason)
+	}
+	if v := w.Offer(Suggestion{Artist: "C", Title: "T3"}, Song{}, false); v.Reason != "нет в Apple" {
+		t.Fatalf("C: got %q", v.Reason)
+	}
+	if v := w.Offer(Suggestion{Artist: "B", Title: "T2"}, Song{ID: "2", Artist: "B", Title: "T2"}, true); !v.Accepted {
+		t.Fatalf("B: rejected: %s", v.Reason)
+	}
+	w.ClosePortion()
+	if out := w.DrainReserve(); len(out) != 0 {
+		t.Errorf("drain (исключение и нет в Apple): %d вердиктов, want 0: %+v", len(out), out)
+	}
+}
+
+func TestReserveDedupAndCap(t *testing.T) {
+	s := NewSession(nil, nil, 2)
+	for i, want := range []string{"A", "B"} {
+		v := s.Offer(Suggestion{Artist: want, Title: "T"}, Song{ID: fmt.Sprintf("%d", i), Artist: want, Title: "T"}, true)
+		if !v.Accepted {
+			t.Fatalf("%s: rejected: %s", want, v.Reason)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		v := s.Offer(Suggestion{Artist: "C", Title: "T3"}, Song{ID: "c", Artist: "C", Title: "T3"}, true)
+		if v.Accepted || v.Reason != "порция заполнена" {
+			t.Fatalf("C %d-й: got (%v, %q)", i, v.Accepted, v.Reason)
+		}
+	}
+	for i, want := range []string{"D", "E"} {
+		v := s.Offer(Suggestion{Artist: want, Title: fmt.Sprintf("T%d", 4+i)}, Song{ID: want, Artist: want, Title: fmt.Sprintf("T%d", 4+i)}, true)
+		if v.Accepted || v.Reason != "порция заполнена" {
+			t.Fatalf("%s: got (%v, %q)", want, v.Accepted, v.Reason)
+		}
+	}
+	s.ClosePortion()
+	out := s.DrainReserve()
+	if len(out) != 2 {
+		t.Fatalf("drain: %d вердиктов, want 2 (C, D, без дубля C и без E): %+v", len(out), out)
+	}
+	for i, want := range []string{"C", "D"} {
+		if !out[i].Accepted || out[i].Song.Artist != want {
+			t.Errorf("drain[%d] = (%v, %+v), want принятый %s", i, out[i].Accepted, out[i].Song, want)
+		}
+	}
+}
+
+func TestReserveCapAtSize(t *testing.T) {
+	s := NewSession(nil, nil, 1)
+	if v := s.Offer(Suggestion{Artist: "A", Title: "T1"}, Song{ID: "1", Artist: "A", Title: "T1"}, true); !v.Accepted {
+		t.Fatalf("A: rejected: %s", v.Reason)
+	}
+	for i, want := range []Song{{ID: "2", Artist: "B", Title: "T2"}, {ID: "3", Artist: "C", Title: "T3"}} {
+		v := s.Offer(Suggestion{Artist: want.Artist, Title: want.Title}, want, true)
+		if v.Accepted || v.Reason != "порция заполнена" {
+			t.Fatalf("%d: got (%v, %q)", i, v.Accepted, v.Reason)
+		}
+	}
+	s.ClosePortion()
+	out := s.DrainReserve()
+	if len(out) != 1 || !out[0].Accepted || out[0].Song.Artist != "B" {
+		t.Fatalf("drain: got %+v, want один принятый B", out)
+	}
+	s.ClosePortion()
+	if out := s.DrainReserve(); len(out) != 0 {
+		t.Errorf("второй слив: %d вердиктов, want 0", len(out))
+	}
+}
+
+func TestClearReserve(t *testing.T) {
+	s := NewSession(nil, nil, 1)
+	s.Offer(Suggestion{Artist: "A", Title: "T1"}, Song{ID: "1", Artist: "A", Title: "T1"}, true)
+	s.Offer(Suggestion{Artist: "B", Title: "T2"}, Song{ID: "2", Artist: "B", Title: "T2"}, true)
+	s.ClosePortion()
+	s.ClearReserve()
+	if out := s.DrainReserve(); len(out) != 0 {
+		t.Errorf("после ClearReserve: %d вердиктов, want 0", len(out))
+	}
+}
+
+func TestSessionDone(t *testing.T) {
+	fill := func(s *Session, n int) {
+		t.Helper()
+		for i := 0; i < n; i++ {
+			artist, title := fmt.Sprintf("A%d", i), fmt.Sprintf("T%d", i)
+			v := s.Offer(Suggestion{Artist: artist, Title: title}, Song{ID: fmt.Sprintf("%d", i), Artist: artist, Title: title}, true)
+			if !v.Accepted {
+				t.Fatalf("%s: rejected: %s", artist, v.Reason)
+			}
+		}
+	}
+	s := NewSession(nil, nil, 20)
+	fill(s, 18)
+	if !s.Done() {
+		t.Errorf("18 из 20: Done = false, want true")
+	}
+	w := NewSession(nil, nil, 20)
+	fill(w, 17)
+	if w.Done() {
+		t.Errorf("17 из 20: Done = true, want false")
+	}
+	th := NewSession(nil, nil, 3)
+	fill(th, 2)
+	if th.Done() {
+		t.Errorf("2 из 3: Done = true, want false")
+	}
+	if !th.Offer(Suggestion{Artist: "A100", Title: "T100"}, Song{ID: "100", Artist: "A100", Title: "T100"}, true).Accepted {
+		t.Fatal("A100: rejected")
+	}
+	if !th.Done() {
+		t.Errorf("3 из 3: Done = false, want true")
 	}
 }
 

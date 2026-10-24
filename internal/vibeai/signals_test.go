@@ -215,6 +215,31 @@ func TestGlobalSkipsOrderAndSingleSession(t *testing.T) {
 	}
 }
 
+func TestServedElsewhere(t *testing.T) {
+	sig := testSignals(t, "")
+	addSignals(t, sig,
+		signalRec{Time: testNow.Add(-20 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Old", Title: "Song"},
+		signalRec{Time: testNow.Add(-2 * 24 * time.Hour), Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
+		signalRec{Time: testNow.Add(-24 * time.Hour), Kind: "served", Session: "s2", Artist: "Self", Title: "Own"},
+		signalRec{Time: testNow.Add(-30 * time.Minute), Kind: "served", Session: "s1", Artist: "Played", Title: "Song"},
+		signalRec{Time: testNow.Add(-30 * time.Minute), Kind: "played", Session: "s3", Artist: "Played", Title: "Song"},
+		signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "SoFaygo", Title: "Knock Knock"},
+	)
+	got := sig.servedElsewhere("s2")
+	want := []Song{{Artist: "SoFaygo", Title: "Knock Knock"}, {Artist: "Ken Carson", Title: "Yale"}}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("got[%d] = %+v, want %+v", i, got[i], w)
+		}
+		if !sig.servedBefore(w, "s2") {
+			t.Errorf("servedBefore(%+v) = false, want true", w)
+		}
+	}
+}
+
 func TestLastOutcomeLatestWins(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig,
