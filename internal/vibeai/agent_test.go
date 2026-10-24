@@ -713,8 +713,10 @@ func TestPromptRulesScaleNoteLater(t *testing.T) {
 
 func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 	for _, want := range []string{
-		"Однозначный запрос — без вопросов, сразу set_plan",
-		"Не задавай дежурных вопросов",
+		"перед set_plan уточни вайб через ask_user",
+		"Запрос только про настроение или занятие",
+		"Без вопросов, сразу set_plan — только если запрос задаёт и ориентир, и направление звучания",
+		"Не задавай дежурный набор вопросов",
 		"Не повторяй вопросы из списка «Вопросы уже заданы»",
 	} {
 		if !strings.Contains(promptRules, want) {
