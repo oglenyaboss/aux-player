@@ -34,6 +34,9 @@ type stageScreen struct {
 	last    time.Time
 	covers  map[string]bool // keys whose cover was requested
 	want    []stageCover    // covers to fetch on the next tick
+
+	initErr string // launch error the scene shows on the next tick
+	lastErr string // host error already shown in the player, so a new one toasts once
 }
 
 type stageCover struct{ key, url string }
@@ -45,18 +48,20 @@ func newStageScreen(host *Model) *stageScreen {
 	} else {
 		stage.SetLang(stage.DefaultLang())
 	}
-	opts := stageOptions(host.cfg)
+	opts := stageOptions(host.cfg, host.appleLogin != nil)
 	opts.OnAction = s.act
 	s.st = stage.New(opts)
 	return s
 }
 
 // stageOptions reads the scene's opening state from the config: onboarding
-// while the agent key is empty, the steps already connected, the eggs opt-out.
-func stageOptions(cfg *config.Config) stage.Options {
+// while the agent key is empty or the Apple sign-in waits for the ask,
+// the steps already connected, the eggs opt-out.
+func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
+	apple := !appleLogin || cfg.AppleUserToken != ""
 	return stage.Options{
-		Onboard:   cfg.VibeLLMAPIKey == "",
-		Connected: [3]bool{true, false, cfg.LastfmSessionKey != ""},
+		Onboard:   cfg.VibeLLMAPIKey == "" || !apple,
+		Connected: [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
 		NoEggs:    cfg.VibeEggs != nil && !*cfg.VibeEggs,
 		Example:   func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
 	}
@@ -196,6 +201,16 @@ func (s *stageScreen) act(a stage.Action) {
 		s.feed = s.feed[:s.open] // the bridge trims the same way on cancel
 		s.out = append(s.out, views.VibeAICancelMsg{})
 	case stage.ConnectApple:
+		if s.host.appleLogin != nil {
+			// The sign-in waits for the onboarding to ask; the answer lands
+			// later through AppleLoginMsg, nothing ships right away. A buffer
+			// of one keeps a repeated enter from queuing a second login.
+			select {
+			case s.host.appleLogin <- struct{}{}:
+			default:
+			}
+			break
+		}
 		s.cmds = append(s.cmds, func() tea.Msg { return stageStepMsg{step: 0} })
 	case stage.ConnectLastfm:
 		key, secret := s.host.cfg.LastfmAPIKey, s.host.cfg.LastfmAPISecret
@@ -243,6 +258,15 @@ func (s *stageScreen) act(a stage.Action) {
 			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 		}
 	case stage.Quit:
+		if s.host.auxOnly {
+			// The AUX is the whole app: leaving it leaves the program.
+			s.host.vibeAI.close()
+			if s.host.player != nil {
+				_ = s.host.player.Close()
+			}
+			s.cmds = append(s.cmds, tea.Quit)
+			break
+		}
 		s.host.activePanel = -1
 	}
 }

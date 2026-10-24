@@ -73,7 +73,7 @@ func runTUI(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	opts := tui.Options{MemProfiling: memProfiling}
+	opts := tui.Options{MemProfiling: memProfiling, AUXOnly: true}
 
 	// Apply theme before creating any TUI model so all panels pick up the palette.
 	theme, themeErr := styles.LoadTheme(cfg.Theme, filepath.Dir(cfgPath))

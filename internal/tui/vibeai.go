@@ -13,6 +13,7 @@ import (
 	"github.com/simone-vibes/vibez/internal/config"
 	"github.com/simone-vibes/vibez/internal/player"
 	"github.com/simone-vibes/vibez/internal/provider"
+	"github.com/simone-vibes/vibez/internal/stage"
 	"github.com/simone-vibes/vibez/internal/tui/views"
 	"github.com/simone-vibes/vibez/internal/vibeai"
 	"github.com/simone-vibes/vibez/internal/vibeai/llm"
@@ -273,6 +274,22 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			dt = 100 * time.Millisecond
 		}
 		v.last = now
+		if e := v.initErr; e != "" {
+			switch v.st.Phase() {
+			case stage.PhIntro:
+				v.st.Fail(e)
+				v.initErr = ""
+			case stage.PhPlay:
+				v.st.Toast(e)
+				v.initErr = ""
+			}
+		}
+		if m.auxOnly && m.errMsg != v.lastErr {
+			v.lastErr = m.errMsg
+			if m.errMsg != "" && v.st.Phase() == stage.PhPlay {
+				v.st.Toast(m.errMsg)
+			}
+		}
 		if m.playerState.Track != nil {
 			v.st.Now(views.PlaybackID(*m.playerState.Track), m.playerState.Position.Seconds(), m.playerState.Playing)
 		}
@@ -297,6 +314,14 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 
 	case stageModelsMsg:
 		v.st.Models(msg.list, msg.total, msg.err)
+		return nil
+
+	case AppleLoginMsg:
+		errText := ""
+		if msg.Err != nil {
+			errText = msg.Err.Error()
+		}
+		v.st.StepDone(0, errText)
 		return nil
 
 	case vibeAIProgressMsg:
@@ -397,7 +422,6 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 		if msg.refill || r.stream {
 			cmds := []tea.Cmd{m.vibeAIAppend(msg.tracks)}
-			v.SetNotice(fmt.Sprintf("поток: +%d в очереди", len(msg.tracks)))
 			if msg.refill && r.playlistID != "" {
 				cmds = append(cmds, m.vibeAISaveCmd())
 			}
@@ -415,23 +439,23 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			}
 			return m.vibeAIPlay(r.feed[msg.Index:])
 		case views.VibeAIQueue:
-			v.SetNotice(fmt.Sprintf("+%d в очередь", len(r.tracks)))
+			v.SetNotice(fmt.Sprintf(stage.Tr("+%d в очередь", "+%d queued"), len(r.tracks)))
 			return m.vibeAIAppend(r.tracks)
 		case views.VibeAISave:
 			if r.savedPortion == r.portion {
-				v.SetNotice("эта порция уже в ♫ " + r.playlistName)
+				v.SetNotice(stage.Tr("эта порция уже в ♫ ", "this batch is already in ♫ ") + r.playlistName)
 				return nil
 			}
-			v.SetNotice("сохраняю в Apple Music…")
+			v.SetNotice(stage.Tr("сохраняю в Apple Music…", "saving to Apple Music…"))
 			return m.vibeAISaveCmd()
 		case views.VibeAIStream:
 			r.stream = !r.stream
 			r.streamForID = ""
 			v.SetStream(r.stream)
 			if r.stream {
-				v.SetNotice("поток включён: новые порции сами встают в очередь")
+				v.SetNotice(stage.Tr("поток включён: новые порции сами встают в очередь", "stream on: new batches join the queue"))
 			} else {
-				v.SetNotice("поток выключен")
+				v.SetNotice(stage.Tr("поток выключен", "stream off"))
 			}
 		}
 
@@ -444,12 +468,10 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		switch msg.Rating {
 		case 1:
 			kind = "more"
-			v.SetNotice("больше такого: " + t.Artist + " — " + t.Title)
 		case -1:
 			kind = "less"
-			v.SetNotice("меньше такого: " + t.Artist + " — " + t.Title)
 		default:
-			v.SetNotice("оценка снята")
+			v.SetNotice(stage.Tr("оценка снята", "rating cleared"))
 		}
 		r.pending = append(r.pending, vibeai.Outcome{ID: t.ID, Artist: t.Artist, Title: t.Title, Kind: kind})
 		m.appendLog(fmt.Sprintf("[vibe] %s — %s: %s", t.Artist, t.Title, kind))
@@ -464,13 +486,13 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 	case vibeAISavedMsg:
 		if msg.err != nil {
 			m.appendLog(fmt.Sprintf("[vibe] playlist error: %v", msg.err))
-			v.SetNotice("✗ плейлист: " + msg.err.Error())
+			v.SetNotice(stage.Tr("✗ плейлист: ", "✗ playlist: ") + msg.err.Error())
 			return nil
 		}
 		r.playlistID, r.playlistName = msg.id, msg.name
 		v.SetPlaylist(msg.name)
 		if msg.created {
-			v.SetNotice(fmt.Sprintf("создан ♫ %s · %d треков", msg.name, msg.n))
+			v.SetNotice(fmt.Sprintf(stage.Tr("создан ♫ %s · %d треков", "created ♫ %s · %d tracks"), msg.name, msg.n))
 		} else {
 			v.SetNotice(fmt.Sprintf("+%d → ♫ %s", msg.n, msg.name))
 		}

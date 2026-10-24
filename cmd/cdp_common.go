@@ -28,6 +28,12 @@ type cdpPlatformHooks struct {
 }
 
 func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int, hooks cdpPlatformHooks) error {
+	// Without a stored user token the sign-in waits for the AUX onboarding to ask.
+	var ask chan struct{}
+	if cfg.AppleUserToken == "" {
+		ask = make(chan struct{}, 1)
+		opts.AppleLogin = ask
+	}
 	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *cdp.Player, 1)
 	runDone := make(chan struct{})
@@ -98,9 +104,15 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 
 		if cfg.AppleUserToken == "" {
 			prog.Send(tui.InitStatusMsg("Authorizing with Apple Music..."))
-			if err := auth.Login(cfg); err != nil {
-				prog.Send(tui.InitErrMsg{Err: fmt.Errorf("authentication: %w", err)})
-				return
+			if ask != nil {
+				appleLoginLoop(ask, func() error { return auth.Login(cfg) }, prog.Send)
+			} else {
+				// A token that existed at startup died during the check: the
+				// AUX screen is already up, sign in without an ask.
+				if err := auth.Login(cfg); err != nil {
+					prog.Send(tui.InitErrMsg{Err: fmt.Errorf("authentication: %w", err)})
+					return
+				}
 			}
 			// A fresh session has no storefront in config yet. The check that
 			// validates returning sessions reports it.

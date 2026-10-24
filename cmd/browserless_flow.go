@@ -18,6 +18,12 @@ import (
 )
 
 func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int) error {
+	// Without a stored user token the sign-in waits for the AUX onboarding to ask.
+	var ask chan struct{}
+	if cfg.AppleUserToken == "" {
+		ask = make(chan struct{}, 1)
+		opts.AppleLogin = ask
+	}
 	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *browserless.Player, 1)
 	restartExe := make(chan string, 1)
@@ -64,9 +70,15 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 
 		if cfg.AppleUserToken == "" {
 			prog.Send(tui.InitStatusMsg("Authorizing with Apple Music..."))
-			if err := auth.Login(cfg); err != nil {
-				prog.Send(tui.InitErrMsg{Err: fmt.Errorf("authentication: %w", err)})
-				return
+			if ask != nil {
+				appleLoginLoop(ask, func() error { return auth.Login(cfg) }, prog.Send)
+			} else {
+				// A token that existed at startup died during the check: the
+				// AUX screen is already up, sign in without an ask.
+				if err := auth.Login(cfg); err != nil {
+					prog.Send(tui.InitErrMsg{Err: fmt.Errorf("authentication: %w", err)})
+					return
+				}
 			}
 			if onUserToken != nil {
 				onUserToken(cfg.AppleUserToken)

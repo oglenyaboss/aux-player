@@ -7,6 +7,10 @@ import (
 
 // Options configures optional TUI features at startup.
 type Options struct {
+	// AUXOnly runs vibez as the AUX screen alone: no vibez intro, no panels, the scene owns the terminal.
+	AUXOnly bool
+	// AppleLogin, when set, holds the Apple Music sign-in until the onboarding asks for it.
+	AppleLogin chan<- struct{}
 	// MemProfiling enables live RSS display (vibez + helper) in the header.
 	// Activate with --mem-profiling on the command line.
 	MemProfiling bool
@@ -40,6 +44,9 @@ type EngineReadyMsg struct {
 
 // InitErrMsg is sent when initialization fails fatally.
 type InitErrMsg struct{ Err error }
+
+// AppleLoginMsg is the outcome of the Apple Music sign-in the onboarding asked for.
+type AppleLoginMsg struct{ Err error }
 
 // RestartMsg is sent when vibez has self-updated and needs to re-exec.
 // The model handles it by quitting cleanly so the caller can exec the new binary.

@@ -343,6 +343,11 @@ type Model struct {
 	vibeAI  *vibeAIRun
 	vibeAIP *vibeAIPanel
 
+	// AUX-only launch: the vibez chrome is off and the scene owns the terminal;
+	// appleLogin carries the asks from the Apple Music onboarding step.
+	auxOnly    bool
+	appleLogin chan<- struct{}
+
 	// Search popup (not a panel)
 	search *views.SearchModel
 
@@ -413,6 +418,8 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		renderArt:        artRenderer(),
 		// Measured cell height/width ratio, so album art renders as a true square.
 		artCellAsp: cellAspect(),
+		auxOnly:    opts.AUXOnly,
+		appleLogin: opts.AppleLogin,
 	}
 	if plyr != nil {
 		m.stateCh = plyr.Subscribe()
@@ -432,6 +439,15 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	m.vibeAIP = &vibeAIPanel{m: newStageScreen(m)}
 	m.vibeAIP.m.SetMemory(vibeAIMemoryLines(cfg))
 	m.panels = []ContentView{m.library, m.queue, m.lyricsP, m.feedP, m.eqP, m.aboutP, m.vibeAIP}
+	if opts.AUXOnly {
+		// The launcher skipped the vibez intro and opened the scene right away.
+		m.introStep = introDone
+		for i, p := range m.panels {
+			if p == m.vibeAIP {
+				m.activePanel = i
+			}
+		}
+	}
 	for _, line := range opts.InitialLogs {
 		m.appendLog(line)
 	}
@@ -561,7 +577,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.aboutP.SetSize(contentW, panelH)
 		m.vibeAIP.SetSize(contentW, panelH)
 
-	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg,
+	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg, AppleLoginMsg,
 		views.VibeAIAnswersMsg, views.VibeAISubmitMsg, views.VibeAICancelMsg, views.VibeAIActionMsg, views.VibeAILaterMsg, views.VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
@@ -1119,6 +1135,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMsg = msg.Err.Error()
 		m.errExpiry = time.Now().Add(30 * time.Second)
 		m.introStep = introDone
+		m.vibeAIP.m.initErr = msg.Err.Error()
 
 	case saveVolumeMsg:
 		m.cfg.SetVolume(msg.vol)
@@ -1228,6 +1245,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	}
 
+	if m.auxOnly {
+		// The scene keys first; whatever it declines and is not a player
+		// gesture stops here, pass keys fall through to the vibez globals
+		// (pause, next/prev, seek).
+		cmd, handled := m.vibeAIP.m.HandleKey(msg)
+		if handled || !auxPassKey(k) {
+			return cmd
+		}
+	}
+
 	switch m.mode {
 	case modeSearch:
 		return m.handleSearchKey(k, msg)
@@ -1238,6 +1265,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	default:
 		return m.handleNormalKey(msg, k)
 	}
+}
+
+// auxPassKey lists the keys AUX hands to the vibez player when the scene
+// declines them: pause, next and previous track, seek.
+func auxPassKey(k string) bool {
+	switch k {
+	case "space", "n", "p", "left", "right":
+		return true
+	}
+	return false
 }
 
 func (m *Model) handleSearchKey(k string, msg tea.KeyPressMsg) tea.Cmd {
@@ -3066,6 +3103,8 @@ func (m *Model) View() tea.View {
 	}
 	var content string
 	switch {
+	case m.auxOnly:
+		content = m.vibeAIP.m.Frame(m.width, m.height)
 	case m.mode == modePlaylistPicker:
 		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, m.renderPlaylistPickerModal())
 	case m.introStep != introDone:

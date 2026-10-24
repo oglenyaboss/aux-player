@@ -55,15 +55,15 @@ func obStepUntil(st *stage.Model, seconds float64, cond func() bool) {
 }
 
 func TestStageOptions(t *testing.T) {
-	o := stageOptions(&config.Config{})
+	o := stageOptions(&config.Config{}, false)
 	if !o.Onboard || o.Connected != [3]bool{true, false, false} || o.NoEggs {
 		t.Fatalf("empty config: onboard=%v connected=%v noEggs=%v, want true/[true false false]/false",
 			o.Onboard, o.Connected, o.NoEggs)
 	}
 	off := false
-	o = stageOptions(&config.Config{VibeLLMAPIKey: "k", LastfmSessionKey: "s", VibeEggs: &off})
-	if o.Onboard || o.Connected != [3]bool{true, false, true} || !o.NoEggs {
-		t.Fatalf("filled config: onboard=%v connected=%v noEggs=%v, want false/[true false true]/true",
+	o = stageOptions(&config.Config{VibeLLMAPIKey: "k", LastfmSessionKey: "s", VibeEggs: &off}, false)
+	if o.Onboard || o.Connected != [3]bool{true, true, true} || !o.NoEggs {
+		t.Fatalf("filled config: onboard=%v connected=%v noEggs=%v, want false/[true true true]/true",
 			o.Onboard, o.Connected, o.NoEggs)
 	}
 }
