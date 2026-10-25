@@ -296,3 +296,65 @@ func TestMbdtfSizes(t *testing.T) {
 		}
 	}
 }
+
+var mbdtfRunaway = Track{Artist: "Kanye West", Title: "Runaway (feat. Pusha T)", Album: "My Beautiful Dark Twisted Fantasy", Dur: 548}
+
+// mbdtfDancerCells counts black cells of the set: outside the frame and the label.
+func mbdtfDancerCells(m *Model, f *fb) int {
+	b, _ := mbdtfPlan(m)
+	n := 0
+	for py := 0; py < 2*m.h; py++ {
+		for px := 0; px < m.w; px++ {
+			inFrame := px >= b.mx-2 && px < b.mx+b.ms+2 && py >= b.my-2 && py < b.my+b.ms+2
+			inLabel := px >= b.lx && px < b.lx+b.lw && py/2 >= b.ly && py/2 < b.ly+b.lh
+			if !inFrame && !inLabel && f.pixelAt(px, py).lum() < 0.1 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// Runaway plays on the white set of the film, ballerinas in black tutus cross it.
+func TestMbdtfRunawaySet(t *testing.T) {
+	m := New(Options{SelfPlay: true})
+	m.SetSize(160, 45)
+	m.JumpPlay([]Track{mbdtfRunaway}, 0, 200)
+	steps(m, 3)
+	f := m.render()
+	if c := f.at(80, 1).bg; c.lum() < 0.75 || c.r > c.g+0.05 {
+		t.Errorf("сет не белый: %s", c.css())
+	}
+	if n := mbdtfDancerCells(m, f); n < 40 {
+		t.Errorf("на сете %d чёрных пикселей, ждём балерин", n)
+	}
+	b, _ := mbdtfPlan(m)
+	if c := f.at(b.lx, b.ly).bg; c.lum() > 0.1 {
+		t.Errorf("табличка на белом не чёрная: %s", c.css())
+	}
+	m, f = mbdtfWallFrame(t, 160, 45, 20, 3)
+	if n := mbdtfDancerCells(m, f); n != 0 {
+		t.Errorf("Dark Fantasy: на стене %d чёрных пикселей, балерины только в Runaway", n)
+	}
+}
+
+// The ballerinas move with the playback and freeze on pause.
+func TestMbdtfRunawayFreeze(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(160, 45)
+	m.JumpPlay([]Track{mbdtfRunaway}, 0, 200)
+	m.Now(mbdtfRunaway.Key(), 200, true)
+	steps(m, 3)
+	a := m.render().String()
+	steps(m, 1)
+	if m.render().String() == a {
+		t.Fatal("балерины стоят во время игры")
+	}
+	m.Now(mbdtfRunaway.Key(), m.pos, false)
+	steps(m, 0.2)
+	b := m.render().String()
+	steps(m, 1)
+	if m.render().String() != b {
+		t.Errorf("на паузе кадр меняется, ждём замерших балерин")
+	}
+}

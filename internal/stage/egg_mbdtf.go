@@ -122,6 +122,9 @@ var (
 	mbdtfCard    = hex(0xf3ece0)
 	mbdtfCardInk = hex(0x2b1d14)
 	mbdtfCardDim = hex(0x7a6a5c)
+	mbdtfSet     = hex(0xf4f4f1)
+	mbdtfTutu    = hex(0x121212)
+	mbdtfShadow  = hex(0xd6d6d1)
 )
 
 const mbdtfCredit = "George Condo, 2010"
@@ -179,6 +182,7 @@ func mbdtfCanvasOf(m *Model, name string, n int) *pixgrid {
 type mbdtfBox struct {
 	mx, my, ms, cell int
 	lx, ly, lw, lh   int
+	white            bool // Runaway: the white set of the film, the ballerinas on it
 }
 
 // mbdtfPlan hangs the painting as big as the window height allows and the wall label
@@ -196,6 +200,7 @@ func mbdtfPlan(m *Model) (b mbdtfBox, ok bool) {
 	b.my = (2*(m.h-2)-fw)/2 + 2
 	b.lx = x0 + fw + gap
 	b.ly = (b.my+b.ms/2)/2 - 1
+	b.white = foldTitle(tk.Title) == "runaway"
 	return b, b.ms >= 32
 }
 
@@ -218,10 +223,14 @@ func mbdtfCanvas(m *Model, b mbdtfBox, px, py int) col {
 	d := (float64(px)*0.6 - float64(py)) / 5
 	i := int(math.Floor(d))
 	stroke := hash(i, 0, 81) + (hash(i+1, 0, 81)-hash(i, 0, 81))*smooth(d-float64(i))
-	c := mbdtfCanvasC.mul(0.93 + 0.08*stroke + 0.04*hash(px, py, 82))
 	cx, cy := float64(b.mx+b.ms/2), float64(b.my+b.ms/2)
 	dx, dy := (float64(px)-cx)/(float64(m.w)*0.55), (float64(py)-cy)/(float64(m.h)*1.6)
-	return c.mul(0.72 + 0.28*math.Exp(-(dx*dx+dy*dy)))
+	light := math.Exp(-(dx*dx + dy*dy))
+	if b.white {
+		return mbdtfSet.mul((0.975 + 0.025*hash(px, py, 82)) * (0.86 + 0.14*light))
+	}
+	c := mbdtfCanvasC.mul(0.93 + 0.08*stroke + 0.04*hash(px, py, 82))
+	return c.mul(0.72 + 0.28*light)
 }
 
 // mbdtfAlong is where a frame pixel sits along the frame, clockwise from the top left, 0..1.
@@ -254,6 +263,10 @@ func mbdtfWall(m *Model, f *fb, b mbdtfBox) {
 		for px := 0; px < m.w; px++ {
 			f.pixel(px, py, mbdtfCanvas(m, b, px, py))
 		}
+	}
+
+	if b.white {
+		mbdtfDancers(m, f, b)
 	}
 
 	tk := m.curTrack()
@@ -311,20 +324,98 @@ func mbdtfWall(m *Model, f *fb, b mbdtfBox) {
 		}
 	}
 
-	f.fill(b.lx, b.ly, b.lw, b.lh, mbdtfCard)
+	card, ink, dim, help := mbdtfCard, mbdtfCardInk, mbdtfCardDim, mbdtfCard
+	if b.white {
+		card, ink, dim, help = mbdtfTutu, mbdtfSet, hex(0x9a9a96), hex(0x6a6a66)
+	}
+	f.fill(b.lx, b.ly, b.lw, b.lh, card)
 	tw := b.lw - 4
 	title := trunc(tk.Title, tw)
-	f.textS(b.lx+2, b.ly+1, title, mbdtfCardInk, true, false)
-	f.text(b.lx+2, b.ly+2, trunc(tk.Artist, tw), mbdtfCardInk)
-	f.textS(b.lx+2, b.ly+4, trunc(mbdtfCredit, tw), mbdtfCardDim, false, true)
-	f.text(b.lx+2, b.ly+5, fmtDur(m.pos)+" / "+fmtDur(tk.Dur), mbdtfCardDim)
+	f.textS(b.lx+2, b.ly+1, title, ink, true, false)
+	f.text(b.lx+2, b.ly+2, trunc(tk.Artist, tw), ink)
+	f.textS(b.lx+2, b.ly+4, trunc(mbdtfCredit, tw), dim, false, true)
+	f.text(b.lx+2, b.ly+5, fmtDur(m.pos)+" / "+fmtDur(tk.Dur), dim)
 	m.titleBox = image.Rect(b.lx+2, (b.ly+1)*2, b.lx+2+len([]rune(title)), (b.ly+1)*2+2)
 	m.barBox = image.Rect(b.lx+2, b.ly+5, b.lx+b.lw-2, b.ly+6)
 
 	if !m.typing {
-		help := tr("? клавиши", "? keys")
-		f.text(3, m.h-2, tr("/ сказать агенту", "/ talk to the agent"), mbdtfCard)
-		f.text(m.w-3-len([]rune(help)), m.h-2, help, mbdtfCard)
+		keys := tr("? клавиши", "? keys")
+		f.text(3, m.h-2, tr("/ сказать агенту", "/ talk to the agent"), help)
+		f.text(m.w-3-len([]rune(keys)), m.h-2, keys, help)
+	}
+}
+
+// mbdtfPoses are the ballerinas of the Runaway film in black tutus: an arabesque
+// facing right and a turn on pointe with the arms overhead.
+var mbdtfPoses = [2][]string{{
+	"...........#......",
+	"..........###.....",
+	"..........###.....",
+	"...........#......",
+	".....#############",
+	"..........###.....",
+	"..........###.....",
+	".........#####....",
+	"......###########.",
+	".....#############",
+	"###########.......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+	"...........#......",
+}, {
+	"......###......",
+	".....#...#.....",
+	"....#..#..#....",
+	"....#.###.#....",
+	".....#####.....",
+	"......###......",
+	".......#.......",
+	"......###......",
+	"......###......",
+	"......###......",
+	".....#####.....",
+	"..###########..",
+	".#############.",
+	"..###########..",
+	"......#.#......",
+	"......#.#......",
+	"......#.#......",
+	"......#.#......",
+	"......#.#......",
+	".......#.......",
+}}
+
+// mbdtfDancers: five ballerinas cross the set behind the painting, holding an
+// arabesque, then turning on pointe; they move with the playback, so a pause freezes
+// them like the end of the scene in the film.
+func mbdtfDancers(m *Model, f *fb, b mbdtfBox) {
+	floor := b.my + b.ms + 1
+	span := float64(m.w + 30)
+	for i := 0; i < 5; i++ {
+		x := int(math.Mod(hash(i, 1, 91)*span+float64(i)*span/5+m.pos*3, span)) - 15
+		pose := mbdtfPoses[0]
+		if math.Mod(m.pos/2.4+hash(i, 2, 91), 1) > 0.6 {
+			pose = mbdtfPoses[1]
+		}
+		h := len(pose)
+		for dx := -4; dx <= 18; dx++ {
+			if math.Abs(float64(dx)-7) < 7 {
+				f.pixel(x+dx, floor, mbdtfShadow)
+			}
+		}
+		for py, row := range pose {
+			for px, r := range row {
+				if r == '#' {
+					f.pixel(x+px, floor-h+py, mbdtfTutu)
+				}
+			}
+		}
 	}
 }
 
