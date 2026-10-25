@@ -330,6 +330,13 @@ func TestToTracks(t *testing.T) {
 	}
 }
 
+func TestToTrackReleased(t *testing.T) {
+	tr := toTrack(Entry{Song: Song{ID: "1", Released: "2020-12-25"}})
+	if tr.Released != "2020-12-25" {
+		t.Errorf("Released = %q, ждём 2020-12-25", tr.Released)
+	}
+}
+
 func TestTurnPortionNoteAndLater(t *testing.T) {
 	ch := &fakeChatter{resps: []llm.Response{
 		toolResp(

@@ -3,10 +3,12 @@ package stage
 import (
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
-// egg is a touch on the player screen for one artist, album or track.
-// ponytail: matched by artist or "artist title" in the prototype; the real player matches the album from Apple Music metadata.
+// egg is a touch on the player screen for one artist, album or track: a rule
+// matches the artist, the album or the title, and the album and the release
+// date come down from the Apple Music metadata.
 type egg struct {
 	knob    rune // progress knob, morphs in a few seconds into the track
 	knobCol col
@@ -24,6 +26,15 @@ type egg struct {
 
 	jewel bool // a pink diamond set into the top of the cover
 	tint  col  // backdrop leans toward this colour
+
+	// hooks: a bespoke egg draws itself through these; nil changes nothing.
+	layout func(m *Model, g playGeom) playGeom                                // the play layout from the window's g; never calls m.geom
+	bg     func(m *Model, c col, x, y int) col                                // one backdrop cell of the player
+	cover  func(m *Model, at func(px, py int) col, px, py int) col            // one cover pixel; at samples the layer below
+	ink    func(m *Model, c col, u, v float64) col                            // one title pixel; u, v run 0..1 across the title
+	bar    func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) // one progress-bar cell
+	over   func(m *Model, f *fb, g playGeom)                                  // on top of the player, under the cold open
+	step   func(m *Model)                                                     // every frame of the track
 }
 
 const eggKnobAt = 6.0
@@ -41,27 +52,266 @@ var wlr = theme{
 	bad:  hex(0xe3242b),
 }
 
-var eggs = map[string]egg{
-	"Lil Uzi Vert": {knob: '◆', knobCol: hex(0xff5fae), jewel: true, tint: hex(0xff5fae)},
-	"Playboi Carti Magnolia": {
+// eggRule hangs an egg on the artist's tracks, narrowed to one album or one title when set.
+type eggRule struct {
+	artist, album, title string
+	e                    egg
+}
+
+var eggRules = []eggRule{
+	{artist: "Lil Uzi Vert", e: egg{knob: '◆', knobCol: hex(0xff5fae), jewel: true, tint: hex(0xff5fae)}},
+	{artist: "Playboi Carti", title: "Magnolia", e: egg{
 		cold:   []string{"YO PI'ERRE,", "YOU WANNA COME OUT HERE?"},
 		credit: "prod. pi'erre bourne",
-	},
-	"Frank Ocean Nights": {switchAt: 210},
-	"Playboi Carti Sky":  {theme: &wlr, drips: true, big: true, ragged: true, grain: true, knob: '†', knobCol: hex(0xf2f2f2)},
+	}},
+	{artist: "Frank Ocean", title: "Nights", e: egg{switchAt: 210}},
+	{artist: "Playboi Carti", album: "Whole Lotta Red", e: egg{
+		theme: &wlr, drips: true, big: true, ragged: true, grain: true, knob: '†', knobCol: hex(0xf2f2f2)}},
+}
+
+// inText: the cell holds a letter or a space between letters, so an egg that paints
+// the backdrop pixel by pixel leaves it to the text.
+func inText(f *fb, x, y int) bool {
+	glyph := func(c *cell) bool { return c != nil && !c.pix && c.ch != ' ' }
+	return glyph(f.at(x, y)) || glyph(f.at(x-1, y)) || glyph(f.at(x+1, y))
 }
 
 func (m *Model) eggOf(t Track) *egg {
 	if m.o.NoEggs {
 		return nil
 	}
-	if e, ok := eggs[t.Artist+" "+t.Title]; ok {
-		return &e
+	k := t.Key()
+	if e, ok := m.eggMemo[k]; ok {
+		return e
 	}
-	if e, ok := eggs[t.Artist]; ok {
-		return &e
+	e := eggRuleFor(t)
+	m.eggMemo[k] = e
+	return e
+}
+
+// eggRuleFor runs the rules once per track and folds every match into one egg,
+// in layers: the naked artist at the bottom, then the album era, then title rules on top.
+// One album match drops the naked-artiest layer whole: the album replaces the artist image.
+func eggRuleFor(t Track) *egg {
+	var arts, albums, titles []*eggRule
+	for i := range eggRules {
+		r := &eggRules[i]
+		if !r.matches(t) {
+			continue
+		}
+		switch ruleScore(r) {
+		case 3:
+			titles = append(titles, r)
+		case 2:
+			albums = append(albums, r)
+		default:
+			arts = append(arts, r)
+		}
 	}
-	return nil
+	if len(albums) > 0 {
+		arts = nil
+	}
+	if len(arts)+len(albums)+len(titles) == 0 {
+		return nil
+	}
+	var e egg
+	for _, ls := range [][]*eggRule{arts, albums, titles} {
+		for _, r := range ls {
+			e = merge(e, r.e)
+		}
+	}
+	return &e
+}
+
+// merge folds the egg of the upper layer b over the lower one a: bespoke fields
+// come from b whole, boolean looks add up, and the hooks chain, lower first.
+func merge(a, b egg) egg {
+	e := a
+	if b.knob != 0 {
+		e.knob, e.knobCol = b.knob, b.knobCol
+	}
+	if b.cold != nil || b.credit != "" {
+		e.cold, e.credit = b.cold, b.credit
+	}
+	if b.switchAt != 0 {
+		e.switchAt = b.switchAt
+	}
+	if b.theme != nil {
+		e.theme = b.theme
+	}
+	e.drips = e.drips || b.drips
+	e.big = e.big || b.big
+	e.ragged = e.ragged || b.ragged
+	e.grain = e.grain || b.grain
+	e.jewel = e.jewel || b.jewel
+	if b.tint != (col{}) {
+		e.tint = b.tint
+	}
+	switch {
+	case b.layout == nil:
+	case a.layout == nil:
+		e.layout = b.layout
+	default:
+		lo, hi := a.layout, b.layout
+		e.layout = func(m *Model, g playGeom) playGeom { return hi(m, lo(m, g)) }
+	}
+	switch {
+	case b.bg == nil:
+	case a.bg == nil:
+		e.bg = b.bg
+	default:
+		lo, hi := a.bg, b.bg
+		e.bg = func(m *Model, c col, x, y int) col { return hi(m, lo(m, c, x, y), x, y) }
+	}
+	switch {
+	case b.cover == nil:
+	case a.cover == nil:
+		e.cover = b.cover
+	default:
+		lo, hi := a.cover, b.cover
+		e.cover = func(m *Model, at func(px, py int) col, px, py int) col {
+			return hi(m, func(x, y int) col { return lo(m, at, x, y) }, px, py)
+		}
+	}
+	switch {
+	case b.ink == nil:
+	case a.ink == nil:
+		e.ink = b.ink
+	default:
+		lo, hi := a.ink, b.ink
+		e.ink = func(m *Model, c col, u, v float64) col { return hi(m, lo(m, c, u, v), u, v) }
+	}
+	switch {
+	case b.bar == nil:
+	case a.bar == nil:
+		e.bar = b.bar
+	default:
+		lo, hi := a.bar, b.bar
+		e.bar = func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) {
+			r, c = lo(m, i, bw, frac, r, c)
+			return hi(m, i, bw, frac, r, c)
+		}
+	}
+	switch {
+	case b.over == nil:
+	case a.over == nil:
+		e.over = b.over
+	default:
+		lo, hi := a.over, b.over
+		e.over = func(m *Model, f *fb, g playGeom) { lo(m, f, g); hi(m, f, g) }
+	}
+	switch {
+	case b.step == nil:
+	case a.step == nil:
+		e.step = b.step
+	default:
+		lo, hi := a.step, b.step
+		e.step = func(m *Model) { lo(m); hi(m) }
+	}
+	return e
+}
+
+// ruleScore: a named title wins, then a named album, then the bare artist.
+func ruleScore(r *eggRule) int {
+	switch {
+	case r.title != "":
+		return 3
+	case r.album != "":
+		return 2
+	default:
+		return 1
+	}
+}
+
+// matches: the right artist, and the album and the title each when the rule names one.
+func (r *eggRule) matches(t Track) bool {
+	if !artistFold(r.artist, t.Artist) {
+		return false
+	}
+	if r.album != "" && foldAlbum(t.Album) != foldAlbum(r.album) {
+		return false
+	}
+	if r.title != "" && foldTitle(t.Title) != foldTitle(r.title) {
+		return false
+	}
+	return true
+}
+
+// artistFold: equal folds, or the rule's artist one of the track artist's ", " and " & " parts.
+// Substrings do not count: Drake is not Nick Drake.
+func artistFold(want, have string) bool {
+	w, h := fold(want), fold(have)
+	if w == h {
+		return true
+	}
+	h = strings.ReplaceAll(h, ", ", "\x00")
+	h = strings.ReplaceAll(h, " & ", "\x00")
+	for _, p := range strings.Split(h, "\x00") {
+		if p == w {
+			return true
+		}
+	}
+	return false
+}
+
+// fold lowers the case and unwinds the typographic apostrophe.
+func fold(s string) string {
+	return strings.TrimSpace(strings.ReplaceAll(strings.ToLower(s), "’", "'"))
+}
+
+// foldAlbum folds the album and cuts the edition marker: "Whole Lotta Red (Deluxe)"
+// and "X - Single" fold to the bare album.
+func foldAlbum(s string) string {
+	s = fold(s)
+	cut := -1
+	for _, sep := range []string{" (", " [", " - "} {
+		if i := strings.Index(s, sep); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut < 0 {
+		return s
+	}
+	return strings.TrimSpace(s[:cut])
+}
+
+// foldTitle folds the title and strips only the bracket with the feature:
+// "(feat. …)" and "[with …]" go away, other brackets stay — live and remix
+// versions are other songs.
+func foldTitle(s string) string {
+	return fold(stripFeat(s))
+}
+
+func stripFeat(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		cl := ""
+		switch r {
+		case '(':
+			cl = ")"
+		case '[':
+			cl = "]"
+		}
+		if cl == "" {
+			b.WriteString(s[i : i+size])
+			i += size
+			continue
+		}
+		end := strings.Index(s[i:], cl)
+		if end < 0 {
+			b.WriteString(s[i : i+size])
+			i += size
+			continue
+		}
+		if inner := fold(s[i+1 : i+end]); strings.HasPrefix(inner, "feat.") || strings.HasPrefix(inner, "with ") {
+			i += end + 1
+			continue
+		}
+		b.WriteString(s[i : i+end+1])
+		i += end + 1
+	}
+	return b.String()
 }
 
 var warmLight = col{0.36, 0.15, 0.04}
@@ -81,6 +331,9 @@ func (m *Model) eggBackdrop(bg col, x, y int, v float64) col {
 	e := m.eggOf(*m.curTrack())
 	if e == nil {
 		return bg
+	}
+	if e.bg != nil {
+		bg = e.bg(m, bg, x, y)
 	}
 	if e.tint != (col{}) {
 		bg = bg.lerp(e.tint.mul(0.22), 0.45*easeInOut(prog(m.trackT, eggKnobAt, 2.5)))
@@ -113,6 +366,9 @@ func (m *Model) titleT() float64 {
 
 func (m *Model) eggStep() {
 	e := m.eggOf(*m.curTrack())
+	if e != nil && e.step != nil {
+		e.step(m)
+	}
 	if e != nil && e.switchAt > 0 && m.pos >= e.switchAt && !m.eggDone {
 		m.eggDone = true
 		m.to.a1, m.to.a3, m.to.a2 = hex(0xffa25e), hex(0xffa25e), hex(0xffd9b8)
@@ -133,6 +389,9 @@ func (m *Model) eggOverlay(f *fb, g playGeom) {
 	e := m.eggOf(*m.curTrack())
 	if e == nil {
 		return
+	}
+	if e.over != nil {
+		e.over(m, f, g)
 	}
 	if e.jewel {
 		m.jewel(f, g)

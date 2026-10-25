@@ -24,6 +24,8 @@ The onboarding walks through four screens before playback starts:
 3. **Agent** — pick an OpenAI-compatible provider, enter its API address and key when asked, choose a model that supports tools, then choose the reasoning effort. The screen verifies the provider and fetches its model list.
 4. **Last.fm** — optional scrobbling. `enter` connects, using API credentials from `last.fm/api/account/create`; `tab` skips the step.
 
+`tab` on the intro reopens these screens as settings; there they also hold an **Easter eggs** switch (on/off, saved as `vibe_eggs` in the config).
+
 ## Keys
 
 | Key | Action |

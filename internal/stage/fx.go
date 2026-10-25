@@ -238,3 +238,12 @@ var font3 = map[rune][5]string{
 	'?':  {"##.", "..#", ".#.", "...", ".#."},
 	' ':  {"...", "...", "...", "...", "..."},
 }
+
+// vnoise is smooth value noise over the plane, 0..1.
+func vnoise(x, y float64, s int) float64 {
+	ix, iy := int(math.Floor(x)), int(math.Floor(y))
+	fx, fy := smooth(x-float64(ix)), smooth(y-float64(iy))
+	a := lerpf(hash(ix, iy, s), hash(ix+1, iy, s), fx)
+	b := lerpf(hash(ix, iy+1, s), hash(ix+1, iy+1, s), fx)
+	return lerpf(a, b, fy)
+}

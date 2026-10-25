@@ -2,6 +2,7 @@ package stage
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 )
@@ -512,10 +513,24 @@ type playGeom struct {
 	px, py, pw     int
 	side, mini     bool
 	split          bool
+	noCover        bool // an egg layout draws its own centrepiece in the cover box
+	noQueue        bool
 }
 
-// geom: landscape windows put the cover beside the text, portrait ones stack it on top.
+// geom is the play layout: the window's, reshaped by the egg of the current track.
 func (m *Model) geom() playGeom {
+	g := m.baseGeom()
+	if m.queue == nil {
+		return g
+	}
+	if e := m.eggOf(*m.curTrack()); e != nil && e.layout != nil {
+		g = e.layout(m, g)
+	}
+	return g
+}
+
+// baseGeom: landscape windows put the cover beside the text, portrait ones stack it on top.
+func (m *Model) baseGeom() playGeom {
 	w, h := m.w, m.h
 	if h < 14 {
 		ch := max(2, h-4)
@@ -543,47 +558,9 @@ func (m *Model) drawPlay(f *fb) {
 	g := m.geom()
 	reveal := easeOut(prog(m.trackT, 0, 1.1))
 
-	glow := m.cover(tk.Key(), 12, 12)
-	breathe := 0.9 + 0.1*math.Sin(m.t*1.6)
-	sc := float64(g.ch) / 22
-	rx, ry := int(18*sc)+2, int(8*sc)+1
-	for y := g.cy - ry; y < g.cy+g.ch+ry; y++ {
-		for x := g.cx - rx; x < g.cx+g.cw+rx; x++ {
-			if x >= g.cx && x < g.cx+g.cw && y >= g.cy && y < g.cy+g.ch {
-				continue
-			}
-			nx := math.Max(float64(g.cx), math.Min(float64(g.cx+g.cw-1), float64(x)))
-			ny := math.Max(float64(g.cy), math.Min(float64(g.cy+g.ch-1), float64(y)))
-			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
-			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
-			lit := smooth((c.lum() - 0.12) * 4)
-			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
-		}
-	}
-
-	cov := m.cover(tk.Key(), g.cw, g.ch*2)
-	var prev *pixgrid
-	if m.prev != m.cur {
-		prev = m.cover(m.queue[m.prev].Key(), g.cw, g.ch*2)
-	}
-	skip := 0.0
-	if m.skipT > 0 {
-		skip = easeIn(prog(m.t-m.skipT, 0, 0.35))
-	}
-	for py := 0; py < g.ch*2; py++ {
-		for px := 0; px < g.cw; px++ {
-			thr := hash(px/2, py/2, m.cur)*0.65 + float64(py)/float64(g.ch*2)*0.35
-			var c col
-			if reveal >= thr || prev == nil {
-				c = cov.at(px, py)
-				if e := reveal - thr; e >= 0 && e < 0.05 && reveal < 1 {
-					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-e/0.05)
-				}
-			} else {
-				c = prev.at(px, py).mul(0.6)
-			}
-			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul((1-0.75*skip)*(1-0.7*m.pause)))
-		}
+	e := m.eggOf(*tk)
+	if !g.noCover {
+		m.drawCover(f, g, tk, e, reveal)
 	}
 
 	x, y, pw := g.px, g.py, g.pw
@@ -593,16 +570,17 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	rows := 0
 	if !g.mini && (g.side && g.ch >= 12 || !g.side && m.h-y >= 12) {
-		e := m.eggOf(*tk)
-		rows = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e)
+		rows, m.titleBox = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e)
 	}
 	if rows == 0 {
 		rows = 1
-		for i, r := range scramble(trunc(tk.Title, pw), prog(m.titleT(), 0.15, 0.55), m.t, m.cur) {
+		title := trunc(tk.Title, pw)
+		for i, r := range scramble(title, prog(m.titleT(), 0.15, 0.55), m.t, m.cur) {
 			if r != 0 {
 				f.style(x+i, y, r, m.th.a1.lerp(m.th.text, 0.3).lerp(white, 0.6*lf), true, false)
 			}
 		}
+		m.titleBox = image.Rect(x, y*2, x+len(title), y*2+2)
 	}
 	gap := 1
 	if g.mini {
@@ -610,7 +588,7 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	y += rows + gap
 	an := f.fade(x, y, trunc(tk.Artist, pw), m.th.text, easeOut(prog(m.trackT, 0.35, 0.5)), true)
-	if e := m.eggOf(*tk); e != nil && e.credit != "" {
+	if e != nil && e.credit != "" {
 		m.drawTag(f, x+an+3, y, pw-an-3, e)
 	}
 	y += 1 + gap
@@ -626,11 +604,11 @@ func (m *Model) drawPlay(f *fb) {
 
 	time := fmtDur(m.pos) + " / " + fmtDur(tk.Dur)
 	bw := min(56, pw-len(time)-2)
+	m.barBox = image.Rect(x, y, x+bw, y+1)
 	frac := 0.0
 	if tk.Dur > 0 {
 		frac = min(1, m.pos/tk.Dur)
 	}
-	e := m.eggOf(*tk)
 	knob, kc, fill := '●', m.th.text, m.th.a1
 	if e != nil && e.knob != 0 {
 		k := easeInOut(prog(m.trackT, eggKnobAt, 1.5))
@@ -645,21 +623,27 @@ func (m *Model) drawPlay(f *fb) {
 		mark = int(e.switchAt / tk.Dur * float64(bw))
 	}
 	for i := 0; i < bw; i++ {
+		var r rune
+		var c col
 		switch {
 		case float64(i)/float64(bw) < frac:
-			f.put(x+i, y, '━', fill)
+			r, c = '━', fill
 		case i == mark:
-			f.put(x+i, y, '┼', m.eggMark(e))
+			r, c = '┼', m.eggMark(e)
 		default:
-			f.put(x+i, y, '─', m.th.dim.mul(0.55))
+			r, c = '─', m.th.dim.mul(0.55)
 		}
+		if e != nil && e.bar != nil {
+			r, c = e.bar(m, i, bw, frac, r, c)
+		}
+		f.put(x+i, y, r, c)
 	}
 	f.style(x+int(frac*float64(bw)), y, knob, kc, true, false)
 	f.text(x+bw+2, y, time, m.th.dim)
 
 	y += 2
 
-	if !g.mini {
+	if !g.mini && !g.noQueue {
 		bottom := m.h - 3
 		if !g.side {
 			bottom = m.h - 2
@@ -710,6 +694,55 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	m.eggOverlay(f, g)
 	m.drawToasts(f)
+}
+
+// drawCover lays the cover into its box over a glow of its own colours.
+func (m *Model) drawCover(f *fb, g playGeom, tk *Track, e *egg, reveal float64) {
+	glow := m.cover(tk.Key(), 12, 12)
+	breathe := 0.9 + 0.1*math.Sin(m.t*1.6)
+	sc := float64(g.ch) / 22
+	rx, ry := int(18*sc)+2, int(8*sc)+1
+	for y := g.cy - ry; y < g.cy+g.ch+ry; y++ {
+		for x := g.cx - rx; x < g.cx+g.cw+rx; x++ {
+			if x >= g.cx && x < g.cx+g.cw && y >= g.cy && y < g.cy+g.ch {
+				continue
+			}
+			nx := math.Max(float64(g.cx), math.Min(float64(g.cx+g.cw-1), float64(x)))
+			ny := math.Max(float64(g.cy), math.Min(float64(g.cy+g.ch-1), float64(y)))
+			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
+			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
+			lit := smooth((c.lum() - 0.12) * 4)
+			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
+		}
+	}
+
+	cov := m.cover(tk.Key(), g.cw, g.ch*2)
+	var prev *pixgrid
+	if m.prev != m.cur {
+		prev = m.cover(m.queue[m.prev].Key(), g.cw, g.ch*2)
+	}
+	skip := 0.0
+	if m.skipT > 0 {
+		skip = easeIn(prog(m.t-m.skipT, 0, 0.35))
+	}
+	for py := 0; py < g.ch*2; py++ {
+		for px := 0; px < g.cw; px++ {
+			thr := hash(px/2, py/2, m.cur)*0.65 + float64(py)/float64(g.ch*2)*0.35
+			var c col
+			if reveal >= thr || prev == nil {
+				c = cov.at(px, py)
+				if e != nil && e.cover != nil {
+					c = e.cover(m, cov.at, px, py)
+				}
+				if es := reveal - thr; es >= 0 && es < 0.05 && reveal < 1 {
+					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-es/0.05)
+				}
+			} else {
+				c = prev.at(px, py).mul(0.6)
+			}
+			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul((1-0.75*skip)*(1-0.7*m.pause)))
+		}
+	}
 }
 
 func (m *Model) drawToasts(f *fb) {
@@ -824,12 +857,12 @@ func (m *Model) wave(f *fb, x, y int, s string, base col) {
 	}
 }
 
-func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg) int {
+func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg) (int, image.Rectangle) {
 	drips := e != nil && e.drips
 	rs := []rune(strings.ToUpper(s))
 	for _, r := range rs {
 		if _, ok := font3[r]; !ok {
-			return 0
+			return 0, image.Rectangle{}
 		}
 	}
 	cols := -1
@@ -844,7 +877,7 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 		sc = 1
 	}
 	if cols*sc > maxW {
-		return 0
+		return 0, image.Rectangle{}
 	}
 	wpx := float64(cols * sc)
 	sweep := prog(m.titleT(), 0.9, 1.2)*1.6 - 0.3
@@ -870,6 +903,9 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 						u := float64(px-x) / wpx
 						b := math.Exp(-(u - sweep) * (u - sweep) / 0.004)
 						c := m.th.grad(u*0.5+m.t*0.03).lerp(white, 0.7*b+0.6*flash)
+						if e != nil && e.ink != nil {
+							c = e.ink(m, c, u, float64(py-y*2)/float64(5*sc))
+						}
 						f.pixel(px, py, c)
 					}
 				}
@@ -881,9 +917,9 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 		gx0 += gw + 1
 	}
 	if drips {
-		return (5*sc+1)/2 + (dripMax*sc+1)/2
+		return (5*sc+1)/2 + (dripMax*sc+1)/2, image.Rect(x, y*2, x+cols*sc, y*2+5*sc)
 	}
-	return (5*sc + 1) / 2
+	return (5*sc + 1) / 2, image.Rect(x, y*2, x+cols*sc, y*2+5*sc)
 }
 
 func (m *Model) drawParticles(f *fb) {

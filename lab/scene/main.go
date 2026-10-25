@@ -4,10 +4,11 @@
 //	go run ./lab/scene -demo    plays itself
 //	go run ./lab/scene -onboard=false   skips the first-run onboarding
 //	go run ./lab/scene -shots 3,6.5 -size 160x45   renders frames of the demo to /tmp/scene-*.png
-//	go run ./lab/scene -egg "Frank Ocean Nights@200"   opens the player on a track to look at its egg; [ ] seek
+//	go run ./lab/scene -egg "Playboi Carti Stop Breathing@20"   opens the player on any catalog track to look at its egg; [ ] seek
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -125,11 +126,25 @@ func main() {
 	}
 }
 
-// playEgg is the old -egg entry: accepted demo candidates queued, the player opens on
-// the named track; a key that matches nothing opens the player at the very start.
+// playEgg opens the player: the named term searched in the Apple catalog as the
+// first track in queue, the demo queue behind; without the network the demo
+// track with the matching name plays, a key that matches nothing opens the
+// player at the very start.
 func playEgg(s *scene, spec string) {
 	key, at, _ := strings.Cut(spec, "@")
 	pos, _ := strconv.ParseFloat(at, 64)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if t, art, err := lookupTrack(ctx, key); err == nil {
+		tracks := append([]stage.Track{t}, demoTracks()...)
+		if img, err := fetchImage(ctx, art); err == nil {
+			s.m.SetCover(t.Key(), img)
+		}
+		fmt.Fprintf(os.Stderr, "egg: %s — %s · %s · %s · %.0fs\n", t.Artist, t.Title, t.Album, t.Released, t.Dur)
+		s.m.JumpPlay(tracks, 0, pos)
+		return
+	}
+	fmt.Fprintln(os.Stderr, "egg: offline, demo track")
 	tracks := demoTracks()
 	i := 0
 	for j, tr := range tracks {

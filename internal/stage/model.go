@@ -14,6 +14,8 @@ import (
 // Track is one song on the screen; Key is its identity for covers, themes and the queue.
 type Track struct {
 	ID, Artist, Title, Why string
+	Album                  string
+	Released               string  // release date as Apple gives it: "2020-12-25"
 	Dur                    float64 // seconds
 }
 
@@ -96,6 +98,9 @@ type Restart struct{}
 
 // Settings is tab on the intro: the host reopens the onboarding with Onboard.
 type Settings struct{}
+
+// Eggs is the easter-eggs switch in the settings: On false turns every egg off.
+type Eggs struct{ On bool }
 
 // Phase is what the screen currently draws.
 type Phase int
@@ -233,13 +238,19 @@ type Model struct {
 	pix    map[string]*pixgrid
 	themes map[string]theme
 
+	eggMemo map[string]*egg // eggOf runs the egg rules once per track key
+
+	titleBox image.Rectangle // where the title sits on the player, in pixels; set by every play frame
+	barBox   image.Rectangle // where the progress bar sits, in cells; set by every play frame
+
 	dstep int
 }
 
 // New builds the screen; call SetCover for each cover before the first frame.
 func New(o Options) *Model {
 	m := &Model{w: 160, h: 45, th: night, to: night, o: o,
-		covers: map[string]image.Image{}, pix: map[string]*pixgrid{}, themes: map[string]theme{}}
+		covers: map[string]image.Image{}, pix: map[string]*pixgrid{}, themes: map[string]theme{},
+		eggMemo: map[string]*egg{}}
 	m.dim = spring{x: 1, to: 1}
 	m.reset()
 	if o.Onboard {
@@ -255,11 +266,12 @@ func (m *Model) Onboard(connected [3]bool) {
 	m.o.Connected = connected
 	m.ph, m.ob = PhOnboard, newOnboard()
 	m.ob.lfKey = []rune(m.o.LastfmKey)
+	m.ob.eggsAsk, m.ob.eggsOn = true, !m.o.NoEggs
 }
 
 func (m *Model) reset() {
 	*m = Model{w: m.w, h: m.h, th: night, to: night, o: m.o, covers: m.covers,
-		pix: m.pix, themes: m.themes, dim: spring{x: 1, to: 1}, portionNo: 1}
+		pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
 	m.slots = make([]*slot, 20)
 	for i := range m.slots {
 		m.slots[i] = &slot{fillAt: -1}

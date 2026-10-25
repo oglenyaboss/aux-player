@@ -200,6 +200,13 @@ func (s *stageScreen) act(a stage.Action) {
 		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
 		c[1] = false
 		s.st.Onboard(c)
+	case stage.Eggs:
+		on := a.On
+		cfg := s.host.cfg
+		cfg.VibeEggs = &on
+		if err := cfg.Save(""); err != nil {
+			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
+		}
 	case stage.ConnectApple:
 		if s.host.appleLogin != nil {
 			// The sign-in waits for the onboarding to ask; the answer lands
@@ -346,7 +353,7 @@ func stageTrack(t VibeAITrack, name string) stage.Track {
 		}
 		return stage.Track{Artist: artist, Title: title}
 	}
-	return stage.Track{ID: t.ID, Artist: t.Artist, Title: t.Title, Why: t.Why, Dur: t.Dur.Seconds()}
+	return stage.Track{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Released: t.Released, Why: t.Why, Dur: t.Dur.Seconds()}
 }
 
 func stageQuestion(q VibeAIQuestion) stage.Question {

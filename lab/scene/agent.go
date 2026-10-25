@@ -93,7 +93,8 @@ func (s *scene) stream(dt float64) {
 	cands := demoCandidates()
 	if s.next < len(cands) && s.clock <= 0 {
 		c := cands[s.next]
-		t := stage.Track{Artist: c.artist, Title: c.title, Why: c.why, Dur: c.dur}
+		t := stage.Track{Artist: c.artist, Title: c.title, Why: c.why,
+			Album: demoAlbums[c.artist+" "+c.title], Dur: c.dur}
 		s.m.Candidate(t, c.ok, c.reason)
 		if c.ok {
 			s.accepted = append(s.accepted, t)

@@ -6,6 +6,7 @@ type Song struct {
 	Title      string
 	Album      string
 	Year       string
+	Released   string `json:"released,omitempty"`
 	ArtworkURL string `json:"artwork,omitempty"`
 	DurationMs int    `json:"duration_ms,omitempty"`
 }

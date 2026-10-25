@@ -78,6 +78,13 @@ func TestStageFullScreen(t *testing.T) {
 	}
 }
 
+func TestStageTrackAlbumReleased(t *testing.T) {
+	tr := stageTrack(VibeAITrack{ID: "1", Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Released: "2020-12-25"}, "")
+	if tr.Album != "Whole Lotta Red" || tr.Released != "2020-12-25" {
+		t.Errorf("Album/Released = %q %q, ждём Whole Lotta Red / 2020-12-25", tr.Album, tr.Released)
+	}
+}
+
 func TestStageEscStays(t *testing.T) {
 	m := newModel(nil)
 	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhIntro {
