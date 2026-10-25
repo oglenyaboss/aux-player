@@ -239,7 +239,7 @@ func TestEggOfAlbum(t *testing.T) {
 		{"other album stays plain", false, Track{Artist: "Playboi Carti", Title: "Shoota", Album: "Die Lit"}, 0, false, false, 0, true},
 		{"Magnolia on its album", false, Track{Artist: "Playboi Carti", Title: "Magnolia", Album: "Playboi Carti"}, 0, true, false, 0, false},
 		{"Nights switches", false, Track{Artist: "Frank Ocean", Title: "Nights", Album: "Blonde"}, 0, false, false, 210, false},
-		{"Nights live gets the shower, not the switch", false, Track{Artist: "Frank Ocean", Title: "Nights (Live)", Album: "Blonde"}, 0, false, false, 0, false},
+		{"Nights live gets the album egg, not the switch", false, Track{Artist: "Frank Ocean", Title: "Nights (Live)", Album: "Blonde"}, 0, false, false, 0, false},
 		{"feat bracket stripped", false, Track{Artist: "Playboi Carti", Title: "Magnolia (feat. Someone)", Album: "Playboi Carti"}, 0, true, false, 0, false},
 		{"Uzi in the duo track", false, Track{Artist: "Future & Lil Uzi Vert", Title: "Patek", Album: "Pluto x Baby Pluto"}, 0, false, true, 0, false},
 		{"Uzi Vertigo is not Uzi", false, Track{Artist: "Lil Uzi Vertigo", Title: "X"}, 0, false, false, 0, true},
