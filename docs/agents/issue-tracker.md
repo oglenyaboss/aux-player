@@ -30,6 +30,10 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 Create a GitHub issue.
 
+## Ticket size
+
+Tickets here go to a lead (`herdr-delegate`), who settles the open questions with the owner and cuts the ticket into worker briefs in `lab/briefs/`, one slice per brief, each verified before the next. So a ticket may be a whole feature: one issue per topic, holding the current state, the plan as ordered slices with their dependencies, acceptance criteria, and the open questions for the owner. Skills that split work into tickets (`/to-tickets`) don't pre-slice it to fit one context window.
+
 ## When a skill says "fetch the relevant ticket"
 
 Read it as in **Read an issue** above.
