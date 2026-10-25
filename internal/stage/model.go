@@ -194,6 +194,7 @@ type Model struct {
 	lastCand  float64
 	status    string
 	thinking  bool
+	launchOut float64
 	slots     []*slot
 	filled    int
 	checked   int
@@ -323,7 +324,10 @@ func (m *Model) Step(dt float64) {
 	case PhOnboard:
 		m.onboardStep(dt)
 	case PhLaunch:
-		if m.pt > 2.1 {
+		if m.launchOut < 0 && m.pt > 1.85 && (len(m.warmups) > 0 || len(m.inbox) > 0 || m.pDone) {
+			m.launchOut = m.pt
+		}
+		if m.launchOut >= 0 && m.pt > m.launchOut+0.25 {
 			if len(m.warmups) > 0 {
 				m.startAsk(0)
 			} else {
@@ -673,6 +677,7 @@ func (m *Model) launch() {
 		p.life, p.drag, p.grav, p.age = 0.75, 0.9, 0, 0
 	}
 	m.bloom = 0.35
+	m.launchOut = -1
 	m.setPhase(PhLaunch)
 	m.send(Query{Text: m.query})
 }

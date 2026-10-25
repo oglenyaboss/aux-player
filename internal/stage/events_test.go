@@ -1,6 +1,7 @@
 package stage
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -60,15 +61,84 @@ func TestQueryAction(t *testing.T) {
 	}
 }
 
-// D3: with nothing but a query, enter reaches PhScan on its own (thinking, no cards asked).
-func TestNoQuestionsGoesToScan(t *testing.T) {
+// #3: while the agent says nothing, the orb stays up with "агент думает".
+func TestOrbHoldsUntilAgentSpeaks(t *testing.T) {
+	t.Cleanup(func() { SetLang("ru") })
+	SetLang("ru")
 	m := New(Options{})
 	m.SetSize(110, 32)
 	m.Key("", "abc")
 	m.Key("enter", "")
-	steps(m, 2.5)
-	if p := m.Phase(); p != PhScan {
-		t.Fatalf("фаза %v, ждём PhScan", p)
+	steps(m, 10)
+	if p := m.Phase(); p != PhLaunch {
+		t.Fatalf("фаза %v, ждём PhLaunch", p)
+	}
+	frame := stripANSI(m.View())
+	if !strings.Contains(frame, "агент думает") || strings.Contains(frame, "Порция 1") {
+		t.Errorf("ждём орб «агент думает» без сетки скана:\n%s", frame)
+	}
+}
+
+// #3: the orb shows what the agent is busy with.
+func TestOrbShowsProgress(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.Key("", "abc")
+	m.Key("enter", "")
+	steps(m, 3)
+	m.Progress("читаю про Blonde")
+	steps(m, 0.5)
+	if p := m.Phase(); p != PhLaunch {
+		t.Fatalf("фаза %v, ждём PhLaunch", p)
+	}
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "читаю про Blonde") {
+		t.Errorf("кадр без статуса:\n%s", frame)
+	}
+}
+
+// #3: a late first question takes the orb down in a quarter second and opens the card.
+func TestOrbLeavesForQuestion(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.Key("", "abc")
+	m.Key("enter", "")
+	steps(m, 5)
+	m.Ask([]Question{{Title: "q1", Options: []string{"a", "b"}}})
+	steps(m, 0.15)
+	if p := m.Phase(); p != PhLaunch {
+		t.Fatalf("фаза %v, ждём PhLaunch, пока орб гаснет", p)
+	}
+	if !runTo(m, PhAsk, 15) {
+		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+	}
+}
+
+// #3: an early question still waits out the launch intro.
+func TestOrbKeepsIntroForEarlyQuestion(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.Key("", "abc")
+	m.Key("enter", "")
+	m.Ask([]Question{{Title: "q1", Options: []string{"a", "b"}}})
+	steps(m, 1.8)
+	if p := m.Phase(); p != PhLaunch {
+		t.Fatalf("фаза %v, ждём PhLaunch до конца вступления", p)
+	}
+	if !runTo(m, PhAsk, 30) {
+		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+	}
+}
+
+// #3: without questions the first pick takes the orb down and starts the scan.
+func TestOrbLeavesForPick(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.Key("", "abc")
+	m.Key("enter", "")
+	steps(m, 3)
+	m.Candidate(Track{Artist: "Solo", Title: "One"}, true, "")
+	if !runTo(m, PhScan, 15) {
+		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
 	}
 }
 
@@ -116,14 +186,7 @@ func TestAnswersRaw(t *testing.T) {
 func TestPortionShrinks(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
-	m.Key("", "abc")
-	m.Key("enter", "")
-	for i := 0; i < 120 && m.Phase() != PhScan; i++ {
-		m.Step(eventDT)
-	}
-	if m.Phase() != PhScan {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
-	}
+	toScan(t, m)
 	tracks := threeTracks()
 	m.Candidate(tracks[0], true, "")
 	m.Candidate(tracks[1], true, "")

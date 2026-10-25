@@ -123,8 +123,8 @@ func TestStageProgressPhrase(t *testing.T) {
 	m := newModel(nil)
 	press(m, "enter") // the example query launches the scene
 	m.vibeAIP.m.st.Step(2.5)
-	if m.vibeAIP.m.st.Phase() != stage.PhScan {
-		t.Fatalf("phase = %d, want scan", m.vibeAIP.m.st.Phase())
+	if m.vibeAIP.m.st.Phase() != stage.PhLaunch {
+		t.Fatalf("phase = %d, want the orb to hold", m.vibeAIP.m.st.Phase())
 	}
 	m.vibeAIP.m.AddProgress("·describe album Blonde")
 	frame := ansi.Strip(m.vibeAIP.m.Frame(110, 32))
@@ -172,6 +172,8 @@ func TestStageTickFlushesAnswers(t *testing.T) {
 	vibeAITypeText(m, "первый запрос")
 	m.vibeAIP.m.st.Step(2.5)
 	m.handleVibeAIMsg(vibeAIAskMsg{gen: m.vibeAI.gen, qs: []vibeai.Question{{Question: "что по духу?", Options: []string{"новое", "знакомое"}}}})
+	m.vibeAIP.m.st.Step(0.3) // the orb takes a quarter second to go
+	m.vibeAIP.m.st.Step(0.3)
 	if m.vibeAIP.m.st.Phase() != stage.PhAsk {
 		t.Fatalf("phase = %d, want ask", m.vibeAIP.m.st.Phase())
 	}

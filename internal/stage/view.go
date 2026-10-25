@@ -163,10 +163,17 @@ func (m *Model) drawLaunch(f *fb) {
 	}
 	m.drawChips(f)
 	if m.pt > 0.35 {
-		grow := easeOut(prog(m.pt, 0.35, 0.5)) * (1 - easeIn(prog(m.pt, 1.85, 0.25)))
+		shrink := 0.0
+		if m.launchOut >= 0 {
+			shrink = easeIn(prog(m.pt, m.launchOut, 0.25))
+		}
+		grow := easeOut(prog(m.pt, 0.35, 0.5)) * (1 - shrink)
 		m.orb(f, float64(m.w)/2, float64(m.h), grow)
 		if grow > 0.3 {
 			s := tr("агент думает", "agent is thinking")
+			if m.status != "" {
+				s = trunc(m.status, m.w-6)
+			}
 			m.wave(f, m.w/2-len([]rune(s))/2, m.h/2+5, s, m.th.text)
 		}
 	}

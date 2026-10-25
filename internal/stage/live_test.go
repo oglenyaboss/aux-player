@@ -21,6 +21,22 @@ func runTo(m *Model, p Phase, maxSteps int) bool {
 	return m.Phase() == p
 }
 
+// toScan walks the usual first turn: enter, one card answered, back to the scan.
+func toScan(t *testing.T, m *Model) {
+	t.Helper()
+	m.Key("", "abc")
+	m.Key("enter", "")
+	m.Ask([]Question{{Title: "q", Options: []string{"a", "b"}}})
+	if !runTo(m, PhAsk, 300) {
+		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+	}
+	steps(m, 0.8)
+	m.Key("enter", "")
+	if !runTo(m, PhScan, 300) {
+		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
+	}
+}
+
 // R1: in the player without SelfPlay the queue keys pass through to the host: the key
 // is not taken, nothing is sent, the queue is untouched. Service keys stay on the screen.
 func TestKeyPassThrough(t *testing.T) {
@@ -74,11 +90,7 @@ func TestKeySelfPlay(t *testing.T) {
 func TestProgressStatus(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
-	m.Key("", "abc")
-	m.Key("enter", "")
-	if !runTo(m, PhScan, 300) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
-	}
+	toScan(t, m)
 	m.Progress("ищу свежие релизы")
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "ищу свежие релизы") {
 		t.Errorf("кадр без статуса:\n%s", frame)
@@ -90,11 +102,7 @@ func TestProgressStatus(t *testing.T) {
 func TestCandidatePacing(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
-	m.Key("", "abc")
-	m.Key("enter", "")
-	if !runTo(m, PhScan, 300) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
-	}
+	toScan(t, m)
 	tr := Track{Artist: "Solo", Title: "One"}
 	for i := 0; i < 5; i++ {
 		m.Candidate(tr, true, "")
@@ -129,11 +137,7 @@ func TestEmptyPortionFails(t *testing.T) {
 	SetLang("ru")
 	m := New(Options{})
 	m.SetSize(110, 32)
-	m.Key("", "abc")
-	m.Key("enter", "")
-	if !runTo(m, PhScan, 300) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
-	}
+	toScan(t, m)
 	m.PortionDone(nil, "")
 	steps(m, 1)
 	if m.Phase() != PhIntro {
@@ -181,11 +185,7 @@ func TestNowBeforePlay(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
 	tr := threeTracks()
-	m.Key("", "abc")
-	m.Key("enter", "")
-	if !runTo(m, PhScan, 300) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
-	}
+	toScan(t, m)
 	m.Now(tr[1].Key(), 10, true)
 	m.PortionDone(tr, "")
 	m.Candidate(tr[0], true, "")
