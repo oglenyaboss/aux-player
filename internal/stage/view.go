@@ -513,10 +513,24 @@ type playGeom struct {
 	px, py, pw     int
 	side, mini     bool
 	split          bool
+	noCover        bool // an egg layout draws its own centrepiece in the cover box
+	noQueue        bool
 }
 
-// geom: landscape windows put the cover beside the text, portrait ones stack it on top.
+// geom is the play layout: the window's, reshaped by the egg of the current track.
 func (m *Model) geom() playGeom {
+	g := m.baseGeom()
+	if m.queue == nil {
+		return g
+	}
+	if e := m.eggOf(*m.curTrack()); e != nil && e.layout != nil {
+		g = e.layout(m, g)
+	}
+	return g
+}
+
+// baseGeom: landscape windows put the cover beside the text, portrait ones stack it on top.
+func (m *Model) baseGeom() playGeom {
 	w, h := m.w, m.h
 	if h < 14 {
 		ch := max(2, h-4)
@@ -544,51 +558,9 @@ func (m *Model) drawPlay(f *fb) {
 	g := m.geom()
 	reveal := easeOut(prog(m.trackT, 0, 1.1))
 
-	glow := m.cover(tk.Key(), 12, 12)
-	breathe := 0.9 + 0.1*math.Sin(m.t*1.6)
-	sc := float64(g.ch) / 22
-	rx, ry := int(18*sc)+2, int(8*sc)+1
-	for y := g.cy - ry; y < g.cy+g.ch+ry; y++ {
-		for x := g.cx - rx; x < g.cx+g.cw+rx; x++ {
-			if x >= g.cx && x < g.cx+g.cw && y >= g.cy && y < g.cy+g.ch {
-				continue
-			}
-			nx := math.Max(float64(g.cx), math.Min(float64(g.cx+g.cw-1), float64(x)))
-			ny := math.Max(float64(g.cy), math.Min(float64(g.cy+g.ch-1), float64(y)))
-			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
-			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
-			lit := smooth((c.lum() - 0.12) * 4)
-			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
-		}
-	}
-
-	cov := m.cover(tk.Key(), g.cw, g.ch*2)
-	var prev *pixgrid
-	if m.prev != m.cur {
-		prev = m.cover(m.queue[m.prev].Key(), g.cw, g.ch*2)
-	}
 	e := m.eggOf(*tk)
-	skip := 0.0
-	if m.skipT > 0 {
-		skip = easeIn(prog(m.t-m.skipT, 0, 0.35))
-	}
-	for py := 0; py < g.ch*2; py++ {
-		for px := 0; px < g.cw; px++ {
-			thr := hash(px/2, py/2, m.cur)*0.65 + float64(py)/float64(g.ch*2)*0.35
-			var c col
-			if reveal >= thr || prev == nil {
-				c = cov.at(px, py)
-				if e != nil && e.cover != nil {
-					c = e.cover(m, cov.at, px, py)
-				}
-				if es := reveal - thr; es >= 0 && es < 0.05 && reveal < 1 {
-					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-es/0.05)
-				}
-			} else {
-				c = prev.at(px, py).mul(0.6)
-			}
-			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul((1-0.75*skip)*(1-0.7*m.pause)))
-		}
+	if !g.noCover {
+		m.drawCover(f, g, tk, e, reveal)
 	}
 
 	x, y, pw := g.px, g.py, g.pw
@@ -671,7 +643,7 @@ func (m *Model) drawPlay(f *fb) {
 
 	y += 2
 
-	if !g.mini {
+	if !g.mini && !g.noQueue {
 		bottom := m.h - 3
 		if !g.side {
 			bottom = m.h - 2
@@ -722,6 +694,55 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	m.eggOverlay(f, g)
 	m.drawToasts(f)
+}
+
+// drawCover lays the cover into its box over a glow of its own colours.
+func (m *Model) drawCover(f *fb, g playGeom, tk *Track, e *egg, reveal float64) {
+	glow := m.cover(tk.Key(), 12, 12)
+	breathe := 0.9 + 0.1*math.Sin(m.t*1.6)
+	sc := float64(g.ch) / 22
+	rx, ry := int(18*sc)+2, int(8*sc)+1
+	for y := g.cy - ry; y < g.cy+g.ch+ry; y++ {
+		for x := g.cx - rx; x < g.cx+g.cw+rx; x++ {
+			if x >= g.cx && x < g.cx+g.cw && y >= g.cy && y < g.cy+g.ch {
+				continue
+			}
+			nx := math.Max(float64(g.cx), math.Min(float64(g.cx+g.cw-1), float64(x)))
+			ny := math.Max(float64(g.cy), math.Min(float64(g.cy+g.ch-1), float64(y)))
+			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
+			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
+			lit := smooth((c.lum() - 0.12) * 4)
+			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
+		}
+	}
+
+	cov := m.cover(tk.Key(), g.cw, g.ch*2)
+	var prev *pixgrid
+	if m.prev != m.cur {
+		prev = m.cover(m.queue[m.prev].Key(), g.cw, g.ch*2)
+	}
+	skip := 0.0
+	if m.skipT > 0 {
+		skip = easeIn(prog(m.t-m.skipT, 0, 0.35))
+	}
+	for py := 0; py < g.ch*2; py++ {
+		for px := 0; px < g.cw; px++ {
+			thr := hash(px/2, py/2, m.cur)*0.65 + float64(py)/float64(g.ch*2)*0.35
+			var c col
+			if reveal >= thr || prev == nil {
+				c = cov.at(px, py)
+				if e != nil && e.cover != nil {
+					c = e.cover(m, cov.at, px, py)
+				}
+				if es := reveal - thr; es >= 0 && es < 0.05 && reveal < 1 {
+					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-es/0.05)
+				}
+			} else {
+				c = prev.at(px, py).mul(0.6)
+			}
+			f.pixel(g.cx+px, g.cy*2+py, m.eggCover(c, float64(py)/float64(g.ch*2)).mul((1-0.75*skip)*(1-0.7*m.pause)))
+		}
+	}
 }
 
 func (m *Model) drawToasts(f *fb) {

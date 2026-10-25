@@ -28,12 +28,13 @@ type egg struct {
 	tint  col  // backdrop leans toward this colour
 
 	// hooks: a bespoke egg draws itself through these; nil changes nothing.
-	bg    func(m *Model, c col, x, y int) col                                // one backdrop cell of the player
-	cover func(m *Model, at func(px, py int) col, px, py int) col            // one cover pixel; at samples the layer below
-	ink   func(m *Model, c col, u, v float64) col                            // one title pixel; u, v run 0..1 across the title
-	bar   func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) // one progress-bar cell
-	over  func(m *Model, f *fb, g playGeom)                                  // on top of the player, under the cold open
-	step  func(m *Model)                                                     // every frame of the track
+	layout func(m *Model, g playGeom) playGeom                                // the play layout from the window's g; never calls m.geom
+	bg     func(m *Model, c col, x, y int) col                                // one backdrop cell of the player
+	cover  func(m *Model, at func(px, py int) col, px, py int) col            // one cover pixel; at samples the layer below
+	ink    func(m *Model, c col, u, v float64) col                            // one title pixel; u, v run 0..1 across the title
+	bar    func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) // one progress-bar cell
+	over   func(m *Model, f *fb, g playGeom)                                  // on top of the player, under the cold open
+	step   func(m *Model)                                                     // every frame of the track
 }
 
 const eggKnobAt = 6.0
@@ -138,6 +139,14 @@ func merge(a, b egg) egg {
 	e.jewel = e.jewel || b.jewel
 	if b.tint != (col{}) {
 		e.tint = b.tint
+	}
+	switch {
+	case b.layout == nil:
+	case a.layout == nil:
+		e.layout = b.layout
+	default:
+		lo, hi := a.layout, b.layout
+		e.layout = func(m *Model, g playGeom) playGeom { return hi(m, lo(m, g)) }
 	}
 	switch {
 	case b.bg == nil:
