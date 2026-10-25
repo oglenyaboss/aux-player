@@ -69,6 +69,13 @@ var eggRules = []eggRule{
 		theme: &wlr, drips: true, big: true, ragged: true, grain: true, knob: '†', knobCol: hex(0xf2f2f2)}},
 }
 
+// inText: the cell holds a letter or a space between letters, so an egg that paints
+// the backdrop pixel by pixel leaves it to the text.
+func inText(f *fb, x, y int) bool {
+	glyph := func(c *cell) bool { return c != nil && !c.pix && c.ch != ' ' }
+	return glyph(f.at(x, y)) || glyph(f.at(x-1, y)) || glyph(f.at(x+1, y))
+}
+
 func (m *Model) eggOf(t Track) *egg {
 	if m.o.NoEggs {
 		return nil

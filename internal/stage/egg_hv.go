@@ -39,15 +39,6 @@ var hvFire = []col{hex(0x3a0600), hex(0xa82000), hex(0xf05a08), hex(0xff9a22), h
 // hvAfter: the instrumentals of the Heroes Version play the morning after.
 func hvAfter(m *Model) bool { return strings.Contains(fold(m.curTrack().Title), "instrumental") }
 
-// hvNoise is smooth value noise over the plane, 0..1.
-func hvNoise(x, y float64, s int) float64 {
-	ix, iy := int(math.Floor(x)), int(math.Floor(y))
-	fx, fy := smooth(x-float64(ix)), smooth(y-float64(iy))
-	a := lerpf(hash(ix, iy, s), hash(ix+1, iy, s), fx)
-	b := lerpf(hash(ix, iy+1, s), hash(ix+1, iy+1, s), fx)
-	return lerpf(a, b, fy)
-}
-
 func hvHeat(c float64) col {
 	c = clamp01(c) * float64(len(hvFire)-1)
 	i := min(int(c), len(hvFire)-2)
@@ -79,7 +70,7 @@ func hvLayer(m *Model, base col, px, py int) col {
 			if after {
 				return hvTower.lerp(hvWindow, 0.55)
 			}
-			return hvTower.lerp(hvEmber, 0.25+0.35*hvNoise(float64(px)*0.3, t*2, 39))
+			return hvTower.lerp(hvEmber, 0.25+0.35*vnoise(float64(px)*0.3, t*2, 39))
 		}
 		return hvTower
 	}
@@ -92,15 +83,15 @@ func hvLayer(m *Model, base col, px, py int) col {
 				return base.lerp(hvEmber, 0.9)
 			}
 		}
-		k := hvNoise(fx*0.06, fy*0.08+t*0.9, 40) * smooth(1-float64(up)/(float64(m.h)*1.3))
+		k := vnoise(fx*0.06, fy*0.08+t*0.9, 40) * smooth(1-float64(up)/(float64(m.h)*1.3))
 		return base.lerp(hvSmoke, 0.5*k)
 	}
-	height := float64(2*m.h) * 0.6 * easeOut(prog(t, 0.4, 4)) * (0.65 + 0.7*hvNoise(fx*0.035, t*0.25, 46))
+	height := float64(2*m.h) * 0.6 * easeOut(prog(t, 0.4, 4)) * (0.65 + 0.7*vnoise(fx*0.035, t*0.25, 46))
 	if height <= 0 {
 		return base
 	}
-	w := hvNoise(fx*0.05, fy*0.05+t*0.8, 47)
-	n := 0.6*hvNoise(fx*0.1+w*2, fy*0.13+t*3.2, 42) + 0.4*hvNoise(fx*0.23, fy*0.3+t*5.5, 43)
+	w := vnoise(fx*0.05, fy*0.05+t*0.8, 47)
+	n := 0.6*vnoise(fx*0.1+w*2, fy*0.13+t*3.2, 42) + 0.4*vnoise(fx*0.23, fy*0.3+t*5.5, 43)
 	heat := n*1.55 - float64(up)/height
 	if heat <= 0 {
 		return base.lerp(hvFire[0], 0.4*smooth(1-float64(up)/(height*1.5)))
@@ -121,7 +112,7 @@ func hvOver(m *Model, f *fb, g playGeom) {
 			if c.pix {
 				continue
 			}
-			if c.ch != ' ' || hvGlyph(f.at(x-1, y)) || hvGlyph(f.at(x+1, y)) {
+			if inText(f, x, y) {
 				c.bg = c.bg.lerp(hvLayer(m, c.bg, x, 2*y+1), 0.3)
 				continue
 			}
@@ -136,16 +127,13 @@ func hvOver(m *Model, f *fb, g playGeom) {
 	}
 }
 
-// hvGlyph: the cell holds a letter, so a space beside it is a gap inside the text.
-func hvGlyph(c *cell) bool { return c != nil && !c.pix && c.ch != ' ' }
-
 // hvCover: the flames on the cover flicker, the rest of the photo stays still.
 func hvCover(m *Model, at func(px, py int) col, px, py int) col {
 	c := at(px, py)
 	if c.lum() < 0.45 || c.r < c.b+0.2 {
 		return c
 	}
-	return c.mul(0.82 + 0.36*hvNoise(float64(px)*0.25, float64(py)*0.18+m.trackT*2.5, 44))
+	return c.mul(0.82 + 0.36*vnoise(float64(px)*0.25, float64(py)*0.18+m.trackT*2.5, 44))
 }
 
 // hvInk: the title smoulders, hot at its bottom edge; the morning after it has cooled.
@@ -153,5 +141,5 @@ func hvInk(m *Model, c col, u, v float64) col {
 	if hvAfter(m) {
 		return c
 	}
-	return c.lerp(hvEmber, 0.7*v*(0.7+0.3*hvNoise(u*8, m.trackT*2, 45)))
+	return c.lerp(hvEmber, 0.7*v*(0.7+0.3*vnoise(u*8, m.trackT*2, 45)))
 }
