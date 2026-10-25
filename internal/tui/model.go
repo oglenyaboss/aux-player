@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -58,6 +59,7 @@ type Model struct {
 
 	// Debug log
 	debugLog []string
+	logW     io.Writer
 }
 
 func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Options) *Model {
@@ -77,6 +79,7 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 	}
 	m.vibeAI = newVibeAIRun()
 	m.vibeAIP = &vibeAIPanel{m: newStageScreen(m)}
+	m.logW = opts.DebugLog
 	for _, line := range opts.InitialLogs {
 		m.appendLog(line)
 	}
@@ -375,6 +378,9 @@ func (m *Model) appendLog(line string) {
 	const maxLines = 500
 	ts := time.Now().Format("15:04:05")
 	m.debugLog = append(m.debugLog, ts+"  "+line)
+	if m.logW != nil {
+		fmt.Fprintf(m.logW, "%s  %s\n", time.Now().Format("2006-01-02 15:04:05.000"), line)
+	}
 	if len(m.debugLog) > maxLines {
 		m.debugLog = m.debugLog[len(m.debugLog)-maxLines:]
 	}

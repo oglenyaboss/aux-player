@@ -417,3 +417,16 @@ func TestNew_ScanNoticeOnlyLoggedWhenTracksWereFound(t *testing.T) {
 		t.Errorf("debugLog = %v, want an entry carrying the notice", m.debugLog)
 	}
 }
+
+func TestDebugLogWritesToFile(t *testing.T) {
+	var buf strings.Builder
+	m := New(testCfg(), &mockProvider{}, nil, Options{DebugLog: &buf, InitialLogs: []string{"[broker] start"}})
+	m.Update(DebugLogMsg("[js:next] skip"))
+	got := buf.String()
+	if !strings.Contains(got, "  [broker] start\n") || !strings.Contains(got, "  [js:next] skip\n") {
+		t.Fatalf("debug log file = %q, want both lines", got)
+	}
+	if !strings.HasPrefix(got, time.Now().Format("2006-01-02 ")) {
+		t.Fatalf("debug log line must start with the date: %q", got)
+	}
+}

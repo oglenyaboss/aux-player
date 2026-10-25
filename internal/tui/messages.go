@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"io"
+
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 )
@@ -27,6 +29,8 @@ type Options struct {
 	ScanNotice string
 	// InitialLogs pre-populates the debug log on launch (e.g. broker token fetch logs).
 	InitialLogs []string
+	// DebugLog, when set, gets every debug log line with its date (aux --debug).
+	DebugLog io.Writer
 }
 
 // InitStatusMsg updates the loading status; the AUX scene has no loading screen

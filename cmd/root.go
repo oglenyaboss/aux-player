@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -70,6 +71,15 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	}
 
 	opts := tui.Options{}
+	if debug {
+		logFile, err := openDebugLog()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = logFile.Close() }()
+		opts.DebugLog = logFile
+		fmt.Fprintf(os.Stderr, "debug log: %s\n", logFile.Name())
+	}
 
 	if local {
 		// if --music-dir was passed, it will save to config.
@@ -181,4 +191,18 @@ func runTUI(_ *cobra.Command, _ []string) error {
 
 	return runPlatform(cfg, iconPath, opts, onUserToken, onStorefront, audioBitrateKbps)
 
+}
+
+// openDebugLog opens ~/.cache/aux/debug.log for appending, so the lines of a run
+// that went wrong survive the next start.
+func openDebugLog() (*os.File, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("debug log: %w", err)
+	}
+	dir = filepath.Join(dir, "aux")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("debug log: %w", err)
+	}
+	return os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 }
