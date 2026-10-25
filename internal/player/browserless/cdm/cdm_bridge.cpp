@@ -5,13 +5,55 @@
 #include <vector>
 #include <chrono>
 #include <cstring>
+#include <cstdio>
 #include <dlfcn.h>
-#include <sys/time.h>
 #include <mutex>
 #include <condition_variable>
 #include <cstdlib>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#include <sys/time.h>
+#endif
+
 namespace {
+
+// Portable shared-library and wall-clock helpers. The CDM is a plain C-ABI
+// shared object everywhere; only how we load it differs.
+#ifdef _WIN32
+void* load_library(const char* utf8_path) {
+    int n = MultiByteToWideChar(CP_UTF8, 0, utf8_path, -1, nullptr, 0);
+    if (n <= 0) return nullptr;
+    std::vector<wchar_t> wide(static_cast<size_t>(n));
+    MultiByteToWideChar(CP_UTF8, 0, utf8_path, -1, wide.data(), n);
+    // LOAD_WITH_ALTERED_SEARCH_PATH resolves the DLL's own dependencies from its directory.
+    return reinterpret_cast<void*>(LoadLibraryExW(wide.data(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH));
+}
+void* load_symbol(void* lib, const char* name) {
+    return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(lib), name));
+}
+void unload_library(void* lib) { FreeLibrary(static_cast<HMODULE>(lib)); }
+double wall_time_seconds() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER u;
+    u.LowPart = ft.dwLowDateTime;
+    u.HighPart = ft.dwHighDateTime;
+    // 100ns ticks since 1601-01-01 -> seconds since the Unix epoch.
+    return static_cast<double>(u.QuadPart - 116444736000000000ULL) / 10000000.0;
+}
+#else
+void* load_library(const char* path) { return dlopen(path, RTLD_NOW); }
+void* load_symbol(void* lib, const char* name) { return dlsym(lib, name); }
+void unload_library(void* lib) { dlclose(lib); }
+double wall_time_seconds() {
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    return static_cast<double>(tv.tv_sec) + static_cast<double>(tv.tv_usec) / 1000000.0;
+}
+#endif
 
 class BufferImpl : public cdm::Buffer {
     std::vector<uint8_t> data_;
@@ -35,12 +77,12 @@ public:
     cdm::Buffer* DecryptedBuffer() override { return buffer_; }
     void SetTimestamp(int64_t ts) override { ts_ = ts; }
     int64_t Timestamp() const override { return ts_; }
-    ~DecryptedBlockImpl() override {
+    ~DecryptedBlockImpl() {
         if (buffer_) buffer_->Destroy();
     }
 };
 
-class Host11Impl : public cdm::Host_11 {
+class HostImpl : public cdm::Host_10, public cdm::Host_11 {
 public:
     std::mutex cv_m;
     std::condition_variable msg_cv;
@@ -48,6 +90,7 @@ public:
     std::condition_variable cert_cv;
 
     bool initialized = false;
+    bool init_reported = false;
     std::string sessionId;
     std::vector<uint8_t> sessionMessage;
     bool hasMessage = false;
@@ -64,14 +107,14 @@ public:
     void SetTimer(int64_t delay_ms, void* context) override {}
 
     cdm::Time GetCurrentWallTime() override {
-        struct timeval tv;
-        gettimeofday(&tv, nullptr);
-        return static_cast<cdm::Time>(tv.tv_sec) + static_cast<cdm::Time>(tv.tv_usec) / 1000000.0;
+        return static_cast<cdm::Time>(wall_time_seconds());
     }
 
     void OnInitialized(bool success) override {
         std::lock_guard<std::mutex> lk(cv_m);
+        init_reported = true;
         initialized = success;
+        msg_cv.notify_all();
     }
 
     void OnResolveKeyStatusPromise(uint32_t promise_id, cdm::KeyStatus key_status) override {}
@@ -94,6 +137,9 @@ public:
     }
 
     void OnRejectPromise(uint32_t promise_id, cdm::Exception exception, uint32_t system_code, const char* error_message, uint32_t error_message_size) override {
+        fprintf(stderr, "aux-cdm: OnRejectPromise promise=%u exception=%d system=%u msg=%.*s\n",
+                promise_id, static_cast<int>(exception), system_code,
+                static_cast<int>(error_message_size), error_message ? error_message : "");
         std::lock_guard<std::mutex> lk(cv_m);
         if (promise_id == 1) {
             certFailed = true;
@@ -142,8 +188,12 @@ public:
 };
 
 void* GetCdmHostCallback(int host_interface_version, void* user_data) {
+    HostImpl* host = static_cast<HostImpl*>(user_data);
     if (host_interface_version == 11) {
-        return static_cast<cdm::Host_11*>(user_data);
+        return static_cast<cdm::Host_11*>(host);
+    }
+    if (host_interface_version == 10) {
+        return static_cast<cdm::Host_10*>(host);
     }
     return nullptr;
 }
@@ -152,8 +202,9 @@ void* GetCdmHostCallback(int host_interface_version, void* user_data) {
 
 struct cdm_context {
     void* lib_handle = nullptr;
+    cdm::ContentDecryptionModule_10* cdm10 = nullptr;
     cdm::ContentDecryptionModule_11* cdm11 = nullptr;
-    Host11Impl host;
+    HostImpl host;
 };
 
 extern "C" {
@@ -161,23 +212,25 @@ extern "C" {
 cdm_context_t* cdm_context_create(const char* library_path) {
     if (!library_path) return nullptr;
 
-    void* handle = dlopen(library_path, RTLD_NOW);
+    void* handle = load_library(library_path);
     if (!handle) {
+        fprintf(stderr, "aux-cdm: dlopen(%s) failed: %s\n", library_path, dlerror());
         return nullptr;
     }
 
     using InitFunc = void (*)(void);
     using CreateFunc = void* (*)(int, const char*, uint32_t, GetCdmHostFunc, void*);
 
-    InitFunc init_cdm = reinterpret_cast<InitFunc>(dlsym(handle, "InitializeCdmModule_4"));
-    CreateFunc create_cdm = reinterpret_cast<CreateFunc>(dlsym(handle, "CreateCdmInstance"));
+    InitFunc init_cdm = reinterpret_cast<InitFunc>(load_symbol(handle, "InitializeCdmModule_4"));
+    CreateFunc create_cdm = reinterpret_cast<CreateFunc>(load_symbol(handle, "CreateCdmInstance"));
 
     if (!init_cdm) {
-        init_cdm = reinterpret_cast<InitFunc>(dlsym(handle, "InitializeCdmModule"));
+        init_cdm = reinterpret_cast<InitFunc>(load_symbol(handle, "InitializeCdmModule"));
     }
 
     if (!create_cdm) {
-        dlclose(handle);
+        fprintf(stderr, "aux-cdm: CreateCdmInstance symbol missing in %s\n", library_path);
+        unload_library(handle);
         return nullptr;
     }
 
@@ -190,26 +243,60 @@ cdm_context_t* cdm_context_create(const char* library_path) {
 
     std::string key_system = "com.widevine.alpha";
     void* raw = create_cdm(11, key_system.data(), static_cast<uint32_t>(key_system.size()), GetCdmHostCallback, &ctx->host);
-    if (!raw) {
-        delete ctx;
-        dlclose(handle);
-        return nullptr;
+    if (raw) {
+        ctx->cdm11 = static_cast<cdm::ContentDecryptionModule_11*>(raw);
+    } else {
+        // ARM64 Linux Widevine builds advertise CDM interface 10 only.
+        fprintf(stderr, "aux-cdm: CDM interface 11 unavailable for %s, trying 10\n", library_path);
+        raw = create_cdm(10, key_system.data(), static_cast<uint32_t>(key_system.size()), GetCdmHostCallback, &ctx->host);
+        if (!raw) {
+            fprintf(stderr, "aux-cdm: CreateCdmInstance returned NULL for interfaces 11 and 10 in %s\n", library_path);
+            delete ctx;
+            unload_library(handle);
+            return nullptr;
+        }
+        ctx->cdm10 = static_cast<cdm::ContentDecryptionModule_10*>(raw);
     }
 
-    ctx->cdm11 = static_cast<cdm::ContentDecryptionModule_11*>(raw);
-    ctx->cdm11->Initialize(true, false, false);
+    if (ctx->cdm11) {
+        ctx->cdm11->Initialize(true, false, false);
+    } else {
+        ctx->cdm10->Initialize(true, false, false);
+    }
+
+    // CDM 10 may deliver Host::OnInitialized asynchronously; session creation
+    // before it would be a contract violation the CDM silently drops.
+    bool reported = false;
+    bool init_ok = false;
+    {
+        std::unique_lock<std::mutex> lk(ctx->host.cv_m);
+        reported = ctx->host.msg_cv.wait_for(lk, std::chrono::seconds(5), [&]{
+            return ctx->host.init_reported;
+        });
+        init_ok = ctx->host.initialized;
+    }
+    if (!reported || !init_ok) {
+        if (!reported) fprintf(stderr, "aux-cdm: CDM did not call OnInitialized within 5s (%s)\n", library_path);
+        else fprintf(stderr, "aux-cdm: CDM reported initialization failure (%s)\n", library_path);
+        if (ctx->cdm11) ctx->cdm11->Destroy();
+        else ctx->cdm10->Destroy();
+        delete ctx;
+        unload_library(handle);
+        return nullptr;
+    }
 
     return ctx;
 }
 
 int cdm_context_set_server_certificate(cdm_context_t* ctx, const uint8_t* cert_data, uint32_t cert_size) {
-    if (!ctx || !ctx->cdm11) return -1;
+    if (!ctx || (!ctx->cdm11 && !ctx->cdm10)) return -1;
     {
         std::lock_guard<std::mutex> lk(ctx->host.cv_m);
         ctx->host.certResolved = false;
         ctx->host.certFailed = false;
     }
-    ctx->cdm11->SetServerCertificate(1, cert_data, cert_size);
+    if (ctx->cdm11) ctx->cdm11->SetServerCertificate(1, cert_data, cert_size);
+    else ctx->cdm10->SetServerCertificate(1, cert_data, cert_size);
     {
         std::unique_lock<std::mutex> lk(ctx->host.cv_m);
         bool ok = ctx->host.cert_cv.wait_for(lk, std::chrono::seconds(5), [&]{
@@ -230,7 +317,7 @@ int cdm_context_generate_challenge(
     uint32_t* out_challenge_size,
     char** out_session_id
 ) {
-    if (!ctx || !ctx->cdm11 || !kid || kid_size != 16) return -1;
+    if (!ctx || (!ctx->cdm11 && !ctx->cdm10) || !kid || kid_size != 16) return -1;
 
     // Reset host session state
     {
@@ -259,7 +346,14 @@ int cdm_context_generate_challenge(
     };
     pssh.insert(pssh.end(), kid, kid + kid_size);
 
-    ctx->cdm11->CreateSessionAndGenerateRequest(
+    if (ctx->cdm11) ctx->cdm11->CreateSessionAndGenerateRequest(
+        2,
+        cdm::SessionType::kTemporary,
+        cdm::InitDataType::kCenc,
+        pssh.data(),
+        static_cast<uint32_t>(pssh.size())
+    );
+    else ctx->cdm10->CreateSessionAndGenerateRequest(
         2,
         cdm::SessionType::kTemporary,
         cdm::InitDataType::kCenc,
@@ -286,7 +380,8 @@ int cdm_context_generate_challenge(
         }
         std::memcpy(*out_challenge, ctx->host.sessionMessage.data(), *out_challenge_size);
 
-        *out_session_id = strdup(ctx->host.sessionId.c_str());
+        *out_session_id = static_cast<char*>(std::malloc(ctx->host.sessionId.size() + 1));
+        if (*out_session_id) std::memcpy(*out_session_id, ctx->host.sessionId.c_str(), ctx->host.sessionId.size() + 1);
         if (!*out_session_id) {
             std::free(*out_challenge);
             *out_challenge = nullptr;
@@ -303,7 +398,7 @@ int cdm_context_update_session(
     const uint8_t* license_data,
     uint32_t license_size
 ) {
-    if (!ctx || !ctx->cdm11 || !session_id || !license_data) return -1;
+    if (!ctx || (!ctx->cdm11 && !ctx->cdm10) || !session_id || !license_data) return -1;
 
     {
         std::lock_guard<std::mutex> lk(ctx->host.cv_m);
@@ -312,7 +407,14 @@ int cdm_context_update_session(
         ctx->host.usableKeys = 0;
     }
 
-    ctx->cdm11->UpdateSession(
+    if (ctx->cdm11) ctx->cdm11->UpdateSession(
+        3,
+        session_id,
+        static_cast<uint32_t>(std::strlen(session_id)),
+        license_data,
+        license_size
+    );
+    else ctx->cdm10->UpdateSession(
         3,
         session_id,
         static_cast<uint32_t>(std::strlen(session_id)),
@@ -350,7 +452,7 @@ int cdm_context_decrypt(
     uint8_t* out_decrypted,
     uint32_t* out_size
 ) {
-    if (!ctx || !ctx->cdm11 || !in_data || in_size == 0) return -1;
+    if (!ctx || (!ctx->cdm11 && !ctx->cdm10) || !in_data || in_size == 0) return -1;
 
     cdm::InputBuffer_2 input = {};
     input.data = in_data;
@@ -361,6 +463,7 @@ int cdm_context_decrypt(
     input.iv = iv;
     input.iv_size = iv_size;
 
+    cdm::SubsampleEntry default_subsample = {0, in_size};
     std::vector<cdm::SubsampleEntry> subs;
     if (num_subsamples > 0 && clear_bytes && cipher_bytes) {
         subs.resize(num_subsamples);
@@ -371,13 +474,13 @@ int cdm_context_decrypt(
         input.subsamples = subs.data();
         input.num_subsamples = num_subsamples;
     } else {
-        cdm::SubsampleEntry default_subsample = {0, in_size};
         input.subsamples = &default_subsample;
         input.num_subsamples = 1;
     }
 
     DecryptedBlockImpl output;
-    cdm::Status status = ctx->cdm11->Decrypt(input, &output);
+    cdm::Status status = ctx->cdm11 ? ctx->cdm11->Decrypt(input, &output)
+                                     : ctx->cdm10->Decrypt(input, &output);
     if (status != cdm::kSuccess) {
         return static_cast<int>(status);
     }
@@ -402,10 +505,14 @@ void cdm_context_destroy(cdm_context_t* ctx) {
         ctx->cdm11->Destroy();
         ctx->cdm11 = nullptr;
     }
-    if (ctx->lib_handle) {
-        dlclose(ctx->lib_handle);
-        ctx->lib_handle = nullptr;
+    if (ctx->cdm10) {
+        ctx->cdm10->Destroy();
+        ctx->cdm10 = nullptr;
     }
+    // We intentionally do not call unload_library here: Widevine CDM spins up
+    // internal threads and TLS destructors that expect the library code to
+    // remain mapped until process termination.
+    ctx->lib_handle = nullptr;
     delete ctx;
 }
 

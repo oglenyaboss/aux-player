@@ -13,7 +13,7 @@ make build      # produces ./aux
 make install    # builds with an embedded Apple developer token and installs to ~/.local/bin/aux
 ```
 
-On Linux, `make build` checks for the GStreamer 1.0, GTK 3 and WebKit2GTK 4.1 (or 4.0) development packages first; install them through your distro's package manager. `make install` additionally needs `APPLE_KEY_ID`, `APPLE_TEAM_ID` and `APPLE_PRIVATE_KEY` in the environment or a local `.env`. Override the install location with `make install PREFIX=/usr/local`.
+On Linux, `make build` checks for the GStreamer 1.0 development packages first (install them through your distro's package manager, plus an AAC-decoder plugin such as `gst-libav` for playback). `make install` additionally needs `APPLE_KEY_ID`, `APPLE_TEAM_ID` and `APPLE_PRIVATE_KEY` in the environment or a local `.env`. Override the install location with `make install PREFIX=/usr/local`.
 
 ## First run
 
@@ -50,7 +50,7 @@ The onboarding walks through four screens before playback starts:
 - `~/.config/aux/config.json` — settings and tokens, written with `0600` permissions.
 - `~/.config/aux/vibe-signals.jsonl` — the agent's feedback signals.
 - `~/.config/aux/vibe-memory.md` — what the agent remembers about your taste.
-- `~/.cache/aux/` — library cache, agent session logs under `vibe/runs`, and the browser.
+- `~/.cache/aux/` — library cache, agent session logs under `vibe/runs`, the Widevine CDM under `cdm` (Linux) and the browser (macOS, Windows).
 
 ## Credits
 

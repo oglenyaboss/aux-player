@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin || windows
 
 package browserless
 
@@ -37,6 +37,9 @@ type trackStream struct {
 	segments  []segmentRef
 	totalDur  time.Duration
 	createdAt time.Time
+
+	seg0Mu  sync.Mutex
+	seg0AAC []byte
 }
 
 // StreamServer manages local HTTP streaming for decrypted Apple Music tracks.
@@ -160,9 +163,9 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 	var keyURI string
 	var initURI string
 	var initOffset, initLength int64
+	var nextByteRangeEnd int64
 	var segments []segmentRef
 	var currDuration float64
-
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		switch {
@@ -180,7 +183,14 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 			}
 			if _, rest, ok := strings.Cut(line, "BYTERANGE=\""); ok {
 				if rangeStr, _, ok := strings.Cut(rest, "\""); ok {
-					_, _ = fmt.Sscanf(rangeStr, "%d@%d", &initLength, &initOffset)
+					if lStr, oStr, hasAt := strings.Cut(rangeStr, "@"); hasAt {
+						initLength, _ = strconv.ParseInt(strings.TrimSpace(lStr), 10, 64)
+						initOffset, _ = strconv.ParseInt(strings.TrimSpace(oStr), 10, 64)
+					} else {
+						initLength, _ = strconv.ParseInt(strings.TrimSpace(rangeStr), 10, 64)
+						initOffset = 0
+					}
+					nextByteRangeEnd = initOffset + initLength
 				}
 			}
 		case strings.HasPrefix(line, "#EXTINF:"):
@@ -191,8 +201,16 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 			dur, _ := strconv.ParseFloat(strings.TrimSpace(val), 64)
 			currDuration = dur
 		case strings.HasPrefix(line, "#EXT-X-BYTERANGE:"):
+			rangeSpec := strings.TrimSpace(strings.TrimPrefix(line, "#EXT-X-BYTERANGE:"))
 			var l, o int64
-			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "#EXT-X-BYTERANGE:"), "%d@%d", &l, &o)
+			if lStr, oStr, hasAt := strings.Cut(rangeSpec, "@"); hasAt {
+				l, _ = strconv.ParseInt(strings.TrimSpace(lStr), 10, 64)
+				o, _ = strconv.ParseInt(strings.TrimSpace(oStr), 10, 64)
+			} else {
+				l, _ = strconv.ParseInt(rangeSpec, 10, 64)
+				o = nextByteRangeEnd
+			}
+			nextByteRangeEnd = o + l
 			for i+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "#") {
 				i++
 			}
@@ -286,6 +304,17 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 	}
 	s.streams[streamID] = st
 	s.mu.Unlock()
+
+	// Warm decrypted segment 0 asynchronously so both initial playback and
+	// seek-to-start (0:00) can write the first ~10s of ADTS frames immediately
+	// without waiting for an upstream CDN round-trip.
+	if len(segments) > 0 && s.cdmEngine != nil {
+		go func() {
+			warmCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			_, _, _ = s.getOrFetchSegment0(warmCtx, &http.Client{Timeout: 10 * time.Second}, st)
+		}()
+	}
 
 	streamURL := fmt.Sprintf("http://127.0.0.1:%d/stream/%s/%s.aac", s.port, streamID, s.authToken)
 	return streamURL, totalDur, nil
@@ -415,54 +444,23 @@ func (s *StreamServer) handleStream(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 
-		seg := st.segments[i]
-		segURL := seg.uri
-		if !strings.HasPrefix(segURL, "http://") && !strings.HasPrefix(segURL, "https://") {
-			segURL = st.baseURI + seg.uri
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, segURL, nil)
-		if err != nil {
-			fail(i, "build request", err)
-			return
-		}
-		if seg.length > 0 {
-			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", seg.offset, seg.offset+seg.length-1))
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			fail(i, "fetch", err)
-			return
-		}
-
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-			_ = resp.Body.Close()
-			fail(i, "fetch", fmt.Errorf("status %s", resp.Status))
-			return
-		}
-
-		segData, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			fail(i, "read", err)
-			return
-		}
-
-		// Decrypt segment into ADTS AAC frames passing subsamples
-		aacData, err := mp4.DecryptSegment(segData, st.kid, st.audioCfg, func(kid, iv, input []byte, subs []mp4.Subsample) ([]byte, error) {
-			cdmSubs := make([]cdm.Subsample, len(subs))
-			for si, sb := range subs {
-				cdmSubs[si] = cdm.Subsample{
-					ClearBytes:  sb.ClearBytes,
-					CipherBytes: sb.CipherBytes,
-				}
+		var aacData []byte
+		if i == 0 {
+			var stage string
+			var err error
+			aacData, stage, err = s.getOrFetchSegment0(ctx, client, st)
+			if err != nil {
+				fail(i, stage, err)
+				return
 			}
-			return s.cdmEngine.DecryptSubsamples(kid, iv, input, cdmSubs)
-		})
-		if err != nil {
-			fail(i, "decrypt", err)
-			return
+		} else {
+			var stage string
+			var err error
+			aacData, stage, err = s.fetchAndDecryptSegment(ctx, client, st, st.segments[i])
+			if err != nil {
+				fail(i, stage, err)
+				return
+			}
 		}
 
 		// Write to HTTP client (GStreamer). A failed write means the client
@@ -477,6 +475,117 @@ func (s *StreamServer) handleStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func (s *StreamServer) getOrFetchSegment0(ctx context.Context, client *http.Client, st *trackStream) ([]byte, string, error) {
+	st.seg0Mu.Lock()
+	defer st.seg0Mu.Unlock()
+	if len(st.seg0AAC) > 0 {
+		return st.seg0AAC, "", nil
+	}
+	aacData, stage, err := s.fetchAndDecryptSegment(ctx, client, st, st.segments[0])
+	if err != nil {
+		return nil, stage, err
+	}
+	st.seg0AAC = aacData
+	return aacData, "", nil
+}
+
+func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.Client, st *trackStream, seg segmentRef) ([]byte, string, error) {
+	segURL := seg.uri
+	if !strings.HasPrefix(segURL, "http://") && !strings.HasPrefix(segURL, "https://") {
+		segURL = st.baseURI + seg.uri
+	}
+
+	segData, stage, err := fetchSegmentWithRetry(ctx, client, segURL, seg.offset, seg.length)
+	if err != nil {
+		return nil, stage, err
+	}
+	aacData, err := mp4.DecryptSegment(segData, st.kid, st.audioCfg, func(kid, iv, input []byte, subs []mp4.Subsample) ([]byte, error) {
+		cdmSubs := make([]cdm.Subsample, len(subs))
+		for si, sb := range subs {
+			cdmSubs[si] = cdm.Subsample{
+				ClearBytes:  sb.ClearBytes,
+				CipherBytes: sb.CipherBytes,
+			}
+		}
+		return s.cdmEngine.DecryptSubsamples(kid, iv, input, cdmSubs)
+	})
+	if err != nil {
+		return nil, "decrypt", err
+	}
+	return aacData, "", nil
+}
+
+// segmentRetryBackoffs defines the wait intervals between retry attempts for
+// transient CDN network or 5xx/429 errors when fetching an HLS segment.
+var segmentRetryBackoffs = []time.Duration{
+	200 * time.Millisecond,
+	500 * time.Millisecond,
+}
+
+// fetchSegmentWithRetry downloads one HLS byte-range or segment URL, retrying
+// transient network/read errors and HTTP 429/5xx responses before giving up.
+func fetchSegmentWithRetry(ctx context.Context, client *http.Client, segURL string, offset, length int64) ([]byte, string, error) {
+	var lastStage string
+	var lastErr error
+
+	for attempt := 0; attempt <= len(segmentRetryBackoffs); attempt++ {
+		if attempt > 0 {
+			timer := time.NewTimer(segmentRetryBackoffs[attempt-1])
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, lastStage, ctx.Err()
+			case <-timer.C:
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, segURL, nil)
+		if err != nil {
+			return nil, "build request", err
+		}
+		if length > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+length-1))
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastStage = "fetch"
+			lastErr = err
+			if ctx.Err() != nil {
+				return nil, lastStage, lastErr
+			}
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+			_ = resp.Body.Close()
+			lastStage = "fetch"
+			lastErr = fmt.Errorf("status %s", resp.Status)
+			// Only retry 408 Request Timeout, 429 Too Many Requests, or 5xx server errors.
+			if resp.StatusCode != http.StatusRequestTimeout &&
+				resp.StatusCode != http.StatusTooManyRequests &&
+				resp.StatusCode < http.StatusInternalServerError {
+				return nil, lastStage, lastErr
+			}
+			continue
+		}
+
+		segData, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			lastStage = "read"
+			lastErr = err
+			if ctx.Err() != nil {
+				return nil, lastStage, lastErr
+			}
+			continue
+		}
+		return segData, "", nil
+	}
+
+	return nil, lastStage, lastErr
 }
 
 // Close terminates the local HTTP stream server.

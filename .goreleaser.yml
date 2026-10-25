@@ -8,7 +8,7 @@ builds:
   - id: aux-linux
     binary: aux
     # Set to 1 by the darwin release job, which runs this same config on a
-    # macOS runner and cannot build the webkit/gstreamer CGO target.
+    # macOS runner and cannot build the gstreamer CGO target.
     skip: '{{ eq (index .Env "AUX_SKIP_LINUX") "1" }}'
     ldflags:
       - -s -w
@@ -17,17 +17,15 @@ builds:
       - -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey={{ .Env.AUX_CLIENT_KEY }}'
     env:
       - CGO_ENABLED=1
-      - PKG_CONFIG_PATH={{ .Env.PROJECT_DIR }}/pkg-config
       - GOTOOLCHAIN=local
     goos:
       - linux
     goarch:
       - amd64
-      # linux/arm64 works at runtime (internal/player/cdp discovers a system
-      # Chromium + Widevine CDM), but is not published here yet: this CGO/webkit
-      # build needs an aarch64 toolchain (CC=aarch64-linux-gnu-gcc + arm64
-      # webkit2gtk) or a native arm64 runner. Until then arm64 users build from
-      # source with `make build`.
+      # linux/arm64 is not published here yet: this CGO/GStreamer build needs
+      # an aarch64 toolchain (CC=aarch64-linux-gnu-gcc + arm64 GStreamer) or a
+      # native arm64 runner. Until then arm64 users build from source with
+      # `make build`.
 
   - id: aux-darwin
     binary: aux

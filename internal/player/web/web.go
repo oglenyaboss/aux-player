@@ -1,5 +1,5 @@
-// Package web provides the shared MusicKit HTML template used by both the
-// WebKit and CDP (Chrome DevTools Protocol) audio backends.
+// Package web provides the shared MusicKit HTML template used by the
+// CDP (Chrome DevTools Protocol) audio backend.
 package web
 
 import (

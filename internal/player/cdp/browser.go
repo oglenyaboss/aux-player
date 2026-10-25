@@ -232,8 +232,7 @@ func widevineCDMDir() string {
 // host. On amd64 AUX downloads Google Chrome, so it is always available; a
 // AUX_CHROME_PATH override is not checked here, so an unusable one fails in
 // EnsureBrowser, where the user sees why. On arm64 it requires a system
-// Chromium/Chrome plus a Widevine CDM. Every other Linux arch uses the WebKit
-// + GStreamer preview fallback.
+// Chromium/Chrome plus a Widevine CDM.
 func Available() bool {
 	switch runtime.GOARCH {
 	case "amd64":

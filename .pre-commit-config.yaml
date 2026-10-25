@@ -48,7 +48,7 @@ repos:
         name: musickit js test
         language: system
         entry: node internal/player/web/musickit_test.mjs
-        files: '^internal/player/(web|webkit/web)/musickit'
+        files: '^internal/player/web/musickit'
         pass_filenames: false
 
       - id: worker-js-test

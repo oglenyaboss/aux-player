@@ -104,6 +104,23 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 			return
 		}
 		_ = blPlayer.SetAudioBitrate(audioBitrateKbps)
+		blPlayer.OnSessionExpired = func() {
+			prog.Send(tui.SessionExpiredMsg{})
+			go func() {
+				if err := auth.Login(cfg); err != nil {
+					prog.Send(tui.InitErrMsg{Err: fmt.Errorf("re-auth: %w", err)})
+					return
+				}
+				if onUserToken != nil {
+					onUserToken(cfg.AppleUserToken)
+				}
+				if _, sf := auth.CheckTokens(cfg.AppleDeveloperToken, cfg.AppleUserToken); sf != "" && onStorefront != nil {
+					onStorefront(sf)
+				}
+				blPlayer.ResetSessionExpired()
+				prog.Send(tui.SessionRestoredMsg{})
+			}()
+		}
 
 		playerCh <- blPlayer
 

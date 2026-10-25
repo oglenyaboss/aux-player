@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin || windows
 
 package browserless
 
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,6 +77,106 @@ func TestHandleStreamCancelledIsNotAFailure(t *testing.T) {
 	}
 	if panicked != nil {
 		t.Errorf("handler panicked with %v for a cancelled request, want a plain return", panicked)
+	}
+}
+
+func TestHandleStreamServesCachedSegment0WithoutUpstreamFetch(t *testing.T) {
+	var upstreamHits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+
+	wantAAC := []byte{0xff, 0xf1, 0x50, 0x80, 0x01, 0xbf, 0xfc, 0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c}
+	s := &StreamServer{
+		authToken: "tok",
+		streams: map[string]*trackStream{
+			"s1": {
+				trackID:  "123",
+				baseURI:  upstream.URL + "/",
+				segments: []segmentRef{{uri: "seg0.mp4", duration: 10.0}},
+				seg0AAC:  wantAAC,
+			},
+		},
+	}
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/stream/s1/tok.aac", nil)
+		req.RemoteAddr = "127.0.0.1:40000"
+		rr := httptest.NewRecorder()
+		s.handleStream(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rr.Code)
+		}
+		if !bytes.Equal(rr.Body.Bytes(), wantAAC) {
+			t.Errorf("body = %x, want %x", rr.Body.Bytes(), wantAAC)
+		}
+	}
+	if got := upstreamHits.Load(); got != 0 {
+		t.Errorf("upstream hits = %d, want 0 when segment 0 is already cached", got)
+	}
+}
+
+func TestFetchSegmentWithRetry_RecoversFromTransient502AndEOF(t *testing.T) {
+	origBackoffs := segmentRetryBackoffs
+	segmentRetryBackoffs = []time.Duration{5 * time.Millisecond, 10 * time.Millisecond}
+	t.Cleanup(func() { segmentRetryBackoffs = origBackoffs })
+
+	var attempts atomic.Int32
+	var gotRange string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		gotRange = r.Header.Get("Range")
+		switch n {
+		case 1:
+			w.WriteHeader(http.StatusBadGateway)
+		case 2:
+			// Simulate mid-body connection drop via Content-Length mismatch.
+			w.Header().Set("Content-Length", "100")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("short"))
+		default:
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte("recovered-segment-payload"))
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	data, stage, err := fetchSegmentWithRetry(context.Background(), upstream.Client(), upstream.URL+"/seg.mp4", 100, 25)
+	if err != nil {
+		t.Fatalf("fetchSegmentWithRetry failed: stage=%q err=%v", stage, err)
+	}
+	if string(data) != "recovered-segment-payload" {
+		t.Errorf("data = %q, want %q", string(data), "recovered-segment-payload")
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("attempts = %d, want 3", got)
+	}
+	if gotRange != "bytes=100-124" {
+		t.Errorf("Range header = %q, want %q", gotRange, "bytes=100-124")
+	}
+}
+
+func TestFetchSegmentWithRetry_DoesNotRetryPermanent403(t *testing.T) {
+	origBackoffs := segmentRetryBackoffs
+	segmentRetryBackoffs = []time.Duration{5 * time.Millisecond, 10 * time.Millisecond}
+	t.Cleanup(func() { segmentRetryBackoffs = origBackoffs })
+
+	var attempts atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, stage, err := fetchSegmentWithRetry(context.Background(), upstream.Client(), upstream.URL+"/seg.mp4", 0, 0)
+	if err == nil || stage != "fetch" {
+		t.Fatalf("expected fetch error on 403, got stage=%q err=%v", stage, err)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("attempts = %d, want 1 (403 must not be retried)", got)
 	}
 }
 

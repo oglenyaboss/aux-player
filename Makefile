@@ -1,5 +1,3 @@
-GOFLAGS=-tags webkit2gtk_4_1
-PKG_CONFIG_PATH=$(CURDIR)/pkg-config
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
@@ -11,25 +9,13 @@ ifeq ($(shell uname -s),Linux)
 	@pkg-config --exists gstreamer-1.0 2>/dev/null || \
 		{ echo ""; \
 		echo "ERROR: gstreamer-1.0 not found."; \
-		echo "Please install: gstreamer, gstreamer-plugins-base, gstreamer-plugins-good"; \
-		echo ""; exit 1; }
-
-	@pkg-config --exists gtk+-3.0 2>/dev/null || \
-		{ echo ""; \
-		echo "ERROR: gtk+-3.0 not found"; \
-		echo "Please install: gtk3 (or libgtk-3-dev on Debian based distros)"; \
-		echo ""; exit 1; }
-
-	@pkg-config --exists webkit2gtk-4.1 2>/dev/null || pkg-config --exists webkit2gtk-4.0 2>/dev/null || \
-		{ echo ""; \
-		echo "ERROR: webkit2gtk not found (checked 4.1 and 4.0)."; \
-		echo "Please install: webkit2gtk-4.1 (or libwebkit2gtk-4.1-dev on Debian based distros)"; \
+		echo "Please install: gstreamer, gstreamer-plugins-base, gstreamer-plugins-good, gst-libav (an AAC decoder is required)"; \
 		echo ""; exit 1; }
 	@echo "All dependencies found."
 endif
 
 build: check-deps
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build -o aux .
+	go build -o aux .
 
 # build-with-token embeds the Apple developer token without obfuscation.
 # Use this for local testing of the embedded-token flow.
@@ -50,7 +36,7 @@ build-with-token:
 		echo "Embedding Last.fm API keys..."; \
 	fi; \
 	echo "Building with embedded token..."; \
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build \
+	go build \
 		-ldflags "$$LDFLAGS" \
 		-o aux . && echo "Done. Run: aux auth login"
 
@@ -67,7 +53,7 @@ release: check-deps
 	@test -n "$$LASTFM_API_SECRET" || { echo "LASTFM_API_SECRET is not set"; exit 1; }
 	@set -e; \
 	echo "Building release binary..."; \
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go build \
+	go build \
 		-ldflags "-s -w \
 		          -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=$$AUX_TOKEN_URL' \
 		          -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=$$AUX_CLIENT_KEY' \
@@ -127,10 +113,10 @@ run: build
 	./aux
 
 test:
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) go test ./...
+	go test ./...
 
 lint:
-	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) golangci-lint run
+	golangci-lint run
 
 clean:
 	rm -f aux

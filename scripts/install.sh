@@ -95,7 +95,7 @@ case "${OS}" in
     linux)
         PLATFORM="Linux ${ARCH_RAW}"
         [ "${ARCH}" = "amd64" ] || \
-            die "no prebuilt Linux/${ARCH} binary is published yet — build from source: git clone https://github.com/oglenyaboss/aux-player && cd aux-player && make build (arm64 full-track playback needs a system Chromium + Widevine CDM installed)"
+            die "no prebuilt Linux/${ARCH} binary is published yet — build from source: git clone https://github.com/oglenyaboss/aux-player && cd aux-player && make build"
         ;;
     darwin)
         PLATFORM="macOS ${ARCH_RAW}"
