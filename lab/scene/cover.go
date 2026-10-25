@@ -153,7 +153,7 @@ func lookupTrack(ctx context.Context, term string) (stage.Track, string, error) 
 			return stage.Track{}, "", err
 		}
 		for _, t := range lk.Results {
-			if t.WrapperType != "track" || !strings.EqualFold(t.TrackName, title) {
+			if t.WrapperType != "track" || !sameTitle(t.TrackName, title) {
 				continue
 			}
 			if len(t.ReleaseDate) > 10 {
@@ -165,6 +165,12 @@ func lookupTrack(ctx context.Context, term string) (stage.Track, string, error) 
 		}
 	}
 	return stage.Track{}, "", fmt.Errorf("no exact match")
+}
+
+// sameTitle: equal, or Apple's title is ours plus a bracket — "(feat. …)", "(2019 Digital Master)".
+func sameTitle(apple, want string) bool {
+	a, w := strings.ToLower(apple), strings.ToLower(want)
+	return a == w || strings.HasPrefix(a, w+" (") || strings.HasPrefix(a, w+" [")
 }
 
 // fetchImage downloads and decodes one picture.

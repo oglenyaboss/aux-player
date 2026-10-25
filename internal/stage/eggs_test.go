@@ -26,6 +26,18 @@ func playFrame(t *testing.T, o Options, title string, e egg, secs float64) (*Mod
 	return m, m.render()
 }
 
+// eggTrackFrame opens the player at 160x45 on a real track from pos, runs secs of playback
+// and renders the frame; the bespoke eggs test against it.
+func eggTrackFrame(t *testing.T, o Options, tr Track, pos, secs float64) (*Model, *fb) {
+	t.Helper()
+	o.SelfPlay = true
+	m := New(o)
+	m.SetSize(160, 45)
+	m.JumpPlay([]Track{tr}, 0, pos)
+	steps(m, secs)
+	return m, m.render()
+}
+
 func TestEggLayersAlbumReplacesArtist(t *testing.T) {
 	m := New(Options{})
 	setRules(t,
@@ -302,5 +314,28 @@ func TestEggFrameOnAlbumTrack(t *testing.T) {
 	steps(m, 8)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "†") {
 		t.Errorf("кадр пасхалки альбома без ползунка †:\n%s", frame)
+	}
+}
+
+func TestFBBlank(t *testing.T) {
+	f := newFB(4, 1)
+	f.fill(0, 0, 4, 1, col{0, 0, 1})
+	f.put(1, 0, 'x', white)
+	f.pixel(2, 0, white)
+	f.blank(1, 0, 2)
+	for x := 1; x <= 2; x++ {
+		if c := f.at(x, 0); c.ch != ' ' || c.pix || c.bg.b != 1 {
+			t.Errorf("ячейка %d: %+v, ждали пробел на синем фоне", x, *c)
+		}
+	}
+	if c := f.at(3, 0); c.bg.b != 1 {
+		t.Errorf("blank задел соседнюю ячейку")
+	}
+}
+
+func TestEggTrackFrame(t *testing.T) {
+	m, f := eggTrackFrame(t, Options{}, Track{Artist: "A", Title: "T", Dur: 100}, 10, 2)
+	if f.w != 160 || f.h != 45 || m.pos < 11.9 || m.pos > 12.1 || m.pause > 0.01 {
+		t.Errorf("кадр %dx%d, pos %.2f, pause %.2f", f.w, f.h, m.pos, m.pause)
 	}
 }

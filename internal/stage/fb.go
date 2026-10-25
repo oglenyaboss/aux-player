@@ -94,6 +94,15 @@ func (f *fb) fill(x, y, w, h int, bg col) {
 	}
 }
 
+// blank wipes the glyphs of w cells from (x, y); the backgrounds stay.
+func (f *fb) blank(x, y, w int) {
+	for i := 0; i < w; i++ {
+		if c := f.at(x+i, y); c != nil {
+			c.ch, c.pix, c.bold, c.ital = ' ', false, false, false
+		}
+	}
+}
+
 func (f *fb) text(x, y int, s string, fg col) int { return f.textS(x, y, s, fg, false, false) }
 
 func (f *fb) textS(x, y int, s string, fg col, bold, ital bool) int {
