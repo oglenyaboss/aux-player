@@ -57,12 +57,28 @@ func TestParseSongSearch(t *testing.T) {
 		t.Fatalf("unexpected err %v", err)
 	}
 	want := []Song{
-		{ID: "s1", Artist: "Kanye West", Title: "Ultralight Beam", Album: "The Life of Pablo", Year: "2016",
+		{ID: "s1", Artist: "Kanye West", Title: "Ultralight Beam", Album: "The Life of Pablo", Year: "2016", Released: "2016-02-14",
 			ArtworkURL: "https://is1-ssl.mzstatic.com/image/{w}x{h}bb.jpg", DurationMs: 363245},
 		{ID: "s2", Artist: "Kanye West", Title: "Father Stretch My Hands", Album: "The Life of Pablo", Year: "?"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestParseSongSearchReleased(t *testing.T) {
+	body := `{"results":{"songs":{"data":[` +
+		`{"id":"1","attributes":{"artistName":"Playboi Carti","name":"Sky","albumName":"Whole Lotta Red","releaseDate":"2020-12-25","durationInMillis":193000}}]}}}`
+	got, err := parseSongSearch([]byte(body))
+	if err != nil {
+		t.Fatalf("unexpected err %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("%d песен, ждём 1", len(got))
+	}
+	s := got[0]
+	if s.Released != "2020-12-25" || s.Album != "Whole Lotta Red" || s.Year != "2020" {
+		t.Errorf("Released/Album/Year: %q %q %q, ждём 2020-12-25 / Whole Lotta Red / 2020", s.Released, s.Album, s.Year)
 	}
 }
 

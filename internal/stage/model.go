@@ -14,6 +14,8 @@ import (
 // Track is one song on the screen; Key is its identity for covers, themes and the queue.
 type Track struct {
 	ID, Artist, Title, Why string
+	Album                  string
+	Released               string  // release date as Apple gives it: "2020-12-25"
 	Dur                    float64 // seconds
 }
 
@@ -233,13 +235,16 @@ type Model struct {
 	pix    map[string]*pixgrid
 	themes map[string]theme
 
+	eggMemo map[string]*egg // eggOf runs the egg rules once per track key
+
 	dstep int
 }
 
 // New builds the screen; call SetCover for each cover before the first frame.
 func New(o Options) *Model {
 	m := &Model{w: 160, h: 45, th: night, to: night, o: o,
-		covers: map[string]image.Image{}, pix: map[string]*pixgrid{}, themes: map[string]theme{}}
+		covers: map[string]image.Image{}, pix: map[string]*pixgrid{}, themes: map[string]theme{},
+		eggMemo: map[string]*egg{}}
 	m.dim = spring{x: 1, to: 1}
 	m.reset()
 	if o.Onboard {
@@ -259,7 +264,7 @@ func (m *Model) Onboard(connected [3]bool) {
 
 func (m *Model) reset() {
 	*m = Model{w: m.w, h: m.h, th: night, to: night, o: m.o, covers: m.covers,
-		pix: m.pix, themes: m.themes, dim: spring{x: 1, to: 1}, portionNo: 1}
+		pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
 	m.slots = make([]*slot, 20)
 	for i := range m.slots {
 		m.slots[i] = &slot{fillAt: -1}

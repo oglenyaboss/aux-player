@@ -3,10 +3,12 @@ package stage
 import (
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
-// egg is a touch on the player screen for one artist, album or track.
-// ponytail: matched by artist or "artist title" in the prototype; the real player matches the album from Apple Music metadata.
+// egg is a touch on the player screen for one artist, album or track: a rule
+// matches the artist, the album or the title, and the album and the release
+// date come down from the Apple Music metadata.
 type egg struct {
 	knob    rune // progress knob, morphs in a few seconds into the track
 	knobCol col
@@ -41,27 +43,155 @@ var wlr = theme{
 	bad:  hex(0xe3242b),
 }
 
-var eggs = map[string]egg{
-	"Lil Uzi Vert": {knob: '◆', knobCol: hex(0xff5fae), jewel: true, tint: hex(0xff5fae)},
-	"Playboi Carti Magnolia": {
+// eggRule hangs an egg on the artist's tracks, narrowed to one album or one title when set.
+type eggRule struct {
+	artist, album, title string
+	e                    egg
+}
+
+var eggRules = []eggRule{
+	{artist: "Lil Uzi Vert", e: egg{knob: '◆', knobCol: hex(0xff5fae), jewel: true, tint: hex(0xff5fae)}},
+	{artist: "Playboi Carti", title: "Magnolia", e: egg{
 		cold:   []string{"YO PI'ERRE,", "YOU WANNA COME OUT HERE?"},
 		credit: "prod. pi'erre bourne",
-	},
-	"Frank Ocean Nights": {switchAt: 210},
-	"Playboi Carti Sky":  {theme: &wlr, drips: true, big: true, ragged: true, grain: true, knob: '†', knobCol: hex(0xf2f2f2)},
+	}},
+	{artist: "Frank Ocean", title: "Nights", e: egg{switchAt: 210}},
+	{artist: "Playboi Carti", album: "Whole Lotta Red", e: egg{
+		theme: &wlr, drips: true, big: true, ragged: true, grain: true, knob: '†', knobCol: hex(0xf2f2f2)}},
 }
 
 func (m *Model) eggOf(t Track) *egg {
 	if m.o.NoEggs {
 		return nil
 	}
-	if e, ok := eggs[t.Artist+" "+t.Title]; ok {
-		return &e
+	k := t.Key()
+	if e, ok := m.eggMemo[k]; ok {
+		return e
 	}
-	if e, ok := eggs[t.Artist]; ok {
-		return &e
+	e := eggRuleFor(t)
+	m.eggMemo[k] = e
+	return e
+}
+
+// eggRuleFor runs the rules once per track: a title rule beats an album rule, an album rule beats the naked artist.
+func eggRuleFor(t Track) *egg {
+	var best *eggRule
+	for i := range eggRules {
+		r := &eggRules[i]
+		if !r.matches(t) {
+			continue
+		}
+		if best == nil || ruleScore(r) > ruleScore(best) {
+			best = r
+		}
 	}
-	return nil
+	if best == nil {
+		return nil
+	}
+	return &best.e
+}
+
+// ruleScore: a named title wins, then a named album, then the bare artist.
+func ruleScore(r *eggRule) int {
+	switch {
+	case r.title != "":
+		return 3
+	case r.album != "":
+		return 2
+	default:
+		return 1
+	}
+}
+
+// matches: the right artist, and the album and the title each when the rule names one.
+func (r *eggRule) matches(t Track) bool {
+	if !artistFold(r.artist, t.Artist) {
+		return false
+	}
+	if r.album != "" && foldAlbum(t.Album) != foldAlbum(r.album) {
+		return false
+	}
+	if r.title != "" && foldTitle(t.Title) != foldTitle(r.title) {
+		return false
+	}
+	return true
+}
+
+// artistFold: equal folds, or the rule's artist one of the track artist's ", " and " & " parts.
+// Substrings do not count: Drake is not Nick Drake.
+func artistFold(want, have string) bool {
+	w, h := fold(want), fold(have)
+	if w == h {
+		return true
+	}
+	h = strings.ReplaceAll(h, ", ", "\x00")
+	h = strings.ReplaceAll(h, " & ", "\x00")
+	for _, p := range strings.Split(h, "\x00") {
+		if p == w {
+			return true
+		}
+	}
+	return false
+}
+
+// fold lowers the case and unwinds the typographic apostrophe.
+func fold(s string) string {
+	return strings.TrimSpace(strings.ReplaceAll(strings.ToLower(s), "’", "'"))
+}
+
+// foldAlbum folds the album and cuts the edition marker: "Whole Lotta Red (Deluxe)"
+// and "X - Single" fold to the bare album.
+func foldAlbum(s string) string {
+	s = fold(s)
+	cut := -1
+	for _, sep := range []string{" (", " [", " - "} {
+		if i := strings.Index(s, sep); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut < 0 {
+		return s
+	}
+	return strings.TrimSpace(s[:cut])
+}
+
+// foldTitle folds the title and strips only the bracket with the feature:
+// "(feat. …)" and "[with …]" go away, other brackets stay — live and remix
+// versions are other songs.
+func foldTitle(s string) string {
+	return fold(stripFeat(s))
+}
+
+func stripFeat(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		cl := ""
+		switch r {
+		case '(':
+			cl = ")"
+		case '[':
+			cl = "]"
+		}
+		if cl == "" {
+			b.WriteString(s[i : i+size])
+			i += size
+			continue
+		}
+		end := strings.Index(s[i:], cl)
+		if end < 0 {
+			b.WriteString(s[i : i+size])
+			i += size
+			continue
+		}
+		if inner := fold(s[i+1 : i+end]); strings.HasPrefix(inner, "feat.") || strings.HasPrefix(inner, "with ") {
+			i += end + 1
+			continue
+		}
+		b.WriteString(s[i : i+end+1])
+		i += end + 1
+	}
+	return b.String()
 }
 
 var warmLight = col{0.36, 0.15, 0.04}

@@ -88,12 +88,16 @@ func demoCandidates() []demoCandidate {
 	}
 }
 
+// demoAlbums pins albums the demo stream knows: the egg rules match on them.
+var demoAlbums = map[string]string{"Playboi Carti Sky": "Whole Lotta Red"}
+
 // demoTracks is the accepted part of the demo stream, in stream order.
 func demoTracks() []stage.Track {
 	var out []stage.Track
 	for _, c := range demoCandidates() {
 		if c.ok {
-			out = append(out, stage.Track{Artist: c.artist, Title: c.title, Why: c.why, Dur: c.dur})
+			out = append(out, stage.Track{Artist: c.artist, Title: c.title, Why: c.why,
+				Album: demoAlbums[c.artist+" "+c.title], Dur: c.dur})
 		}
 	}
 	return out

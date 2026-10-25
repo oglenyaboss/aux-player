@@ -55,6 +55,7 @@ func parseSongSearch(body []byte) ([]Song, error) {
 			Title:      d.Attributes.Name,
 			Album:      d.Attributes.AlbumName,
 			Year:       year,
+			Released:   d.Attributes.ReleaseDate,
 			ArtworkURL: d.Attributes.Artwork.URL,
 			DurationMs: d.Attributes.DurationInMillis,
 		})

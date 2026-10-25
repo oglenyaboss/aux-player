@@ -667,7 +667,7 @@ func vibeAIPlaylistName(query string) string {
 }
 
 func vibeAIViewTrack(t vibeai.Track) VibeAITrack {
-	return VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Why: t.Why, Favorite: t.Favorite,
+	return VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Released: t.Released, Why: t.Why, Favorite: t.Favorite,
 		ArtworkURL: t.ArtworkURL, Dur: time.Duration(t.DurationMs) * time.Millisecond}
 }
 

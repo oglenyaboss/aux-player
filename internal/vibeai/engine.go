@@ -28,6 +28,7 @@ type Config struct {
 
 type Track struct {
 	ID, Artist, Title, Album, Year, ArtworkURL, Why string
+	Released                                        string
 	DurationMs                                      int
 	Favorite                                        bool
 }
@@ -365,6 +366,7 @@ func toTrack(en Entry) Track {
 		Title:      en.Song.Title,
 		Album:      en.Song.Album,
 		Year:       en.Song.Year,
+		Released:   en.Song.Released,
 		ArtworkURL: en.Song.ArtworkURL,
 		DurationMs: en.Song.DurationMs,
 		Why:        en.Why,

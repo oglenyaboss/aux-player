@@ -44,6 +44,7 @@ type VibeAIQuestion struct {
 type VibeAITrack struct {
 	ID                              string
 	Artist, Title, Album, Year, Why string
+	Released                        string
 	Favorite                        bool
 	ArtworkURL                      string
 	Dur                             time.Duration

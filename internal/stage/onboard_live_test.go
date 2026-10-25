@@ -219,7 +219,7 @@ func TestOnboardConnectedAll(t *testing.T) {
 }
 
 func TestNoEggs(t *testing.T) {
-	sky := []Track{{Artist: "Playboi Carti", Title: "Sky", Dur: 190}}
+	sky := []Track{{Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Dur: 190}}
 	m := New(Options{})
 	m.SetSize(110, 32)
 	m.JumpPlay(sky, 0, 0)
