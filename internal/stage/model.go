@@ -237,6 +237,9 @@ type Model struct {
 
 	eggMemo map[string]*egg // eggOf runs the egg rules once per track key
 
+	titleBox image.Rectangle // where the title sits on the player, in pixels; set by every play frame
+	barBox   image.Rectangle // where the progress bar sits, in cells; set by every play frame
+
 	dstep int
 }
 

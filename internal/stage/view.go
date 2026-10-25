@@ -2,6 +2,7 @@ package stage
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 )
@@ -566,6 +567,7 @@ func (m *Model) drawPlay(f *fb) {
 	if m.prev != m.cur {
 		prev = m.cover(m.queue[m.prev].Key(), g.cw, g.ch*2)
 	}
+	e := m.eggOf(*tk)
 	skip := 0.0
 	if m.skipT > 0 {
 		skip = easeIn(prog(m.t-m.skipT, 0, 0.35))
@@ -576,8 +578,11 @@ func (m *Model) drawPlay(f *fb) {
 			var c col
 			if reveal >= thr || prev == nil {
 				c = cov.at(px, py)
-				if e := reveal - thr; e >= 0 && e < 0.05 && reveal < 1 {
-					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-e/0.05)
+				if e != nil && e.cover != nil {
+					c = e.cover(m, cov.at, px, py)
+				}
+				if es := reveal - thr; es >= 0 && es < 0.05 && reveal < 1 {
+					c = c.lerp(m.th.a2.lerp(white, 0.5), 1-es/0.05)
 				}
 			} else {
 				c = prev.at(px, py).mul(0.6)
@@ -593,16 +598,17 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	rows := 0
 	if !g.mini && (g.side && g.ch >= 12 || !g.side && m.h-y >= 12) {
-		e := m.eggOf(*tk)
-		rows = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e)
+		rows, m.titleBox = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e)
 	}
 	if rows == 0 {
 		rows = 1
-		for i, r := range scramble(trunc(tk.Title, pw), prog(m.titleT(), 0.15, 0.55), m.t, m.cur) {
+		title := trunc(tk.Title, pw)
+		for i, r := range scramble(title, prog(m.titleT(), 0.15, 0.55), m.t, m.cur) {
 			if r != 0 {
 				f.style(x+i, y, r, m.th.a1.lerp(m.th.text, 0.3).lerp(white, 0.6*lf), true, false)
 			}
 		}
+		m.titleBox = image.Rect(x, y*2, x+len(title), y*2+2)
 	}
 	gap := 1
 	if g.mini {
@@ -610,7 +616,7 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	y += rows + gap
 	an := f.fade(x, y, trunc(tk.Artist, pw), m.th.text, easeOut(prog(m.trackT, 0.35, 0.5)), true)
-	if e := m.eggOf(*tk); e != nil && e.credit != "" {
+	if e != nil && e.credit != "" {
 		m.drawTag(f, x+an+3, y, pw-an-3, e)
 	}
 	y += 1 + gap
@@ -626,11 +632,11 @@ func (m *Model) drawPlay(f *fb) {
 
 	time := fmtDur(m.pos) + " / " + fmtDur(tk.Dur)
 	bw := min(56, pw-len(time)-2)
+	m.barBox = image.Rect(x, y, x+bw, y+1)
 	frac := 0.0
 	if tk.Dur > 0 {
 		frac = min(1, m.pos/tk.Dur)
 	}
-	e := m.eggOf(*tk)
 	knob, kc, fill := '●', m.th.text, m.th.a1
 	if e != nil && e.knob != 0 {
 		k := easeInOut(prog(m.trackT, eggKnobAt, 1.5))
@@ -645,14 +651,20 @@ func (m *Model) drawPlay(f *fb) {
 		mark = int(e.switchAt / tk.Dur * float64(bw))
 	}
 	for i := 0; i < bw; i++ {
+		var r rune
+		var c col
 		switch {
 		case float64(i)/float64(bw) < frac:
-			f.put(x+i, y, '━', fill)
+			r, c = '━', fill
 		case i == mark:
-			f.put(x+i, y, '┼', m.eggMark(e))
+			r, c = '┼', m.eggMark(e)
 		default:
-			f.put(x+i, y, '─', m.th.dim.mul(0.55))
+			r, c = '─', m.th.dim.mul(0.55)
 		}
+		if e != nil && e.bar != nil {
+			r, c = e.bar(m, i, bw, frac, r, c)
+		}
+		f.put(x+i, y, r, c)
 	}
 	f.style(x+int(frac*float64(bw)), y, knob, kc, true, false)
 	f.text(x+bw+2, y, time, m.th.dim)
@@ -824,12 +836,12 @@ func (m *Model) wave(f *fb, x, y int, s string, base col) {
 	}
 }
 
-func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg) int {
+func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg) (int, image.Rectangle) {
 	drips := e != nil && e.drips
 	rs := []rune(strings.ToUpper(s))
 	for _, r := range rs {
 		if _, ok := font3[r]; !ok {
-			return 0
+			return 0, image.Rectangle{}
 		}
 	}
 	cols := -1
@@ -844,7 +856,7 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 		sc = 1
 	}
 	if cols*sc > maxW {
-		return 0
+		return 0, image.Rectangle{}
 	}
 	wpx := float64(cols * sc)
 	sweep := prog(m.titleT(), 0.9, 1.2)*1.6 - 0.3
@@ -870,6 +882,9 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 						u := float64(px-x) / wpx
 						b := math.Exp(-(u - sweep) * (u - sweep) / 0.004)
 						c := m.th.grad(u*0.5+m.t*0.03).lerp(white, 0.7*b+0.6*flash)
+						if e != nil && e.ink != nil {
+							c = e.ink(m, c, u, float64(py-y*2)/float64(5*sc))
+						}
 						f.pixel(px, py, c)
 					}
 				}
@@ -881,9 +896,9 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 		gx0 += gw + 1
 	}
 	if drips {
-		return (5*sc+1)/2 + (dripMax*sc+1)/2
+		return (5*sc+1)/2 + (dripMax*sc+1)/2, image.Rect(x, y*2, x+cols*sc, y*2+5*sc)
 	}
-	return (5*sc + 1) / 2
+	return (5*sc + 1) / 2, image.Rect(x, y*2, x+cols*sc, y*2+5*sc)
 }
 
 func (m *Model) drawParticles(f *fb) {

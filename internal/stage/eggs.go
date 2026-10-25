@@ -26,6 +26,14 @@ type egg struct {
 
 	jewel bool // a pink diamond set into the top of the cover
 	tint  col  // backdrop leans toward this colour
+
+	// hooks: a bespoke egg draws itself through these; nil changes nothing.
+	bg    func(m *Model, c col, x, y int) col                                // one backdrop cell of the player
+	cover func(m *Model, at func(px, py int) col, px, py int) col            // one cover pixel; at samples the layer below
+	ink   func(m *Model, c col, u, v float64) col                            // one title pixel; u, v run 0..1 across the title
+	bar   func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) // one progress-bar cell
+	over  func(m *Model, f *fb, g playGeom)                                  // on top of the player, under the cold open
+	step  func(m *Model)                                                     // every frame of the track
 }
 
 const eggKnobAt = 6.0
@@ -73,22 +81,118 @@ func (m *Model) eggOf(t Track) *egg {
 	return e
 }
 
-// eggRuleFor runs the rules once per track: a title rule beats an album rule, an album rule beats the naked artist.
+// eggRuleFor runs the rules once per track and folds every match into one egg,
+// in layers: the naked artist at the bottom, then the album era, then title rules on top.
+// One album match drops the naked-artiest layer whole: the album replaces the artist image.
 func eggRuleFor(t Track) *egg {
-	var best *eggRule
+	var arts, albums, titles []*eggRule
 	for i := range eggRules {
 		r := &eggRules[i]
 		if !r.matches(t) {
 			continue
 		}
-		if best == nil || ruleScore(r) > ruleScore(best) {
-			best = r
+		switch ruleScore(r) {
+		case 3:
+			titles = append(titles, r)
+		case 2:
+			albums = append(albums, r)
+		default:
+			arts = append(arts, r)
 		}
 	}
-	if best == nil {
+	if len(albums) > 0 {
+		arts = nil
+	}
+	if len(arts)+len(albums)+len(titles) == 0 {
 		return nil
 	}
-	return &best.e
+	var e egg
+	for _, ls := range [][]*eggRule{arts, albums, titles} {
+		for _, r := range ls {
+			e = merge(e, r.e)
+		}
+	}
+	return &e
+}
+
+// merge folds the egg of the upper layer b over the lower one a: bespoke fields
+// come from b whole, boolean looks add up, and the hooks chain, lower first.
+func merge(a, b egg) egg {
+	e := a
+	if b.knob != 0 {
+		e.knob, e.knobCol = b.knob, b.knobCol
+	}
+	if b.cold != nil || b.credit != "" {
+		e.cold, e.credit = b.cold, b.credit
+	}
+	if b.switchAt != 0 {
+		e.switchAt = b.switchAt
+	}
+	if b.theme != nil {
+		e.theme = b.theme
+	}
+	e.drips = e.drips || b.drips
+	e.big = e.big || b.big
+	e.ragged = e.ragged || b.ragged
+	e.grain = e.grain || b.grain
+	e.jewel = e.jewel || b.jewel
+	if b.tint != (col{}) {
+		e.tint = b.tint
+	}
+	switch {
+	case b.bg == nil:
+	case a.bg == nil:
+		e.bg = b.bg
+	default:
+		lo, hi := a.bg, b.bg
+		e.bg = func(m *Model, c col, x, y int) col { return hi(m, lo(m, c, x, y), x, y) }
+	}
+	switch {
+	case b.cover == nil:
+	case a.cover == nil:
+		e.cover = b.cover
+	default:
+		lo, hi := a.cover, b.cover
+		e.cover = func(m *Model, at func(px, py int) col, px, py int) col {
+			return hi(m, func(x, y int) col { return lo(m, at, x, y) }, px, py)
+		}
+	}
+	switch {
+	case b.ink == nil:
+	case a.ink == nil:
+		e.ink = b.ink
+	default:
+		lo, hi := a.ink, b.ink
+		e.ink = func(m *Model, c col, u, v float64) col { return hi(m, lo(m, c, u, v), u, v) }
+	}
+	switch {
+	case b.bar == nil:
+	case a.bar == nil:
+		e.bar = b.bar
+	default:
+		lo, hi := a.bar, b.bar
+		e.bar = func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) {
+			r, c = lo(m, i, bw, frac, r, c)
+			return hi(m, i, bw, frac, r, c)
+		}
+	}
+	switch {
+	case b.over == nil:
+	case a.over == nil:
+		e.over = b.over
+	default:
+		lo, hi := a.over, b.over
+		e.over = func(m *Model, f *fb, g playGeom) { lo(m, f, g); hi(m, f, g) }
+	}
+	switch {
+	case b.step == nil:
+	case a.step == nil:
+		e.step = b.step
+	default:
+		lo, hi := a.step, b.step
+		e.step = func(m *Model) { lo(m); hi(m) }
+	}
+	return e
 }
 
 // ruleScore: a named title wins, then a named album, then the bare artist.
@@ -212,6 +316,9 @@ func (m *Model) eggBackdrop(bg col, x, y int, v float64) col {
 	if e == nil {
 		return bg
 	}
+	if e.bg != nil {
+		bg = e.bg(m, bg, x, y)
+	}
 	if e.tint != (col{}) {
 		bg = bg.lerp(e.tint.mul(0.22), 0.45*easeInOut(prog(m.trackT, eggKnobAt, 2.5)))
 	}
@@ -243,6 +350,9 @@ func (m *Model) titleT() float64 {
 
 func (m *Model) eggStep() {
 	e := m.eggOf(*m.curTrack())
+	if e != nil && e.step != nil {
+		e.step(m)
+	}
 	if e != nil && e.switchAt > 0 && m.pos >= e.switchAt && !m.eggDone {
 		m.eggDone = true
 		m.to.a1, m.to.a3, m.to.a2 = hex(0xffa25e), hex(0xffa25e), hex(0xffd9b8)
@@ -263,6 +373,9 @@ func (m *Model) eggOverlay(f *fb, g playGeom) {
 	e := m.eggOf(*m.curTrack())
 	if e == nil {
 		return
+	}
+	if e.over != nil {
+		e.over(m, f, g)
 	}
 	if e.jewel {
 		m.jewel(f, g)
