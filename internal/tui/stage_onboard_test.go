@@ -418,3 +418,25 @@ func TestStageOptionsLastfmAsk(t *testing.T) {
 		t.Fatalf("key and secret: ask=%v, ждём false", o.LastfmAskKeys)
 	}
 }
+
+// The eggs switch lands in the config and on disk right away.
+func TestStageEggsSaves(t *testing.T) {
+	isolatedHome(t)
+	m := newModel(nil)
+	s := m.vibeAIP.m
+	s.act(stage.Eggs{On: false})
+	if m.cfg.VibeEggs == nil || *m.cfg.VibeEggs {
+		t.Fatalf("VibeEggs = %v, ждём false", m.cfg.VibeEggs)
+	}
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
+	if err != nil {
+		t.Fatalf("reading the saved config: %v", err)
+	}
+	if !strings.Contains(string(data), `"vibe_eggs": false`) {
+		t.Fatalf("the saved config misses \"vibe_eggs\": false:\n%s", data)
+	}
+	s.act(stage.Eggs{On: true})
+	if m.cfg.VibeEggs == nil || !*m.cfg.VibeEggs {
+		t.Fatalf("VibeEggs = %v, ждём true", m.cfg.VibeEggs)
+	}
+}

@@ -367,7 +367,8 @@ func TestIntroTabSettings(t *testing.T) {
 }
 
 // R2: Onboard reopens the onboarding over the intro; the connected Apple step closes
-// itself after the language and the screen stops on the agent step.
+// itself once the preferences are in — language, and the eggs in the settings — and the
+// screen stops on the agent step.
 func TestOnboardReopen(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
@@ -381,10 +382,11 @@ func TestOnboardReopen(t *testing.T) {
 	for i := 0; i < 400 && m.ob.t < obReady; i++ {
 		m.Step(eventDT)
 	}
-	m.Key("enter", "")
+	m.Key("enter", "") // language
+	m.Key("enter", "") // the eggs switch
 	steps(m, 3)
 	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
-		t.Fatalf("после языка шаг %d (ok=%v), ждём 1", step, ok)
+		t.Fatalf("после настроек шаг %d (ok=%v), ждём 1", step, ok)
 	}
 }
 
@@ -540,5 +542,145 @@ func TestLastfmAskKeysSkip(t *testing.T) {
 	setups := recorded[Setup](r)
 	if len(setups) != 1 || setups[0].Lastfm {
 		t.Fatalf("ждём один Setup без Last.fm, записано %v", r.acts)
+	}
+}
+
+// liveSettings reopens the onboarding the way the settings do: a model that reached the
+// intro calls Onboard, the cinematic runs past obReady and the language is confirmed.
+func liveSettings(t *testing.T, o Options, r *recorder) *Model {
+	t.Helper()
+	o.OnAction = r.on
+	m := New(o)
+	m.SetSize(110, 32)
+	if !runTo(m, PhIntro, 300) {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	m.Onboard([3]bool{true, false, false})
+	for i := 0; i < 400 && m.ob.t < obReady; i++ {
+		m.Step(eventDT)
+	}
+	m.Key("enter", "")
+	return m
+}
+
+var wlrSky = []Track{{Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Dur: 193}}
+
+// 1: the settings carry the eggs row after the language; the first run has none.
+func TestSettingsEggsRow(t *testing.T) {
+	r := &recorder{}
+	m := liveSettings(t, Options{}, r)
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "Пасхалки") {
+		t.Errorf("кадр настроек без «Пасхалки»:\n%s", frame)
+	}
+
+	m = liveOnboard(t, Options{}, r)
+	if frame := stripANSI(m.View()); strings.Contains(frame, "Пасхалки") || strings.Contains(frame, "Easter eggs") {
+		t.Errorf("кадр первого запуска с пасхалками:\n%s", frame)
+	}
+}
+
+// 2: right + enter switch the eggs off, the egg is gone from the playing track.
+func TestSettingsEggsOff(t *testing.T) {
+	r := &recorder{}
+	m := liveSettings(t, Options{}, r)
+	m.Key("right", "")
+	m.Key("enter", "")
+	if eggs := recorded[Eggs](r); len(eggs) != 1 || eggs[0] != (Eggs{On: false}) {
+		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+	}
+	m.JumpPlay(wlrSky, 0, 0)
+	steps(m, 8)
+	if frame := stripANSI(m.View()); strings.Contains(frame, "†") {
+		t.Errorf("кадр с пасхалкой после выключения:\n%s", frame)
+	}
+}
+
+// 3: with NoEggs the switch starts off; in a reopened settings it comes back on and the egg returns.
+func TestSettingsEggsOn(t *testing.T) {
+	r := &recorder{}
+	m := liveSettings(t, Options{NoEggs: true}, r)
+	m.Key("enter", "")
+	if eggs := recorded[Eggs](r); len(eggs) != 1 || eggs[0] != (Eggs{On: false}) {
+		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+	}
+
+	m.Onboard([3]bool{true, false, false})
+	for i := 0; i < 400 && m.ob.t < obReady; i++ {
+		m.Step(eventDT)
+	}
+	m.Key("enter", "")
+	m.Key("left", "")
+	m.Key("enter", "")
+	if eggs := recorded[Eggs](r); len(eggs) != 2 || eggs[1] != (Eggs{On: true}) {
+		t.Fatalf("ждём второй Eggs{On: true}, записано %v", r.acts)
+	}
+	m.JumpPlay(wlrSky, 0, 0)
+	steps(m, 8)
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "†") {
+		t.Errorf("кадр без пасхалки после включения:\n%s", frame)
+	}
+}
+
+// 4: in the settings the connected Apple Music step waits for the eggs too.
+func TestSettingsEggsGate(t *testing.T) {
+	r := &recorder{}
+	m := liveSettings(t, Options{}, r)
+	steps(m, 1)
+	if got := recorded[ConnectApple](r); len(got) != 0 {
+		t.Fatalf("Apple Music подключился сам: %v", r.acts)
+	}
+	if step, _, _, ok := m.Onboarding(); !ok || step != 0 {
+		t.Fatalf("шаг %d (ok=%v) до выбора пасхалок, ждём 0", step, ok)
+	}
+	if frame := stripANSI(m.View()); strings.Contains(frame, "подключено") {
+		t.Fatalf("Apple Music закрылся сам:\n%s", frame)
+	}
+	m.Key("enter", "")
+	steps(m, 1)
+	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
+		t.Fatalf("шаг %d (ok=%v) после пасхалок, ждём 1", step, ok)
+	}
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "подключено") {
+		t.Fatalf("кадр без «подключено»:\n%s", frame)
+	}
+}
+
+// 5: the confirmed eggs row shows the status next to it.
+func TestSettingsEggsStatus(t *testing.T) {
+	r := &recorder{}
+	m := liveSettings(t, Options{}, r)
+	m.Key("enter", "")
+	frame := stripANSI(m.View())
+	if got := recorded[ConnectApple](r); len(got) != 0 {
+		t.Fatalf("enter на пасхалках не должен открывать Apple Music: %v", r.acts)
+	}
+	if !strings.Contains(frame, "Пасхалки") || !strings.Contains(frame, "вкл") {
+		t.Fatalf("кадр без «Пасхалки»/«вкл»:\n%s", frame)
+	}
+}
+
+// 6: switching the eggs off on a playing track drops the cached egg theme.
+func TestSettingsEggsTheme(t *testing.T) {
+	r := &recorder{}
+	m := New(Options{OnAction: r.on})
+	m.SetSize(110, 32)
+	m.JumpPlay(wlrSky, 0, 0)
+	steps(m, 2)
+	if m.to.a1 != hex(0xe3242b) {
+		t.Fatalf("a1=%v, ждём пасхальную #e3242b", m.to.a1)
+	}
+	m.Onboard([3]bool{true, false, false})
+	for i := 0; i < 400 && m.ob.t < obReady; i++ {
+		m.Step(eventDT)
+	}
+	m.Key("enter", "")
+	m.Key("right", "")
+	m.Key("enter", "")
+	if got := recorded[Eggs](r); len(got) != 1 || got[0] != (Eggs{On: false}) {
+		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+	}
+	m.JumpPlay(wlrSky, 0, 0)
+	if m.to.a1 == hex(0xe3242b) {
+		t.Fatalf("a1=%v, тема пасхалки вернулась из кэша", m.to.a1)
 	}
 }

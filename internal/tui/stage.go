@@ -200,6 +200,13 @@ func (s *stageScreen) act(a stage.Action) {
 		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
 		c[1] = false
 		s.st.Onboard(c)
+	case stage.Eggs:
+		on := a.On
+		cfg := s.host.cfg
+		cfg.VibeEggs = &on
+		if err := cfg.Save(""); err != nil {
+			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
+		}
 	case stage.ConnectApple:
 		if s.host.appleLogin != nil {
 			// The sign-in waits for the onboarding to ask; the answer lands

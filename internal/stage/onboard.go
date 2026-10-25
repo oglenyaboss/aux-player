@@ -47,6 +47,9 @@ type onboard struct {
 	effort   int
 	picked   string
 	langDone bool
+	eggsAsk  bool // the eggs switch on screen: the settings, not the first run
+	eggsOn   bool
+	eggsDone bool
 	lfKey    []rune
 	lfSecret []rune
 	lfSub    int // 0 API key field, 1 secret field
@@ -81,6 +84,9 @@ var efforts []string
 func newOnboard() *onboard {
 	return &onboard{waitT: -1, done: [3]float64{-1, -1, -1}, errT: -1, needleT: -1, stepT: obReady, effort: 1}
 }
+
+// prefsDone gates the connected steps: the language now, and the eggs in the settings.
+func (o *onboard) prefsDone() bool { return o.langDone && (!o.eggsAsk || o.eggsDone) }
 
 func (o *onboard) models() []ModelInfo {
 	q := strings.ToLower(string(o.filter))
@@ -119,7 +125,7 @@ func (m *Model) onboardStep(dt float64) {
 		o.waitT = -1
 		m.completeStep()
 	}
-	if o.step < 3 && o.langDone && o.t-o.stepT >= 0.45 && m.o.Connected[o.step] {
+	if o.step < 3 && o.prefsDone() && o.t-o.stepT >= 0.45 && m.o.Connected[o.step] {
 		m.completeStep()
 	}
 	if o.step == 3 && o.needleT < 0 && o.t-o.done[2] > 0.5 {
@@ -165,6 +171,18 @@ func (m *Model) onboardKey(k, text string) {
 				}
 			case "enter":
 				o.langDone, o.stepT = true, o.t
+			}
+			return
+		}
+		if o.eggsAsk && !o.eggsDone {
+			switch k {
+			case "left", "right", "h", "l":
+				o.eggsOn = !o.eggsOn
+			case "enter":
+				o.eggsDone, o.stepT = true, o.t
+				m.o.NoEggs = !o.eggsOn
+				clear(m.themes)
+				m.send(Eggs{On: o.eggsOn})
 			}
 			return
 		}
@@ -902,6 +920,34 @@ func (m *Model) drawPanel(f *fb) {
 			y += m.drawLangBody(f, x+2, y, pw-2, a*easeOut(prog(o.t, o.stepT, 0.35)))
 		}
 	}
+	if o.eggsAsk {
+		a := in(2)
+		name := tr("Пасхалки", "Easter eggs")
+		switch {
+		case o.eggsDone:
+			f.fade(x, y, "✓", m.th.a1, a, true)
+			f.fade(x+2, y, name, m.th.text.lerp(m.th.dim, 0.3), a, false)
+			status := tr("вкл", "on")
+			if !o.eggsOn {
+				status = tr("выкл", "off")
+			}
+			f.fade(x+pw-len([]rune(status)), y, status, m.th.dim, a*0.8, false)
+			y++
+		case o.langDone:
+			f.fade(x, y, "›", m.th.a1, a, true)
+			f.fade(x+2, y, name, m.th.text, a, true)
+			y++
+			cur := 0
+			if !o.eggsOn {
+				cur = 1
+			}
+			y += m.drawPick(f, x+2, y, []string{tr("вкл", "on"), tr("выкл", "off")}, cur, a*easeOut(prog(o.t, o.stepT, 0.35)))
+		default:
+			f.fade(x, y, "·", m.th.dim, a, true)
+			f.fade(x+2, y, name, m.th.dim, a, false)
+			y++
+		}
+	}
 
 	names := [3]string{"Apple Music", tr("Агент", "Agent"), "Last.fm"}
 	for i, name := range names {
@@ -920,16 +966,16 @@ func (m *Model) drawPanel(f *fb) {
 			for xx := x - 1; xx < x+pw; xx++ {
 				f.tint(xx, y, m.th.a1, fl)
 			}
-		case i == o.step && o.langDone:
+		case i == o.step && o.prefsDone():
 			mark, mc, nc = "›", m.th.a1, m.th.text
 		}
 		f.fade(x, y, mark, mc, a, true)
-		f.fade(x+2, y, name, nc, a, i == o.step && o.langDone)
+		f.fade(x+2, y, name, nc, a, i == o.step && o.prefsDone())
 		if status != "" {
 			f.fade(x+pw-len([]rune(status)), y, status, m.th.dim, a*0.8, false)
 		}
 		y++
-		if i == o.step && o.langDone {
+		if i == o.step && o.prefsDone() {
 			a := a * easeOut(prog(o.t, o.stepT, 0.35))
 			y += m.drawStepBody(f, i, x+2, y, pw-2, a)
 		}
@@ -947,12 +993,8 @@ func (m *Model) drawPanel(f *fb) {
 	}
 }
 
-func (m *Model) drawLangBody(f *fb, x, y, w int, a float64) int {
-	names := []string{"English", "Русский"}
-	cur := 1
-	if lang == "en" {
-		cur = 0
-	}
+// drawPick lays a choice out in one line, underlines the current one and shows the key hints.
+func (m *Model) drawPick(f *fb, x, y int, names []string, cur int, a float64) int {
 	ux, sx := x, x
 	for i, n := range names {
 		if i == cur {
@@ -971,6 +1013,14 @@ func (m *Model) drawLangBody(f *fb, x, y, w int, a float64) int {
 	dx := key(x, y+2, "←→", tr("выбрать", "choose"))
 	key(x+dx, y+2, "enter", tr("дальше", "continue"))
 	return 4
+}
+
+func (m *Model) drawLangBody(f *fb, x, y, w int, a float64) int {
+	cur := 1
+	if lang == "en" {
+		cur = 0
+	}
+	return m.drawPick(f, x, y, []string{"English", "Русский"}, cur, a)
 }
 
 func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {

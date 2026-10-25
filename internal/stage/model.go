@@ -99,6 +99,9 @@ type Restart struct{}
 // Settings is tab on the intro: the host reopens the onboarding with Onboard.
 type Settings struct{}
 
+// Eggs is the easter-eggs switch in the settings: On false turns every egg off.
+type Eggs struct{ On bool }
+
 // Phase is what the screen currently draws.
 type Phase int
 
@@ -263,6 +266,7 @@ func (m *Model) Onboard(connected [3]bool) {
 	m.o.Connected = connected
 	m.ph, m.ob = PhOnboard, newOnboard()
 	m.ob.lfKey = []rune(m.o.LastfmKey)
+	m.ob.eggsAsk, m.ob.eggsOn = true, !m.o.NoEggs
 }
 
 func (m *Model) reset() {
