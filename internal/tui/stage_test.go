@@ -208,6 +208,105 @@ func TestStageTickFlushesAnswers(t *testing.T) {
 	}
 }
 
+// trackCardQuestion is the two-track question card the bridge hands the scene: options and tracks are parallel, the default is option 2.
+func trackCardQuestion() vibeai.Question {
+	return vibeai.Question{
+		Question: "куда?",
+		Options:  []string{"воздух", "соул"},
+		Tracks: []vibeai.Track{
+			{ID: "t1", Artist: "Frank Ocean", Title: "Self Control", ArtworkURL: "https://x/{w}x{h}.jpg"},
+			{ID: "t2", Artist: "Dijon", Title: "Annie"},
+		},
+		Default: "2",
+	}
+}
+
+func TestStageTrackCardAll(t *testing.T) {
+	ruLang(t)
+	cfg := testCfg()
+	cfg.VibeLang = "ru"
+	m := New(cfg, &mockProvider{}, nil, Options{})
+	vibeAITypeText(m, "первый запрос")
+	m.vibeAIP.m.st.Step(2.5)
+	m.handleVibeAIMsg(vibeAIAskMsg{gen: m.vibeAI.gen, qs: []vibeai.Question{trackCardQuestion()}})
+	m.vibeAIP.m.st.Step(0.3) // the orb takes a quarter second to go
+	m.vibeAIP.m.st.Step(0.3)
+	if m.vibeAIP.m.st.Phase() != stage.PhAsk {
+		t.Fatalf("phase = %d, want ask", m.vibeAIP.m.st.Phase())
+	}
+	frame := ansi.Strip(m.vibeAIP.m.Frame(110, 32))
+	for i := 0; i < 30 && (!strings.Contains(frame, "Frank Ocean") || !strings.Contains(frame, "a всё вместе")); i++ {
+		m.vibeAIP.m.st.Step(0.3)
+		frame = ansi.Strip(m.vibeAIP.m.Frame(110, 32))
+	}
+	if !strings.Contains(frame, "Frank Ocean") || !strings.Contains(frame, "a всё вместе") {
+		t.Fatalf("кадр без карточки треков:\n%s", frame)
+	}
+	want1 := false
+	for _, c := range m.vibeAIP.m.want {
+		if c.key == "t1" {
+			want1 = true
+		}
+	}
+	if !want1 {
+		t.Fatalf("обложки вариантов не заказаны: want = %+v", m.vibeAIP.m.want)
+	}
+	m.vibeAIP.m.st.Step(0.8) // the card accepts an answer only after 0.7s
+	press(m, "a")
+	base := time.Now()
+	found := false
+	for i := 0; i < 60 && !found; i++ {
+		for _, msg := range stageMsgs(t, m.handleVibeAIMsg(stageTickMsg(base.Add(time.Duration(i)*33*time.Millisecond)))) {
+			ans, ok := msg.(VibeAIAnswersMsg)
+			if !ok {
+				continue
+			}
+			want := VibeAIAnswersMsg{Answers: []string{"all"}}
+			if !reflect.DeepEqual(ans, want) {
+				t.Fatalf("answers = %#v, want %#v", ans, want)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the all answer must reach the bridge via the tick flush")
+	}
+}
+
+func TestStageTrackCardDefault(t *testing.T) {
+	ruLang(t)
+	cfg := testCfg()
+	cfg.VibeLang = "ru"
+	m := New(cfg, &mockProvider{}, nil, Options{})
+	vibeAITypeText(m, "первый запрос")
+	m.vibeAIP.m.st.Step(2.5)
+	m.handleVibeAIMsg(vibeAIAskMsg{gen: m.vibeAI.gen, qs: []vibeai.Question{trackCardQuestion()}})
+	m.vibeAIP.m.st.Step(0.3)
+	m.vibeAIP.m.st.Step(0.3)
+	m.vibeAIP.m.st.Step(0.8)
+	if press(m, "enter") != nil {
+		t.Error("enter must be accepted silently, the answer rides the ticks")
+	}
+	base := time.Now()
+	found := false
+	for i := 0; i < 60 && !found; i++ {
+		for _, msg := range stageMsgs(t, m.handleVibeAIMsg(stageTickMsg(base.Add(time.Duration(i)*33*time.Millisecond)))) {
+			ans, ok := msg.(VibeAIAnswersMsg)
+			if !ok {
+				continue
+			}
+			want := VibeAIAnswersMsg{Answers: []string{"2"}}
+			if !reflect.DeepEqual(ans, want) {
+				t.Fatalf("answers = %#v, want %#v", ans, want)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the default answer must reach the bridge via the tick flush")
+	}
+}
+
 func TestStageSeekPassesThrough(t *testing.T) {
 	plyr := newMockPlayer()
 	m := newModel(plyr)

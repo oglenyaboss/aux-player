@@ -31,6 +31,7 @@ func (t Track) Key() string {
 type Question struct {
 	Title       string
 	Options     []string // choice question
+	Tracks      []Track  // option tracks of a card with covers, parallel to Options
 	Scale       bool
 	Left, Right string // scale ends
 	Def         int    // default option index, or default scale step
@@ -46,6 +47,10 @@ func (q Question) scaleSteps() int {
 	return q.Steps
 }
 
+func (q Question) trackCard() bool {
+	return !q.Scale && len(q.Tracks) > 0 && len(q.Tracks) == len(q.Options)
+}
+
 // Chip is one plan word on the top line: Token is the query word it grew from, Label what is drawn.
 type Chip struct{ Token, Label string }
 
@@ -56,7 +61,7 @@ type Action interface{}
 type Query struct{ Text string }
 
 // Answers carries one entry per warm-up card: the option or scale step picked, 1..N;
-// an empty string means the default answer.
+// "all" for the all-of-them answer on a track card; an empty string means the default answer.
 type Answers struct{ Raw []string }
 
 // Say is a line typed after "/" in the player.
@@ -137,6 +142,7 @@ type Options struct {
 	LastfmAskKeys bool                      // the Last.fm app key or secret is missing: the Last.fm step asks for both
 	LastfmKey     string                    // the Last.fm API key already known, prefilled in that field
 	NoEggs        bool                      // no easter eggs
+	Slots         int                       // portion slots in the scan grid; 0 means 20
 }
 
 type chip struct {
@@ -155,6 +161,25 @@ type cand struct {
 type slot struct {
 	tr     Track
 	fillAt float64
+}
+
+type nextState int
+
+const (
+	nextOff nextState = iota
+	nextGathering
+	nextReady
+	nextFailed
+)
+
+type nextPortion struct {
+	state  nextState
+	reply  string
+	tracks []Track
+	born   []float64
+	gone   []Track
+	goneAt float64
+	at     float64
 }
 
 type toast struct {
@@ -191,6 +216,9 @@ type Model struct {
 	selIdx, knobI int
 	answered      bool
 	ansT          float64
+	ansFree       bool
+	cardTyping    bool
+	cardText      []rune
 	warmups       []Question
 	raw           []string
 
@@ -242,6 +270,7 @@ type Model struct {
 
 	titleBox image.Rectangle // where the title sits on the player, in pixels; set by every play frame
 	barBox   image.Rectangle // where the progress bar sits, in cells; set by every play frame
+	next     nextPortion     // the portion the agent is picking after the current one
 
 	dstep int
 }
@@ -272,11 +301,18 @@ func (m *Model) Onboard(connected [3]bool) {
 func (m *Model) reset() {
 	*m = Model{w: m.w, h: m.h, th: night, to: night, o: m.o, covers: m.covers,
 		pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
-	m.slots = make([]*slot, 20)
+	m.slots = make([]*slot, m.portionSize())
 	for i := range m.slots {
 		m.slots[i] = &slot{fillAt: -1}
 	}
 	m.buildLogo()
+}
+
+func (m *Model) portionSize() int {
+	if m.o.Slots > 0 {
+		return m.o.Slots
+	}
+	return 20
 }
 
 func (m *Model) setPhase(p Phase) { m.ph, m.pt, m.dstep = p, 0, 0 }
@@ -435,6 +471,68 @@ func (m *Model) Progress(line string) {
 	m.status = strings.TrimSpace(line)
 	m.thinking = true
 }
+
+// NextGathering opens the next portion: the agent is picking it now, reply is the owner's
+// words it rebuilds for, empty for the standing flow.
+func (m *Model) NextGathering(reply string) {
+	if len(m.next.tracks) > 0 {
+		m.next.gone, m.next.goneAt = m.next.tracks, m.t
+	}
+	m.next.tracks, m.next.born = nil, nil
+	m.next.state = nextGathering
+	m.next.reply = strings.TrimSpace(reply)
+	m.next.at = m.t
+	m.status = ""
+}
+
+// NextPick adds one track the agent has taken for the next portion; a duplicate or
+// one over the portion size is dropped.
+func (m *Model) NextPick(t Track) {
+	if m.next.state != nextGathering || len(m.next.tracks) >= m.portionSize() {
+		return
+	}
+	for _, q := range m.next.tracks {
+		if q.Key() == t.Key() {
+			return
+		}
+	}
+	m.next.tracks = append(m.next.tracks, t)
+	m.next.born = append(m.next.born, m.t)
+}
+
+// NextReady: the portion is gathered and waits for the queue; tracks keeps the reveal
+// time of the ones already shown.
+func (m *Model) NextReady(tracks []Track) {
+	if len(tracks) > m.portionSize() {
+		tracks = tracks[:m.portionSize()]
+	}
+	born := make([]float64, len(tracks))
+	for i, tr := range tracks {
+		born[i] = m.t
+		for j, q := range m.next.tracks {
+			if q.Key() == tr.Key() {
+				born[i] = m.next.born[j]
+				break
+			}
+		}
+	}
+	m.next.tracks, m.next.born = append([]Track(nil), tracks...), born
+	m.next.state = nextReady
+	m.next.at = m.t
+}
+
+// NextFailed: the turn fell through and no next portion is coming.
+func (m *Model) NextFailed() {
+	if len(m.next.tracks) > 0 {
+		m.next.gone, m.next.goneAt = m.next.tracks, m.t
+	}
+	m.next.tracks, m.next.born = nil, nil
+	m.next.state = nextFailed
+	m.next.at = m.t
+}
+
+// NextClear drops the next portion: it has gone to the queue or the flow has stopped.
+func (m *Model) NextClear() { m.next = nextPortion{} }
 
 // PortionDone ends the portion: note is spoken when it lands, tracks becomes the player
 // queue. In the player it only tops the queue up with the tracks it doesn't have yet.
@@ -699,6 +797,7 @@ func (m *Model) launch() {
 func (m *Model) startAsk(i int) {
 	m.setPhase(PhAsk)
 	m.qi, m.qT, m.answered, m.ansT = i, 0, false, 0
+	m.ansFree, m.cardTyping, m.cardText = false, false, nil
 	m.dim.to = 0.45
 	q := m.warmups[i]
 	if !q.Scale && len(q.Options) > 0 {
@@ -713,12 +812,27 @@ func (m *Model) startAsk(i int) {
 	m.knob = spring{x: float64(q.Def), to: float64(q.Def)}
 }
 
+func trackCols(w, n int) (colW, cw, ch int) {
+	colW = (w - 6 - 2*(n-1)) / n
+	cw = min(12, colW)
+	ch = cw / 2
+	return
+}
+
 func (m *Model) card() (x, y, w, h int) {
 	q := m.warmups[m.qi]
 	w = min(64, m.w-6)
 	h = 8 + len(q.Options)
-	if q.Scale {
+	switch {
+	case q.Scale:
 		h = 9
+	case q.trackCard():
+		colW, _, ch := trackCols(w, len(q.Tracks))
+		if colW < 8 {
+			h = 8 + 2*len(q.Tracks)
+		} else {
+			h = ch + 10
+		}
 	}
 	return (m.w - w) / 2, (m.h - h) / 2, w, h
 }
@@ -746,6 +860,31 @@ func (m *Model) answer() {
 	m.bloom = 0.25
 }
 
+func (m *Model) answerAll() {
+	if m.answered || m.qT < 0.7 {
+		return
+	}
+	q := m.warmups[m.qi]
+	if !q.trackCard() {
+		return
+	}
+	m.answered, m.ansT = true, 0
+	m.raw = append(m.raw, "all")
+	m.chips = append(m.chips, chip{label: tr("всё вместе", "all of them"), born: m.t + 0.3})
+	m.bloom = 0.25
+}
+
+func (m *Model) answerFree(raw, label string) {
+	if m.answered || m.qT < 0.7 {
+		return
+	}
+	m.answered, m.ansT = true, 0
+	m.ansFree = true
+	m.raw = append(m.raw, raw)
+	m.chips = append(m.chips, chip{label: label, born: m.t + 0.3})
+	m.bloom = 0.25
+}
+
 func (m *Model) track(x, y, w int) (tx, ty, tw int) { return x + 5, y + 5, w - 10 }
 
 // ---------- scan ----------
@@ -758,7 +897,7 @@ func (m *Model) streamGeom() (x, y0, y1, w int, show bool) {
 	return 3, 7, m.h - 2, max(30, min(46, m.w/3)), true
 }
 
-// gridGeom picks full cards when 20 of them fit, thumbnails otherwise.
+// gridGeom picks full cards when all slots fit, thumbnails otherwise.
 func (m *Model) gridGeom() (x, y, cols, cw int, cards bool) {
 	sx, _, _, sw, show := m.streamGeom()
 	x, y = 3, 8
@@ -767,7 +906,7 @@ func (m *Model) gridGeom() (x, y, cols, cw int, cards bool) {
 	}
 	avail := m.w - x - 2
 	cols = max(1, min(5, (avail+2)/24))
-	if rows := (20 + cols - 1) / cols; rows*3-1 <= m.h-y-1 {
+	if rows := (len(m.slots) + cols - 1) / cols; rows*3-1 <= m.h-y-1 {
 		return x, y, cols, 22, true
 	}
 	cols = max(1, min(10, (avail+1)/5))
@@ -1041,6 +1180,34 @@ func (m *Model) Key(k, text string) bool {
 		return true
 	case PhAsk:
 		q := m.warmups[m.qi]
+		if m.cardTyping {
+			switch k {
+			case "esc":
+				m.cardTyping, m.cardText = false, nil
+			case "enter":
+				if s := strings.TrimSpace(string(m.cardText)); s != "" {
+					m.answerFree(s, tr("своё: ", "own: ")+trunc(s, 24))
+				}
+				m.cardTyping, m.cardText = false, nil
+			case "backspace":
+				if len(m.cardText) > 0 {
+					m.cardText = m.cardText[:len(m.cardText)-1]
+				}
+			default:
+				m.cardText = append(m.cardText, []rune(text)...)
+			}
+			return true
+		}
+		if q.trackCard() && !m.answered && m.qT >= 0.7 {
+			switch k {
+			case "/":
+				m.cardTyping, m.cardText = true, nil
+				return true
+			case "esc":
+				m.answerFree("none", tr("мимо", "none of these"))
+				return true
+			}
+		}
 		switch k {
 		case "up", "k":
 			if !q.Scale && m.selIdx > 0 {
@@ -1051,15 +1218,23 @@ func (m *Model) Key(k, text string) bool {
 				m.selIdx++
 			}
 		case "left", "h":
-			if q.Scale && m.knobI > 0 {
+			switch {
+			case q.Scale && m.knobI > 0:
 				m.knobI--
+			case q.trackCard() && m.selIdx > 0:
+				m.selIdx--
 			}
 		case "right", "l":
-			if q.Scale && m.knobI < q.scaleSteps()-1 {
+			switch {
+			case q.Scale && m.knobI < q.scaleSteps()-1:
 				m.knobI++
+			case q.trackCard() && m.selIdx < len(q.Options)-1:
+				m.selIdx++
 			}
 		case "enter", "space":
 			m.answer()
+		case "a":
+			m.answerAll()
 		default:
 			if n, err := strconv.Atoi(k); err == nil && !q.Scale && n >= 1 && n <= len(q.Options) {
 				m.selIdx = n - 1

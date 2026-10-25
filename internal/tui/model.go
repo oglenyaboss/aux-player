@@ -240,7 +240,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appendLog(pp)
 		}
 		m.vibeAIOnState(s)
-		cmds = append(cmds, m.vibeAIStreamTick(s))
+		cmds = append(cmds, m.vibeAIHandoff(s), m.vibeAIStreamTick(s))
 		m.playerState = s
 		if !wasPlaying && m.playerState.Playing {
 			m.appendLog("[player] playing")

@@ -317,6 +317,21 @@ func (m *Model) drawAsk(f *fb) {
 		f.fade(x+3, y+h-2, tr("←→ степень   enter ответ", "←→ scale   enter answer"), m.th.dim, ca*0.8, false)
 		return
 	}
+	if q.trackCard() {
+		m.drawTrackOptions(f, q, x, y, w, ca)
+		if m.cardTyping {
+			tail := m.cardText
+			if n := max(1, w-9); len(tail) > n {
+				tail = tail[len(tail)-n:]
+			}
+			f.textS(x+3, y+h-2, "›", m.th.a1, true, false)
+			f.text(x+5, y+h-2, string(tail), m.th.text)
+			f.put(x+5+len(tail), y+h-2, '▎', m.th.a1.mul(0.6+0.4*math.Sin(m.t*6)))
+		} else {
+			f.fade(x+3, y+h-2, trunc(tr("←→ выбор  enter вот это  a всё вместе  / своё  esc мимо", "←→ choose  enter this one  a all  / own words  esc none"), w-6), m.th.dim, ca*0.8, false)
+		}
+		return
+	}
 	for i, o := range q.Options {
 		p := easeOut(prog(m.qT, 0.4+0.05*float64(i), 0.35))
 		if p <= 0 {
@@ -385,6 +400,89 @@ func (m *Model) drawScale(f *fb, q Question, x, y, w int, a float64) {
 	}
 }
 
+func (m *Model) drawTrackOptions(f *fb, q Question, x, y, w int, ca float64) {
+	colW, cw, ch := trackCols(w, len(q.Tracks))
+	if colW < 8 {
+		m.drawTrackList(f, q, x, y, w)
+		return
+	}
+	for i, tk := range q.Tracks {
+		p := easeOut(prog(m.qT, 0.4+0.05*float64(i), 0.35))
+		if p <= 0 {
+			continue
+		}
+		hl := math.Max(0, 1-math.Abs(float64(i)-m.sel.x))
+		chosen := m.answered && !m.ansFree && i == m.selIdx
+		fl := 0.0
+		if chosen {
+			fl = 1 - prog(m.ansT, 0, 0.35)
+		}
+		oa := clamp01(p)
+		if m.answered && !chosen {
+			oa *= 1 - prog(m.ansT, 0, 0.2)
+		}
+		cx := x + 3 + i*(colW+2)
+		ox := cx + (colW-cw)/2
+		g := m.cover(tk.Key(), cw, 2*ch)
+		for py := 0; py < 2*ch; py++ {
+			for px := 0; px < cw; px++ {
+				f.pixel(ox+px, (y+4)*2+py, g.at(px, py).mul(oa*(0.5+0.5*hl)))
+			}
+		}
+		ly := y + 4 + ch
+		for yy := ly; yy <= ly+2; yy++ {
+			for xx := cx; xx < cx+colW; xx++ {
+				if pp := f.at(xx, yy); pp != nil {
+					pp.bg = pp.bg.lerp(m.th.a1, 0.22*hl*oa).lerp(white, 0.5*fl)
+				}
+			}
+		}
+		lc := m.th.dim.lerp(m.th.text, 0.55+0.45*hl)
+		f.fade(cx, ly, trunc(q.Options[i], colW), lc, oa, hl > 0.5)
+		f.fade(cx, ly+1, trunc(tk.Artist, colW), m.th.dim, oa, false)
+		f.fade(cx, ly+2, trunc(tk.Title, colW), m.th.dim, oa, false)
+	}
+}
+
+func (m *Model) drawTrackList(f *fb, q Question, x, y, w int) {
+	for i, tk := range q.Tracks {
+		p := easeOut(prog(m.qT, 0.4+0.05*float64(i), 0.35))
+		if p <= 0 {
+			continue
+		}
+		hl := math.Max(0, 1-math.Abs(float64(i)-m.sel.x))
+		chosen := m.answered && !m.ansFree && i == m.selIdx
+		fl := 0.0
+		if chosen {
+			fl = 1 - prog(m.ansT, 0, 0.35)
+		}
+		oa := clamp01(p)
+		if m.answered && !chosen {
+			oa *= 1 - prog(m.ansT, 0, 0.2)
+		}
+		ry := y + 4 + 2*i
+		for yy := ry; yy <= ry+1; yy++ {
+			for xx := x + 2; xx < x+w-2; xx++ {
+				u := float64(xx-x) / float64(w)
+				if pp := f.at(xx, yy); pp != nil {
+					pp.bg = pp.bg.lerp(m.th.a1, 0.22*hl*(1-u*0.85)*oa).lerp(white, 0.5*fl)
+				}
+			}
+		}
+		if hl > 0.05 {
+			f.fade(x+2, ry, "▌", m.th.a1, hl*oa, false)
+		}
+		g := m.cover(tk.Key(), 4, 4)
+		for py := 0; py < 4; py++ {
+			for px := 0; px < 4; px++ {
+				f.pixel(x+3+px, ry*2+py, g.at(px, py).mul(oa*(0.5+0.5*hl)))
+			}
+		}
+		f.fade(x+9, ry, trunc(q.Options[i], w-12), m.th.dim.lerp(m.th.text, 0.55+0.45*hl), oa, hl > 0.5)
+		f.fade(x+9, ry+1, trunc(tk.Artist+" — "+tk.Title, w-12), m.th.dim, oa, false)
+	}
+}
+
 // candLine renders one stream row: pending ones decode, accepted settle, rejected break apart.
 func (m *Model) candLine(f *fb, c *cand, i, x, y, w int, la float64) {
 	title := trunc(c.tr.Title, w-4)
@@ -417,7 +515,7 @@ func (m *Model) drawScan(f *fb) {
 	sx, y0, y1, sw, show := m.streamGeom()
 	_, _, cols, cw, cards := m.gridGeom()
 	f.textS(3, 3, fmt.Sprintf(tr("Порция %d", "Batch %d"), m.portionNo), m.th.text, true, false)
-	cnt := fmt.Sprintf(tr("%d из 20", "%d of 20"), m.filled)
+	cnt := fmt.Sprintf(tr("%d из %d", "%d of %d"), m.filled, len(m.slots))
 	f.textS(m.w-3-len([]rune(cnt)), 3, cnt, m.th.a1, true, false)
 	if m.rejected > 0 && m.w >= 70 {
 		miss := fmt.Sprintf(tr("мимо %d", "passed %d"), m.rejected)
@@ -643,6 +741,8 @@ func (m *Model) drawPlay(f *fb) {
 
 	y += 2
 
+	m.drawNextLine(f, x, y, pw)
+
 	if !g.mini && !g.noQueue {
 		bottom := m.h - 3
 		if !g.side {
@@ -653,7 +753,12 @@ func (m *Model) drawPlay(f *fb) {
 			y = max(y, g.cy+g.ch+1)
 			bottom = m.h - 2
 		}
-		for k := 1; y+1 < bottom && m.cur+k < len(m.queue); k++ {
+		strip := m.nextStrip()
+		limit := bottom
+		if strip {
+			limit = bottom - 2
+		}
+		for k := 1; y+1 < limit && m.cur+k < len(m.queue); k++ {
 			next := m.queue[m.cur+k]
 			rp := 1.0
 			if m.queueT > 0 {
@@ -671,6 +776,9 @@ func (m *Model) drawPlay(f *fb) {
 			f.fade(x+6, y, trunc(next.Title, pw-6), m.th.dim.lerp(m.th.text, 0.6*fade), easeOut(rp), false)
 			f.fade(x+6, y+1, trunc(next.Artist, pw-6), m.th.dim, rp*0.7*fade, false)
 			y += 2
+		}
+		if strip && y+1 < bottom {
+			m.drawNextStrip(f, x, y, pw)
 		}
 	}
 
@@ -694,6 +802,97 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	m.eggOverlay(f, g)
 	m.drawToasts(f)
+}
+
+// drawNextLine is the play-phase line under the progress bar: what the agent is doing
+// with the next portion.
+func (m *Model) drawNextLine(f *fb, x, y, pw int) {
+	if m.next.state == nextOff || y-1 >= m.h-2 {
+		return
+	}
+	sy := y - 1
+	switch m.next.state {
+	case nextGathering:
+		var s string
+		if m.next.reply == "" {
+			s = fmt.Sprintf(tr("собираю следующие %d", "picking the next %d"), m.portionSize())
+			if m.status != "" {
+				s += " · " + m.status
+			}
+		} else {
+			s = fmt.Sprintf(tr("учитываю «%s»", "taking in \"%s\""), trunc(m.next.reply, 24))
+			if m.status != "" {
+				s += " · " + m.status
+			} else {
+				s += fmt.Sprintf(tr(", пересобираю следующие %d", ", rebuilding the next %d"), m.portionSize())
+			}
+		}
+		m.wave(f, x, sy, trunc(s, pw), m.th.a1)
+	case nextReady:
+		s := fmt.Sprintf(tr("✓ следующие %d готовы", "✓ next %d ready"), len(m.next.tracks))
+		f.fade(x, sy, trunc(s, pw), m.th.a1, easeOut(prog(m.t-m.next.at, 0, 0.3)), false)
+	case nextFailed:
+		if a := 0.9 * (1 - prog(m.t-m.next.at, 5, 1)); a > 0 {
+			f.fade(x, sy, trunc(tr("✗ следующие не собрались", "✗ couldn't pick the next ones"), pw), m.th.bad, a, false)
+		}
+	}
+}
+
+// nextStrip: the tail of the list gives room to the next portion while it is gathered,
+// ready, or still dissolving away.
+func (m *Model) nextStrip() bool {
+	return m.next.state == nextGathering || m.next.state == nextReady ||
+		m.t-m.next.goneAt < 0.4 && len(m.next.gone) > 0
+}
+
+// drawNextStrip draws the portion's thumbnails in a row of slots under the queue.
+func (m *Model) drawNextStrip(f *fb, x, y, pw int) {
+	n := m.next
+	d := prog(m.t-n.goneAt, 0, 0.4)
+	k := min(m.portionSize(), (pw+1)/5)
+	for i := 0; i < k; i++ {
+		sx := x + 5*i
+		if n.state == nextGathering {
+			b := 0.18 + 0.12*(0.5+0.5*math.Sin(m.t*3-float64(i)*0.8))
+			for yy := 0; yy < 4; yy++ {
+				for xx := 0; xx < 4; xx++ {
+					f.pixel(sx+xx, y*2+yy, m.th.dim.mul(b))
+				}
+			}
+		}
+		if i < len(n.gone) && d < 1 {
+			g := m.cover(n.gone[i].Key(), 4, 4)
+			for yy := 0; yy < 4; yy++ {
+				for xx := 0; xx < 4; xx++ {
+					if hash(xx, yy, i+23) >= d {
+						f.pixel(sx+xx, y*2+yy, g.at(xx, yy).mul(0.7*(1-0.7*m.pause)))
+					}
+				}
+			}
+		}
+		if i < len(n.tracks) {
+			b := 0.7
+			if n.state == nextReady {
+				b = 0.7 + 0.15*easeOut(prog(m.t-n.at, 0, 0.4))
+			}
+			g := m.cover(n.tracks[i].Key(), 4, 4)
+			rp := prog(m.t-n.born[i], 0, 0.5)
+			for yy := 0; yy < 4; yy++ {
+				for xx := 0; xx < 4; xx++ {
+					if hash(xx, yy, i+11) < rp {
+						f.pixel(sx+xx, y*2+yy, g.at(xx, yy).mul(b*(1-0.7*m.pause)))
+					}
+				}
+			}
+		}
+	}
+	if n.state != nextGathering {
+		return
+	}
+	s := fmt.Sprintf(tr("%d из %d", "%d of %d"), len(n.tracks), m.portionSize())
+	if x+5*k+1+len([]rune(s)) < x+pw {
+		f.fade(x+5*k+1, y, s, m.th.dim, 0.8, false)
+	}
 }
 
 // drawCover lays the cover into its box over a glow of its own colours.
@@ -756,6 +955,9 @@ func (m *Model) drawToasts(f *fb) {
 		h := 3
 		if t.q != nil {
 			h = 6
+			if t.q.trackCard() {
+				h = 8
+			}
 		}
 		x := m.w - w - 3 + int(t.x.x)
 		y := base - h + 1
@@ -775,6 +977,35 @@ func (m *Model) drawToasts(f *fb) {
 		}
 		f.text(x+2, y+1, tr("вопрос, музыка не прервётся", "a question, the music keeps playing"), m.th.dim)
 		f.textS(x+2, y+2, trunc(t.q.Title, w-4), m.th.text, true, false)
+		if t.q.trackCard() {
+			for k, tk := range t.q.Tracks {
+				ox := x + 2 + k*14
+				fl := 0.0
+				if t.picked == k {
+					fl = 1 - prog(m.t-t.pickT, 0, 0.5)
+					for xx := ox; xx < ox+14; xx++ {
+						f.tint(xx, y+6, m.th.a1, 0.45*fl)
+					}
+				}
+				g := m.cover(tk.Key(), 6, 6)
+				for py := 0; py < 6; py++ {
+					for px := 0; px < 6; px++ {
+						c := g.at(px, py)
+						if t.picked >= 0 && t.picked != k {
+							c = c.mul(0.5)
+						}
+						f.pixel(ox+px, (y+3)*2+py, c)
+					}
+				}
+				oc := m.th.text
+				if t.picked >= 0 && t.picked != k {
+					oc = m.th.dim
+				}
+				f.style(ox, y+6, rune('1'+k), m.th.a1.lerp(white, fl), true, false)
+				f.text(ox+2, y+6, trunc(t.q.Options[k], 11), oc.lerp(white, fl))
+			}
+			continue
+		}
 		ox := x + 2
 		for k, o := range t.q.Options {
 			fl := 0.0

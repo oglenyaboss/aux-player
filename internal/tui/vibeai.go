@@ -55,10 +55,11 @@ type vibeAISavedMsg struct {
 // vibeAIRun is the agent session behind the vibe screen. The engine runs in
 // command goroutines; mu serialises them, everything else is owned by Update.
 type vibeAIRun struct {
-	mu      sync.Mutex
-	engine  *vibeai.Engine
-	turnCtx context.Context
-	turnGen int
+	mu          sync.Mutex
+	engine      *vibeai.Engine
+	turnCtx     context.Context
+	turnGen     int
+	undelivered bool
 
 	events  chan tea.Msg
 	answers chan []string
@@ -66,10 +67,13 @@ type vibeAIRun struct {
 	gen     int
 	busy    bool
 	refill  bool
+	fresh   bool
 
 	tracks       []vibeai.Track
 	feed         []vibeai.Track
 	portionStart int
+	staged       *vibeAIStaged
+	dropStaged   bool
 	served       map[string]vibeai.Track
 	pending      []vibeai.Outcome
 	pendingIDs   []string
@@ -92,8 +96,18 @@ type vibeaiLaterAnswer struct {
 	raw string
 }
 
+// vibeAIStaged is a finished continuation portion held in the host until the
+// player queue runs dry; the owner's reply may drop it before it lands.
+// refill marks the original stream top-up, whose tracks are saved to Apple Music.
+type vibeAIStaged struct {
+	tracks []vibeai.Track
+	note   string
+	later  *vibeai.Question
+	refill bool
+}
+
 func newVibeAIRun() *vibeAIRun {
-	return &vibeAIRun{events: make(chan tea.Msg, 64), answers: make(chan []string), served: make(map[string]vibeai.Track), stream: true}
+	return &vibeAIRun{events: make(chan tea.Msg, 64), answers: make(chan []string), served: make(map[string]vibeai.Track), stream: true, fresh: true}
 }
 
 type vibeAIBridge struct{ r *vibeAIRun }
@@ -136,6 +150,7 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 		Storefront:          cfg.StoreFront,
 		LastfmKey:           cfg.LastfmAPIKey,
 		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel, Effort: cfg.VibeLLMEffort},
+		PortionSize:         vibeAIPortion,
 		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
 		SignalsPath:         filepath.Join(memDir, "vibe-signals.jsonl"),
 		CacheDir:            cacheDir,
@@ -149,7 +164,9 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 // top-up whose tracks go to the end of the queue instead of the screen's play
 // actions. Listening outcomes accumulated since the last turn and answers to
 // a mid-stream question asked earlier in the same session are handed to the
-// engine before it turns.
+// engine before it turns. A reply carrying a staged portion has the turn's
+// goroutine forget that portion in the engine first; a fresh turn throws the
+// staged portion away altogether.
 func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r := m.vibeAI
 	if r.cancel != nil {
@@ -160,6 +177,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.gen++
 	r.busy = true
 	r.refill = refill
+	r.fresh = fresh
 	gen := r.gen
 	pending := r.pending
 	r.pending = nil
@@ -168,9 +186,12 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 		r.tracks, r.portion, r.feed = nil, 0, nil
 		r.playlistID, r.playlistName, r.savedPortion = "", "", 0
 		r.autoplay, r.autoplayID, r.later, r.laterAnswers = true, "", nil, nil
+		r.staged, r.dropStaged = nil, false
 	} else {
 		r.autoplay = false
 	}
+	drop := r.dropStaged
+	r.dropStaged = false
 	r.portionStart = len(r.feed)
 	answers := r.laterAnswers
 	r.laterAnswers = nil
@@ -187,6 +208,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 			}
 			_, _ = r.engine.Close()
 			r.engine = nil
+			r.undelivered = false
 		}
 		if r.engine == nil {
 			e, err := vibeai.Start(ctx, cfg, vibeAIBridge{r})
@@ -195,6 +217,10 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 			}
 			r.engine = e
 		}
+		if drop || r.undelivered {
+			r.engine.DropLast()
+		}
+		r.undelivered = false
 		if len(pending) > 0 {
 			_ = r.engine.Record(pending)
 		}
@@ -202,6 +228,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 			r.engine.Answer(a.q, a.raw)
 		}
 		p, err := r.engine.Turn(ctx, text)
+		r.undelivered = err == nil && !fresh
 		return vibeAIDoneMsg{gen: gen, tracks: p.Tracks, note: p.Note, later: p.Later, err: err, elapsed: time.Since(start), refill: refill}
 	}
 	// The result rides the event channel behind the turn's picks: the screen
@@ -249,7 +276,9 @@ func (m *Model) cancelVibeAI() {
 	if len(r.feed) > r.portionStart {
 		r.feed = r.feed[:r.portionStart]
 	}
+	r.staged = nil
 	r.autoplay = false
+	m.vibeAIP.m.NextClear()
 	m.appendLog("[vibe] cancelled")
 }
 
@@ -333,6 +362,12 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		if msg.gen != r.gen || !r.busy {
 			return waitVibeAI(r.events)
 		}
+		if !r.fresh {
+			if msg.pick.Accepted {
+				v.NextPick(vibeAIViewTrack(msg.pick.Track))
+			}
+			return waitVibeAI(r.events)
+		}
 		v.AddPick(vibeAIViewTrack(msg.pick.Track), msg.pick.Name, msg.pick.Accepted, msg.pick.Reason)
 		if msg.pick.Accepted {
 			r.feed = append(r.feed, msg.pick.Track)
@@ -369,6 +404,14 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 
 	case VibeAISubmitMsg:
+		if !msg.Fresh && r.staged != nil {
+			r.staged = nil
+			r.dropStaged = true
+			m.appendLog("[vibe] staged portion dropped: owner reply")
+		}
+		if !msg.Fresh {
+			v.NextGathering(msg.Text)
+		}
 		return m.vibeAITurnCmd(msg.Text, msg.Fresh, false)
 
 	case VibeAICancelMsg:
@@ -448,13 +491,17 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// vibeAIDone lands a finished turn: the portion goes to the screen and the queue.
+// vibeAIDone lands a finished turn: the fresh portion plays, a continuation
+// portion stages in the host until the player queue runs dry.
 func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	r := m.vibeAI
 	v := m.vibeAIP.m
 	if msg.gen != r.gen {
 		return nil
 	}
+	r.mu.Lock()
+	r.undelivered = false
+	r.mu.Unlock()
 	r.busy = false
 	if msg.err != nil {
 		if len(r.feed) > r.portionStart {
@@ -463,7 +510,16 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 		r.autoplay = false
 		m.appendLog(fmt.Sprintf("[vibe] error: %v", msg.err))
 		v.SetError(msg.err)
+		if !r.fresh {
+			v.NextFailed()
+		}
 		return nil
+	}
+	if !r.fresh && (msg.refill || r.stream) {
+		r.staged = &vibeAIStaged{tracks: msg.tracks, note: msg.note, later: msg.later, refill: msg.refill}
+		m.appendLog(fmt.Sprintf("[vibe] portion staged: %d tracks in %s", len(msg.tracks), msg.elapsed.Round(time.Second)))
+		v.NextReady(vibeAIViewTracks(msg.tracks))
+		return m.vibeAIHandoff(m.playerState)
 	}
 	r.tracks = msg.tracks
 	r.portion++
@@ -473,6 +529,7 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks in %s", r.portion, len(msg.tracks), msg.elapsed.Round(time.Second)))
 	r.feed = append(r.feed[:r.portionStart], msg.tracks...)
 	v.PortionDone(vibeAIViewTracks(msg.tracks), msg.note)
+	v.NextClear()
 	if msg.later != nil {
 		r.later = msg.later
 		v.AskLater(vibeAIViewQuestion(*msg.later))
@@ -490,26 +547,49 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 		}
 		return m.vibeAIAppend(rest)
 	}
-	if msg.refill || r.stream {
-		cmds := []tea.Cmd{m.vibeAIAppend(msg.tracks)}
-		if msg.refill && r.playlistID != "" {
-			cmds = append(cmds, m.vibeAISaveCmd())
-		}
-		return tea.Batch(cmds...)
-	}
 	return nil
 }
 
-// vibeAIStreamTick starts a top-up turn while stream mode is on and the
-// currently playing vibe track has vibeAIStreamAhead or fewer tracks left
-// behind it in the queue.
-func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
+// vibeAIHandoff delivers the staged continuation portion to the screen and the
+// player queue: right away when nothing plays or the playing track is outside
+// the queue, otherwise once the player moved onto the queue's last track.
+func (m *Model) vibeAIHandoff(s player.State) tea.Cmd {
 	r := m.vibeAI
-	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID {
+	if r.staged == nil {
 		return nil
 	}
-	if _, ok := r.served[PlaybackID(*s.Track)]; !ok {
+	if ahead, ok := m.vibeAIAhead(s); ok && ahead > 0 {
 		return nil
+	}
+	st := r.staged
+	r.staged = nil
+	r.tracks = st.tracks
+	r.portion++
+	for _, t := range st.tracks {
+		r.served[t.ID] = t
+	}
+	r.feed = append(r.feed[:r.portionStart], st.tracks...)
+	r.portionStart = len(r.feed)
+	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks handed off", r.portion, len(st.tracks)))
+	v := m.vibeAIP.m
+	v.PortionDone(vibeAIViewTracks(st.tracks), st.note)
+	v.NextClear()
+	if st.later != nil {
+		r.later = st.later
+		v.AskLater(vibeAIViewQuestion(*st.later))
+	}
+	cmds := []tea.Cmd{m.vibeAIAppend(st.tracks)}
+	if st.refill && r.playlistID != "" {
+		cmds = append(cmds, m.vibeAISaveCmd())
+	}
+	return tea.Batch(cmds...)
+}
+
+// vibeAIAhead counts the tracks the queue still holds behind the playing one;
+// ok is false when nothing plays or the playing track is outside the queue.
+func (m *Model) vibeAIAhead(s player.State) (int, bool) {
+	if s.Track == nil {
+		return 0, false
 	}
 	pid := PlaybackID(*s.Track)
 	idx := -1
@@ -519,14 +599,35 @@ func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 			break
 		}
 	}
-	if idx < 0 || len(m.queueTracks)-1-idx > vibeAIStreamAhead {
+	if idx < 0 {
+		return 0, false
+	}
+	return len(m.queueTracks) - 1 - idx, true
+}
+
+// vibeAIStreamTick starts a top-up turn while stream mode is on, no portion
+// waits to hand off, and the currently playing vibe track has
+// vibeAIStreamAhead or fewer tracks left behind it in the queue.
+func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
+	r := m.vibeAI
+	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID || r.staged != nil {
+		return nil
+	}
+	if _, ok := r.served[PlaybackID(*s.Track)]; !ok {
+		return nil
+	}
+	ahead, ok := m.vibeAIAhead(s)
+	if !ok || ahead > vibeAIStreamAhead {
 		return nil
 	}
 	r.streamForID = s.Track.ID
+	m.vibeAIP.m.NextGathering("")
 	return m.vibeAITurnCmd("", false, true)
 }
 
-const vibeAIStreamAhead = 4
+const vibeAIPortion = 5
+
+const vibeAIStreamAhead = 1
 
 const vibeAICloseWait = 3 * time.Second
 
@@ -680,7 +781,7 @@ func vibeAIViewTracks(ts []vibeai.Track) []VibeAITrack {
 }
 
 func vibeAIViewQuestion(q vibeai.Question) VibeAIQuestion {
-	return VibeAIQuestion{Question: q.Question, Kind: q.Kind, Options: q.Options, Left: q.Left, Right: q.Right, Steps: q.Steps, Default: q.Default}
+	return VibeAIQuestion{Question: q.Question, Options: q.Options, Tracks: vibeAIViewTracks(q.Tracks), Default: q.Default}
 }
 
 func vibeAIProviderTracks(ts []vibeai.Track) []provider.Track {

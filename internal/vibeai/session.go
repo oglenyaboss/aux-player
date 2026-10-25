@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const windowSize = 20
+
 type Seed struct {
 	Artist string
 	Mode   string // "not_it" | "and_similar" | "want_it"
@@ -20,6 +22,8 @@ type Entry struct {
 	Why      string
 	Favorite bool // трек из Favorites владельца
 	Known    bool // хотя бы один артист песни — известный
+
+	knownCounted bool
 }
 
 type Verdict struct {
@@ -41,6 +45,8 @@ type Session struct {
 	excl            map[string]string
 	seeds           map[string]string
 	given           map[string]bool
+	recent          []Entry
+	lastClosed      int
 	portion         []Entry
 	inPortion       map[string]bool
 	portionArts     map[string]int
@@ -100,11 +106,6 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		return v
 	}
 	v.Song = song
-	if s.Need() == 0 {
-		v.Reason = "порция заполнена"
-		s.addReserve(sug, song)
-		return v
-	}
 	arts := songArtists(song)
 	for _, a := range arts {
 		if name, ok := s.excl[a]; ok {
@@ -123,6 +124,12 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		v.Reason = "уже было"
 		return v
 	}
+	if s.Need() == 0 {
+		v.Reason = "порция заполнена"
+		s.addReserve(sug, song)
+		return v
+	}
+	windowArts, windowKnown := s.windowCounts()
 	if s.sig != nil {
 		if s.sig.skippedBefore(song, s.sessionID) {
 			v.Reason = "бросал раньше, не дослушав"
@@ -146,14 +153,14 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		if s.seeds[a] == "want_it" {
 			continue
 		}
-		if s.portionArts[a] >= s.PerArtist {
+		if s.portionArts[a]+windowArts[a] >= s.PerArtist {
 			v.Reason = "лимит артиста: " + a
 			return v
 		}
 	}
-	maxSimilar := int(math.Ceil(float64(s.Size)*0.15 - 1e-9))
+	maxSimilar := int(math.Ceil(float64(windowSize)*0.15 - 1e-9))
 	for _, a := range arts {
-		if s.seeds[a] == "and_similar" && s.portionArts[a] >= maxSimilar {
+		if s.seeds[a] == "and_similar" && s.portionArts[a]+windowArts[a] >= maxSimilar {
 			v.Reason = "лимит ориентира"
 			return v
 		}
@@ -169,11 +176,46 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			knownCounted = true
 		}
 	}
-	if knownCounted && s.knownCount >= s.maxKnown() {
+	if knownCounted && s.knownCount+windowKnown >= s.maxKnown() {
 		v.Reason = "лимит известных"
 		return v
 	}
-	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown})
+	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
+	s.inPortion[k] = true
+	for _, a := range arts {
+		s.portionArts[a]++
+	}
+	if knownCounted {
+		s.knownCount++
+	}
+	v.Accepted = true
+	return v
+}
+
+func (s *Session) Take(sug Suggestion, song Song) Verdict {
+	v := Verdict{Suggestion: sug, Song: song}
+	k := songKey(song)
+	if s.given[k] || s.inPortion[k] {
+		v.Reason = "уже было"
+		return v
+	}
+	if s.Need() == 0 {
+		v.Reason = "порция полна"
+		return v
+	}
+	arts := songArtists(song)
+	isKnown := false
+	knownCounted := false
+	for _, a := range arts {
+		if !s.known[a] {
+			continue
+		}
+		isKnown = true
+		if _, isSeed := s.seeds[a]; !isSeed {
+			knownCounted = true
+		}
+	}
+	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
 	s.inPortion[k] = true
 	for _, a := range arts {
 		s.portionArts[a]++
@@ -198,14 +240,13 @@ func (s *Session) addReserve(sug Suggestion, song Song) {
 	s.reserve = append(s.reserve, reserved{sug: sug, song: song})
 }
 
-func (s *Session) DrainReserve() []Verdict {
-	reserve := s.reserve
-	s.reserve = nil
-	verdicts := make([]Verdict, 0, len(reserve))
-	for _, r := range reserve {
-		verdicts = append(verdicts, s.Offer(r.sug, r.song, true))
+func (s *Session) TakeReserve() []string {
+	names := make([]string, 0, len(s.reserve))
+	for _, r := range s.reserve {
+		names = append(names, r.song.Artist+" — "+r.song.Title)
 	}
-	return verdicts
+	s.reserve = nil
+	return names
 }
 
 func (s *Session) ClearReserve() { s.reserve = nil }
@@ -224,11 +265,37 @@ func (s *Session) hasSeedArtist(arts []string) bool {
 }
 
 func (s *Session) maxKnown() int {
-	return int(math.Floor(float64(s.Size)*0.2 + 1e-9))
+	return int(math.Floor(float64(windowSize)*0.2 + 1e-9))
 }
 
 func (s *Session) KnownLeft() int {
-	return max(s.maxKnown()-s.knownCount, 0)
+	_, tailKnown := s.windowCounts()
+	return max(s.maxKnown()-s.knownCount-tailKnown, 0)
+}
+
+func (s *Session) windowTail() []Entry {
+	n := windowSize - s.Size
+	if n <= 0 {
+		return nil
+	}
+	if n >= len(s.recent) {
+		return s.recent
+	}
+	return s.recent[len(s.recent)-n:]
+}
+
+func (s *Session) windowCounts() (map[string]int, int) {
+	tailArts := make(map[string]int)
+	tailKnown := 0
+	for _, e := range s.windowTail() {
+		for _, a := range songArtists(e.Song) {
+			tailArts[a]++
+		}
+		if e.knownCounted {
+			tailKnown++
+		}
+	}
+	return tailArts, tailKnown
 }
 
 func (s *Session) Portion() []Entry {
@@ -240,9 +307,29 @@ func (s *Session) ClosePortion() []Entry {
 	for _, e := range out {
 		s.given[songKey(e.Song)] = true
 	}
+	s.recent = append(s.recent, out...)
+	s.lastClosed = len(out)
 	s.portion = nil
 	s.inPortion = make(map[string]bool)
 	s.portionArts = make(map[string]int)
 	s.knownCount = 0
 	return out
+}
+
+func (s *Session) ResetPortion() {
+	s.portion = nil
+	s.inPortion = make(map[string]bool)
+	s.portionArts = make(map[string]int)
+	s.knownCount = 0
+}
+
+func (s *Session) DropLast() {
+	if s.lastClosed == 0 || len(s.recent) < s.lastClosed {
+		return
+	}
+	for _, e := range s.recent[len(s.recent)-s.lastClosed:] {
+		delete(s.given, songKey(e.Song))
+	}
+	s.recent = s.recent[:len(s.recent)-s.lastClosed]
+	s.lastClosed = 0
 }

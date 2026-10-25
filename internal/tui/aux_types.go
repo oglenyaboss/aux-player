@@ -33,12 +33,10 @@ func FormatDuration(d time.Duration) string {
 }
 
 type VibeAIQuestion struct {
-	Question    string
-	Kind        string
-	Options     []string
-	Left, Right string
-	Steps       int
-	Default     string
+	Question string
+	Options  []string
+	Tracks   []VibeAITrack
+	Default  string
 }
 
 type VibeAITrack struct {

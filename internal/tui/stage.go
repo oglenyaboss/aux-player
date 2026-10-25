@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +61,7 @@ func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 	return stage.Options{
 		Onboard:       cfg.VibeLLMAPIKey == "" || !apple,
 		Connected:     [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
+		Slots:         vibeAIPortion,
 		LastfmAskKeys: cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "",
 		LastfmKey:     cfg.LastfmAPIKey,
 		NoEggs:        cfg.VibeEggs != nil && !*cfg.VibeEggs,
@@ -99,10 +99,18 @@ func (s *stageScreen) Ask(qs []VibeAIQuestion) {
 		cards[i] = stageQuestion(q)
 	}
 	s.st.Ask(cards)
+	for _, q := range qs {
+		for _, t := range q.Tracks {
+			s.wantCover(t)
+		}
+	}
 }
 
 func (s *stageScreen) AskLater(q VibeAIQuestion) {
 	s.st.AskLater(stageQuestion(q))
+	for _, t := range q.Tracks {
+		s.wantCover(t)
+	}
 }
 
 func (s *stageScreen) AddPick(t VibeAITrack, name string, accepted bool, reason string) {
@@ -127,6 +135,26 @@ func (s *stageScreen) PortionDone(tracks []VibeAITrack, note string) {
 		s.wantCover(t)
 	}
 }
+
+func (s *stageScreen) NextGathering(reply string) { s.st.NextGathering(reply) }
+
+func (s *stageScreen) NextPick(t VibeAITrack) {
+	s.st.NextPick(stageTrack(t, ""))
+	s.wantCover(t)
+}
+
+func (s *stageScreen) NextReady(tracks []VibeAITrack) {
+	cards := make([]stage.Track, len(tracks))
+	for i, t := range tracks {
+		cards[i] = stageTrack(t, "")
+		s.wantCover(t)
+	}
+	s.st.NextReady(cards)
+}
+
+func (s *stageScreen) NextFailed() { s.st.NextFailed() }
+
+func (s *stageScreen) NextClear() { s.st.NextClear() }
 
 func (s *stageScreen) SetError(err error) {
 	s.feed = s.feed[:s.open]
@@ -357,24 +385,16 @@ func stageTrack(t VibeAITrack, name string) stage.Track {
 }
 
 func stageQuestion(q VibeAIQuestion) stage.Question {
-	def := questionDefault(q)
-	if q.Kind == "scale" {
-		def--
+	tracks := make([]stage.Track, len(q.Tracks))
+	for i, t := range q.Tracks {
+		tracks[i] = stageTrack(t, "")
 	}
-	return stage.Question{Title: q.Question, Options: q.Options, Scale: q.Kind == "scale",
-		Left: q.Left, Right: q.Right, Steps: q.Steps, Def: def}
+	return stage.Question{Title: q.Question, Options: q.Options, Tracks: tracks, Def: questionDefault(q)}
 }
 
 func questionDefault(q VibeAIQuestion) int {
-	if q.Kind == "scale" {
-		n, err := strconv.Atoi(q.Default)
-		if err != nil || n < 1 || n > q.Steps {
-			return (q.Steps + 1) / 2
-		}
-		return n
-	}
-	if i := slices.Index(q.Options, q.Default); i >= 0 {
-		return i
+	if n, err := strconv.Atoi(q.Default); err == nil && n >= 1 && n <= len(q.Options) {
+		return n - 1
 	}
 	return 0
 }

@@ -40,20 +40,22 @@ type Portion struct {
 }
 
 type Engine struct {
-	agent     *Agent
-	session   *Session
-	sig       *Signals
-	mem       *memory.Store
-	log       *runLog
-	api       *appleAPI
-	cfg       Config
-	query     string
-	start     time.Time
-	sessionID string
-	turns     int
-	portions  [][]Track
-	replies   []reply
-	asked     []string
+	agent      *Agent
+	session    *Session
+	sig        *Signals
+	mem        *memory.Store
+	log        *runLog
+	api        *appleAPI
+	cfg        Config
+	query      string
+	start      time.Time
+	sessionID  string
+	turns      int
+	portions   [][]Track
+	replies    []reply
+	asked      []string
+	skipped    []string
+	laterAsked bool
 }
 
 type reply struct {
@@ -82,7 +84,7 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		cfg.CacheMaxAge = 24 * time.Hour
 	}
 	if cfg.PortionSize == 0 {
-		cfg.PortionSize = 20
+		cfg.PortionSize = 5
 	}
 	api := &appleAPI{http: &http.Client{Timeout: 30 * time.Second}, dev: cfg.AppleDeveloperToken, user: cfg.AppleUserToken}
 	var progress func(string)
@@ -140,10 +142,14 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 			e.log.f("## владелец: %s", text)
 		}
 		e.agent.Reset()
+		e.session.ResetPortion()
 		tail := "Продолжи поток: следующая порция. Держись ядра запроса. ▲ — главный ориентир, ищи близкое по звучанию; дослушанное — слабый плюс; от ▼ и скипнутого уходи."
 		if text != "" {
 			tail = "Новая реплика владельца: «" + text + "». Учти её в следующей порции."
 			e.session.ClearReserve()
+		}
+		if text == "" && len(e.skipped) >= 2 {
+			tail += "\n\nСкипнуто с прошлого вопроса: " + strings.Join(e.skipped, "; ") + ". Если видна развилка — одно дослушано, другое скипнуто, — задай ask_later: варианты — дослушанные треки из «Выдано»."
 		}
 		message = e.history() + "\n\n" + tail
 		if text != "" {
@@ -151,15 +157,24 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		}
 	}
 	e.turns++
+	history := make([]Track, 0)
+	for _, p := range e.portions {
+		history = append(history, p...)
+	}
+	e.agent.History = history
 	entries, err := e.agent.Turn(ctx, message)
 	if err != nil {
 		return Portion{}, err
+	}
+	if e.agent.Later != nil {
+		e.skipped = nil
 	}
 	for _, r := range e.agent.Warmup {
 		e.replies = append(e.replies, reply{after: 0, text: "на вопрос «" + r.Question + "» — " + r.Answer})
 	}
 	e.agent.Warmup = nil
-	if e.agent.Later != nil {
+	e.laterAsked = e.agent.Later != nil
+	if e.laterAsked {
 		e.asked = append(e.asked, e.agent.Later.Question)
 	}
 	e.log.f("## порция %d", e.turns)
@@ -175,6 +190,19 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		e.log.f("вопрос на потом: %s %v", e.agent.Later.Question, e.agent.Later.Options)
 	}
 	return Portion{Tracks: tracks, Note: e.agent.Note, Later: e.agent.Later}, nil
+}
+
+func (e *Engine) DropLast() {
+	if len(e.portions) == 0 {
+		return
+	}
+	e.portions = e.portions[:len(e.portions)-1]
+	if e.laterAsked {
+		e.asked = e.asked[:len(e.asked)-1]
+		e.laterAsked = false
+	}
+	e.session.DropLast()
+	e.log.f("## порция %d отброшена: реплика владельца", len(e.portions)+1)
 }
 
 func (e *Engine) Answer(q Question, raw string) {
@@ -295,6 +323,11 @@ func skippedBlock(songs []Song) string {
 }
 
 func (e *Engine) Record(outs []Outcome) error {
+	for _, out := range outs {
+		if out.Kind == "skip_early" || out.Kind == "skip_mid" {
+			e.skipped = append(e.skipped, out.Artist+" — "+out.Title)
+		}
+	}
 	if e.sig == nil {
 		return nil
 	}

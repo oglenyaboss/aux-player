@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,6 +228,7 @@ func TestVibeAILateAskAfterDoneIgnored(t *testing.T) {
 
 func TestVibeAI_StreamAppendsWhileOn(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.playerState.Track = &m.queueTracks[len(m.queueTracks)-1]
 	next := []vibeai.Track{{ID: "4", Artist: "D", Title: "Four"}, {ID: "5", Artist: "E", Title: "Five"}}
 	done := func() vibeAIDoneMsg {
 		return vibeAIDoneMsg{gen: startVibeTurn(m), tracks: next, elapsed: time.Second}
@@ -288,6 +290,7 @@ func TestVibeAI_SaveTwiceSamePortion(t *testing.T) {
 	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "Vibes AI · x", n: 3, created: true})
 	m.vibeAITurnCmd("", false, false)
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
 		t.Error("a new portion should append to the linked playlist")
 	}
@@ -320,6 +323,7 @@ func TestVibeAI_Outcome(t *testing.T) {
 
 func TestVibeAI_FeedPlayFromIndex(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.playerState.Track = &m.queueTracks[len(m.queueTracks)-1]
 	next := []vibeai.Track{{ID: "4", Artist: "D", Title: "Four"}, {ID: "5", Artist: "E", Title: "Five"}}
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: startVibeTurn(m), tracks: next, elapsed: time.Second})
 	if len(m.vibeAI.feed) != 5 {
@@ -349,6 +353,7 @@ func TestVibeAI_PlayIndexOutOfBounds(t *testing.T) {
 
 func TestVibeAINoteLeavePending(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	t1 := &provider.Track{ID: "1", Title: "One"}
 	t2 := &provider.Track{ID: "2", Title: "Two"}
@@ -375,6 +380,7 @@ func TestVibeAINoteLeavePending(t *testing.T) {
 
 func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2", Title: "Two"}, Position: 0})
@@ -391,6 +397,7 @@ func TestVibeAINoteLeaveViaStateMsg(t *testing.T) {
 
 func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Position: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
@@ -402,6 +409,7 @@ func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 
 func TestVibeAIOutcomesSameTrackAtZero(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
@@ -413,6 +421,7 @@ func TestVibeAIOutcomesSameTrackAtZero(t *testing.T) {
 
 func TestVibeAIOutcomesRepeatStatesNoDouble(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 15 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 3 * time.Second})
@@ -425,6 +434,7 @@ func TestVibeAIOutcomesRepeatStatesNoDouble(t *testing.T) {
 
 func TestVibeAIOutcomesPlayedNoSkipInView(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 60 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	if len(m.vibeAI.pending) == 0 {
@@ -455,6 +465,7 @@ func TestVibeAIOutcomesNonVibeTrackIgnored(t *testing.T) {
 
 func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 20 * time.Second})
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 1})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 20 * time.Second})
@@ -475,6 +486,7 @@ func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 
 func TestVibeAIOutcomesTwoTransitions(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 130 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}, Position: 0})
@@ -558,19 +570,29 @@ func TestVibeAI_StreamRefillAhead(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	s := player.State{Track: &provider.Track{ID: "1"}}
-	if m.vibeAIStreamTick(s) == nil {
-		t.Fatal("remaining 2 ≤ 4: stream should top up")
+	if m.vibeAIStreamTick(s) != nil {
+		t.Error("ahead 2 > 1 за треком 1: ход не должен стартовать")
+	}
+	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) == nil {
+		t.Fatal("ahead 1 ≤ 1 за треком 2: ход должен стартовать")
 	}
 	m.vibeAI.busy = false
-	if m.vibeAIStreamTick(s) != nil {
+	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) != nil {
 		t.Error("the same track must not trigger a second top-up")
 	}
 	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "x"}}) != nil {
 		t.Error("a non-vibe track must not trigger a top-up")
 	}
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), refill: true})
+	if len(m.queueIDs) != 3 {
+		t.Errorf("queue = %v, want 3: refill waits staged until the last track", m.queueIDs)
+	}
+	if m.vibeAI.staged == nil {
+		t.Fatal("staged = nil, want the refill portion staged")
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
 	if len(m.queueIDs) != 6 {
-		t.Errorf("refill should append to the queue, got %v", m.queueIDs)
+		t.Errorf("queue = %v, want 6 after the playing track ran out", m.queueIDs)
 	}
 }
 
@@ -587,11 +609,278 @@ func TestVibeAI_StreamAheadThreshold(t *testing.T) {
 	for i, tr := range m.queueTracks {
 		m.queueIDs[i] = PlaybackID(tr)
 	}
-	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[2]}) != nil {
-		t.Error("remaining 7 > 4: must not top up")
+	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[7]}) != nil {
+		t.Error("ahead 2 > 1: must not top up")
 	}
-	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[6]}) == nil {
-		t.Error("remaining 3 ≤ 4: must top up")
+	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[8]}) == nil {
+		t.Error("ahead 1 ≤ 1: must top up")
+	}
+}
+
+func TestVibeAIPortionSize(t *testing.T) {
+	if got := vibeAIConfig(&config.Config{}).PortionSize; got != vibeAIPortion {
+		t.Fatalf("PortionSize = %d, want 5", got)
+	}
+	if got := stageOptions(&config.Config{}, false).Slots; got != vibeAIPortion {
+		t.Fatalf("Slots = %d, want 5", got)
+	}
+}
+
+func TestVibeAI_StagedUntilLastTrack(t *testing.T) {
+	m := openVibeWithPortion(t)
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) || m.playerState.Track == nil || m.playerState.Track.ID != "1" {
+		t.Fatalf("fixture broken: queue %v playing %+v", m.queueIDs, m.playerState.Track)
+	}
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) {
+		t.Fatalf("queue = %v, want [1 2 3]: the portion must wait", m.queueIDs)
+	}
+	if len(m.vibeAI.feed) != 3 || len(m.vibeAIP.m.feed) != 3 {
+		t.Fatalf("feed host %d screen %d, want 3", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	}
+	if m.vibeAI.staged == nil {
+		t.Fatal("staged = nil, want the waiting portion")
+	}
+	if m.vibeAI.portion != 1 {
+		t.Fatalf("portion = %d, want 1", m.vibeAI.portion)
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}})
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) || m.vibeAI.staged == nil {
+		t.Fatalf("queue %v staged %v, want the portion waiting behind track 2", m.queueIDs, m.vibeAI.staged)
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
+	if want := []string{"1", "2", "3", "4", "5"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
+	}
+	if len(m.vibeAI.feed) != 5 || len(m.vibeAIP.m.feed) != 5 {
+		t.Fatalf("feed host %d screen %d, want 5 at handoff", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	}
+	if m.vibeAI.staged != nil {
+		t.Error("staged must clear at handoff")
+	}
+	if m.vibeAI.portion != 2 {
+		t.Errorf("portion = %d, want 2", m.vibeAI.portion)
+	}
+	if _, ok := m.vibeAI.served["4"]; !ok {
+		t.Error("track 4 must be served after the handoff")
+	}
+}
+
+func TestVibeAI_HandoffAtDoneOnLastTrack(t *testing.T) {
+	m := openVibeWithPortion(t)
+	m.playerState.Track = &m.queueTracks[2]
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if want := []string{"1", "2", "3", "4", "5"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v: playing the last track hands off at done", m.queueIDs, want)
+	}
+	if m.vibeAI.staged != nil {
+		t.Error("staged must be nil after a handoff at done")
+	}
+}
+
+func TestVibeAI_HandoffWhenNothingPlaying(t *testing.T) {
+	m := openVibeWithPortion(t)
+	m.playerState.Track = nil
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if want := []string{"1", "2", "3", "4", "5"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v: nothing playing hands off at done", m.queueIDs, want)
+	}
+}
+
+func TestVibeAI_ContinuationPicksWait(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIPickMsg{gen: gen, pick: vibeai.Pick{
+		Track:    vibeai.Track{ID: "4", Artist: "D", Title: "Four"},
+		Name:     "D — Four",
+		Accepted: true,
+	}})
+	if len(m.vibeAI.feed) != 3 || len(m.vibeAIP.m.feed) != 3 {
+		t.Fatalf("feed host %d screen %d, want 3: the pick must wait for the handoff", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	}
+	if _, ok := m.vibeAI.served["4"]; ok {
+		t.Error("the continuation pick must not be served before the handoff")
+	}
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) {
+		t.Fatalf("queue = %v, want [1 2 3]", m.queueIDs)
+	}
+}
+
+func TestVibeAI_StreamWaitsForStaged(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if m.vibeAI.staged == nil {
+		t.Fatal("fixture broken: the portion must be staged")
+	}
+	m.vibeAI.busy = false
+	if tick := m.vibeAIStreamTick(player.State{Track: &m.queueTracks[1]}); tick != nil {
+		t.Error("a top-up must not start while a portion waits to hand off")
+	}
+}
+
+func TestVibeAI_ReplyDropsStaged(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if m.vibeAI.staged == nil {
+		t.Fatal("fixture broken: the portion must be staged")
+	}
+	if cmd := m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"}); cmd == nil {
+		t.Fatal("the reply must start a turn")
+	}
+	if m.vibeAI.staged != nil {
+		t.Fatal("staged = non-nil, want the portion dropped by the reply")
+	}
+	if !m.vibeAI.busy {
+		t.Error("busy = false, want the new turn running")
+	}
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) {
+		t.Fatalf("queue = %v, want [1 2 3]: the dropped portion must not queue", m.queueIDs)
+	}
+	gen = m.vibeAI.gen
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "6", Artist: "F", Title: "Six"},
+		{ID: "7", Artist: "G", Title: "Seven"},
+	}, elapsed: time.Second})
+	if m.vibeAI.staged == nil {
+		t.Fatal("staged = nil, want the new portion staged while track 1 plays")
+	}
+	if len(m.vibeAI.staged.tracks) != 2 || m.vibeAI.staged.tracks[0].ID != "6" || m.vibeAI.staged.tracks[1].ID != "7" {
+		t.Fatalf("staged tracks = %+v, want 6 7", m.vibeAI.staged.tracks)
+	}
+	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) {
+		t.Fatalf("queue = %v, want [1 2 3]", m.queueIDs)
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
+	if want := []string{"1", "2", "3", "6", "7"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v: 4 and 5 must never queue", m.queueIDs, want)
+	}
+}
+
+func TestVibeAI_ReplyWithoutStaged(t *testing.T) {
+	m := openVibeWithPortion(t)
+	if cmd := m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"}); cmd == nil {
+		t.Fatal("the reply must start a turn")
+	}
+	if m.vibeAI.staged != nil || m.vibeAI.dropStaged {
+		t.Fatalf("staged = %v dropStaged = %v, want none without a staged portion", m.vibeAI.staged, m.vibeAI.dropStaged)
+	}
+	if !m.vibeAI.busy {
+		t.Error("busy = false, want the new turn running")
+	}
+	for _, line := range m.debugLog {
+		if strings.Contains(line, "staged portion dropped") {
+			t.Errorf("a reply without a staged portion must not log the drop: %q", line)
+		}
+	}
+}
+
+func TestVibeAI_DoneClearsUndelivered(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.vibeAI.undelivered = true
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{{ID: "4", Artist: "D", Title: "Four"}}, elapsed: time.Second})
+	if m.vibeAI.undelivered {
+		t.Error("undelivered = true, want the landed portion counted as delivered")
+	}
+}
+
+func TestVibeAI_StaleDoneKeepsUndelivered(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.vibeAI.undelivered = true
+	m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"})
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{{ID: "4", Artist: "D", Title: "Four"}}, elapsed: time.Second})
+	if !m.vibeAI.undelivered {
+		t.Error("undelivered = false, want the next turn to drop the portion the reply cancelled")
+	}
+}
+
+func TestVibeAI_FreshDropsStaged(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if m.vibeAI.staged == nil {
+		t.Fatal("fixture broken: the portion must be staged")
+	}
+	m.vibeAITurnCmd("новое", true, false)
+	if m.vibeAI.staged != nil || m.vibeAI.dropStaged {
+		t.Fatalf("staged = %v dropStaged = %v, want both cleared by the fresh turn", m.vibeAI.staged, m.vibeAI.dropStaged)
+	}
+}
+
+func TestVibeAI_CancelDropsStaged(t *testing.T) {
+	m := openVibeWithPortion(t)
+	gen := startVibeTurn(m)
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if m.vibeAI.staged == nil {
+		t.Fatal("fixture broken: the portion must be staged")
+	}
+	m.handleVibeAIMsg(VibeAICancelMsg{})
+	if m.vibeAI.staged != nil {
+		t.Fatal("staged must be dropped by the cancel")
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
+	if want := []string{"1", "2", "3"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v: the cancelled portion must never queue", m.queueIDs, want)
+	}
+}
+
+func TestVibeAI_ViewQuestionTracks(t *testing.T) {
+	q := vibeai.Question{
+		Question: "куда?",
+		Options:  []string{"воздух", "соул"},
+		Tracks: []vibeai.Track{
+			{ID: "t1", Artist: "Frank Ocean", Title: "Self Control", ArtworkURL: "https://x/{w}x{h}.jpg"},
+			{ID: "t2", Artist: "Dijon", Title: "Annie"},
+		},
+		Default: "2",
+	}
+	vq := vibeAIViewQuestion(q)
+	if len(vq.Tracks) != 2 {
+		t.Fatalf("tracks = %d, want 2", len(vq.Tracks))
+	}
+	if vq.Tracks[0].ID != "t1" || vq.Tracks[0].Artist != "Frank Ocean" || vq.Tracks[0].ArtworkURL != "https://x/{w}x{h}.jpg" {
+		t.Fatalf("tracks[0] = %+v", vq.Tracks[0])
+	}
+	if vq.Tracks[1].ID != "t2" || vq.Tracks[1].Artist != "Dijon" {
+		t.Fatalf("tracks[1] = %+v", vq.Tracks[1])
+	}
+	sq := stageQuestion(vq)
+	if sq.Def != 1 {
+		t.Fatalf("card def = %d, want 1", sq.Def)
+	}
+	if len(sq.Tracks) != 2 || sq.Tracks[0].Artist != "Frank Ocean" || sq.Tracks[1].Artist != "Dijon" {
+		t.Fatalf("card tracks = %+v", sq.Tracks)
+	}
+	q.Default = "9"
+	if got := questionDefault(vibeAIViewQuestion(q)); got != 0 {
+		t.Errorf("def for 9 = %d, want 0", got)
 	}
 }
 
@@ -678,6 +967,7 @@ func TestVibeAI_RateMsgPending(t *testing.T) {
 
 func TestVibeAI_LessSkipsPlayingTrack(t *testing.T) {
 	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	m.Update(playerStateMsg{Track: m.playerState.Track, Position: 10 * time.Second})
 	if cmd := m.handleVibeAIMsg(VibeAIRateMsg{Index: 0, Rating: -1}); cmd == nil {
@@ -813,5 +1103,62 @@ func TestVibeAIQuitNotesLeave(t *testing.T) {
 	m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if len(m.vibeAI.pending) != 1 || m.vibeAI.pending[0].ID != "1" || m.vibeAI.pending[0].Kind != "played" {
 		t.Fatalf("pending = %+v, want the track playing at quit marked played", m.vibeAI.pending)
+	}
+}
+
+func TestVibeAI_NextGatheringOnStreamTick(t *testing.T) {
+	m := openVibeWithPortion(t)
+	stageIntoPlayer(m)
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
+	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) == nil {
+		t.Fatal("fixture broken: the top-up turn must start")
+	}
+	if frame := auxFrame(m, 110, 32); !strings.Contains(frame, "picking the next 5") {
+		t.Fatalf("frame without the gathering line:\n%s", frame)
+	}
+}
+
+func TestVibeAI_NextPortionFlow(t *testing.T) {
+	m := openVibeWithPortion(t)
+	stageIntoPlayer(m)
+	m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"})
+	if frame := auxFrame(m, 110, 32); !strings.Contains(frame, `taking in "потише"`) {
+		t.Fatalf("frame without the reply line:\n%s", frame)
+	}
+	gen := m.vibeAI.gen
+	acceptPick(m, gen, "4", "D", "Four")
+	if frame := auxFrame(m, 110, 32); !strings.Contains(frame, "1 of 5") {
+		t.Fatalf("frame without the continuation pick:\n%s", frame)
+	}
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: []vibeai.Track{
+		{ID: "4", Artist: "D", Title: "Four"},
+		{ID: "5", Artist: "E", Title: "Five"},
+	}, elapsed: time.Second})
+	if frame := auxFrame(m, 110, 32); !strings.Contains(frame, "✓ next 2 ready") {
+		t.Fatalf("frame without the ready line:\n%s", frame)
+	}
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
+	if frame := auxFrame(m, 110, 32); strings.Contains(frame, "next 2") {
+		t.Fatalf("the next line must go once the portion is handed off:\n%s", frame)
+	}
+}
+
+func TestVibeAI_NextFailed(t *testing.T) {
+	m := openVibeWithPortion(t)
+	stageIntoPlayer(m)
+	m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"})
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
+	if frame := auxFrame(m, 110, 32); !strings.Contains(frame, "✗ couldn't pick the next ones") {
+		t.Fatalf("frame without the failed line:\n%s", frame)
+	}
+}
+
+func TestVibeAI_NextClearedOnCancel(t *testing.T) {
+	m := openVibeWithPortion(t)
+	stageIntoPlayer(m)
+	m.handleVibeAIMsg(VibeAISubmitMsg{Text: "потише"})
+	m.handleVibeAIMsg(VibeAICancelMsg{})
+	if frame := auxFrame(m, 110, 32); strings.Contains(frame, "taking in") {
+		t.Fatalf("the next line must go on cancel:\n%s", frame)
 	}
 }
