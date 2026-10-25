@@ -728,6 +728,19 @@ func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 	}
 }
 
+func TestPromptRulesWantItShare(t *testing.T) {
+	for _, want := range []string{
+		"имя артиста с настроением, временем или занятием",
+		"14–16 треков из 20",
+		"«только X», «X и всё» — вся порция из X",
+		"Не больше 2 треков одного артиста в порции, включая фиты, кроме ориентира want_it",
+	} {
+		if !strings.Contains(promptRules, want) {
+			t.Errorf("promptRules не содержит %q", want)
+		}
+	}
+}
+
 func TestAskUserOnlyOnFirstTurn(t *testing.T) {
 	ui := &fakeUI{answers: []string{"1"}}
 	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, ui)
