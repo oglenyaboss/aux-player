@@ -76,15 +76,8 @@ func hasVersionWord(s string) bool {
 	return versionWordRe.MatchString(s)
 }
 
-func titlePrefixMatch(a, b string) bool {
-	if !strings.HasPrefix(a, b) && !strings.HasPrefix(b, a) {
-		return false
-	}
-	short := a
-	if len(b) < len(short) {
-		short = b
-	}
-	return utf8.RuneCountInString(short) >= 4
+func titleExtends(want, got string) bool {
+	return strings.HasPrefix(got, want) && utf8.RuneCountInString(want) >= 4
 }
 
 func firstCleanSong(cands []Song) (Song, bool) {
@@ -111,7 +104,7 @@ func matchSong(sug Suggestion, results []Song) (Song, bool) {
 		switch {
 		case rk == wantKey:
 			exact = append(exact, r)
-		case wantKey != "" && rk != "" && titlePrefixMatch(wantKey, rk):
+		case wantKey != "" && rk != "" && titleExtends(wantKey, rk):
 			prefix = append(prefix, r)
 		}
 	}

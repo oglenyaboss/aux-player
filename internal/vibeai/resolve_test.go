@@ -33,6 +33,12 @@ func TestMatchSong(t *testing.T) {
 			{ID: "5", Artist: "Kanye West", Title: "Ultralight Beam (Remix)"},
 			{ID: "6", Artist: "Kanye West", Title: "Ultralight Beam"},
 		}, "6", true},
+		{"shorter title is another song", Suggestion{Artist: "Frank Ocean", Title: "Slide on Me"}, []Song{
+			{ID: "7", Artist: "Calvin Harris", Title: "Slide (feat. Frank Ocean & Migos)"},
+		}, "", false},
+		{"longer title extends wanted", Suggestion{Artist: "Jai Paul", Title: "Jasmine"}, []Song{
+			{ID: "8", Artist: "Jai Paul", Title: "Jasmine (Demo)"},
+		}, "8", true},
 	}
 	for _, tt := range tests {
 		got, ok := matchSong(tt.sug, tt.results)
