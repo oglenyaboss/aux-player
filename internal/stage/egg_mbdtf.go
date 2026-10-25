@@ -1,6 +1,12 @@
 package stage
 
-import "math"
+import (
+	"embed"
+	"hash/fnv"
+	"image"
+	"image/jpeg"
+	"math"
+)
 
 func init() {
 	eggRules = append(eggRules, eggRule{
@@ -11,6 +17,7 @@ func init() {
 			bg:      mbdtfBg,
 			cover:   mbdtfCover,
 			ink:     mbdtfInk,
+			layout:  mbdtfLayout,
 			over:    mbdtfOver,
 			knob:    '♛',
 			knobCol: hex(0xd4a843),
@@ -29,9 +36,14 @@ var mbdtfTheme = theme{
 	bad:  hex(0xff5c7a),
 }
 
-// mbdtfBg: at the reveal the backdrop becomes a canvas-textured gallery wall
+// mbdtfBg: on the gallery wall the red canvas, under the prompt too. In the usual
+// player at the reveal the backdrop becomes a canvas-textured gallery wall
 // with a warm gold halo radiating from the title.
 func mbdtfBg(m *Model, c col, x, y int) col {
+	if g := m.geom(); g.noCover {
+		b, _ := mbdtfPlan(m)
+		return mbdtfCanvas(m, b, x, 2*y+1)
+	}
 	rv := easeInOut(prog(m.trackT, 6, 1.5))
 	if rv == 0 {
 		return c
@@ -60,9 +72,9 @@ func mbdtfInk(m *Model, c col, u, v float64) col {
 	return hex(0xf6dc8a).lerp(hex(0xb8862b), v)
 }
 
-// mbdtfOver: the cover hangs in a gold frame, two pixel rings on each side;
-// the frame shimmers in over the second after the reveal.
-func mbdtfOver(m *Model, f *fb, g playGeom) {
+// mbdtfFrame: in the usual player of narrow windows the cover hangs in a gold frame,
+// two pixel rings on each side; the frame shimmers in over the second after the reveal.
+func mbdtfFrame(m *Model, f *fb, g playGeom) {
 	a := easeOut(prog(m.trackT, 6, 1))
 	if a == 0 {
 		return
@@ -94,4 +106,233 @@ func mbdtfOver(m *Model, f *fb, g playGeom) {
 			f.pixel(x, y, c)
 		}
 	}
+}
+
+// The Apple cover is the censored one: an 8×8 mosaic in a thin gold frame on red
+// canvas. The mosaic box as fractions of the cover.
+const mbdtfMosaicU0, mbdtfMosaicU1 = 0.31, 0.69
+
+var (
+	mbdtfCanvasC = hex(0xee2843)
+	mbdtfGold    = hex(0xe2bd55)
+	mbdtfGoldLo  = hex(0x8a6a22)
+	mbdtfDull    = hex(0x5c3d1a)
+	mbdtfDullLo  = hex(0x3a2410)
+	mbdtfGlint   = hex(0xfff4c8)
+	mbdtfCard    = hex(0xf3ece0)
+	mbdtfCardInk = hex(0x2b1d14)
+	mbdtfCardDim = hex(0x7a6a5c)
+)
+
+const mbdtfCredit = "George Condo, 2010"
+
+// mbdtfPaintings are the other covers Condo painted for the album, the inside of the
+// gold frame; the phoenix original is left out.
+//
+//go:embed assets/mbdtf-*.jpg
+var mbdtfPaintings embed.FS
+
+// mbdtfHung is which painting hangs for a track; "" is the censored mosaic of the
+// track cover. The ballerina came from Runaway, the crown and the sword from POWER.
+var mbdtfHung = map[string]string{
+	"dark fantasy":                  "",
+	"power":                         "crown",
+	"all of the lights":             "sword",
+	"all of the lights (interlude)": "sword",
+	"runaway":                       "ballerina",
+	"monster":                       "mouth",
+}
+
+// mbdtfRest goes round the other tracks by their title.
+var mbdtfRest = []string{"", "crown", "sword", "mouth", "priest"}
+
+func mbdtfPainting(t Track) string {
+	k := foldTitle(t.Title)
+	if p, ok := mbdtfHung[k]; ok {
+		return p
+	}
+	h := fnv.New32a()
+	h.Write([]byte(k))
+	return mbdtfRest[h.Sum32()%uint32(len(mbdtfRest))]
+}
+
+// mbdtfCanvasOf is the grid inside the frame: a painting, or the track cover for the mosaic.
+func mbdtfCanvasOf(m *Model, name string, n int) *pixgrid {
+	if name == "" {
+		return m.cover(m.curTrack().Key(), 200, 200)
+	}
+	key := "egg:mbdtf-" + name
+	if _, ok := m.covers[key]; !ok {
+		var img image.Image = image.NewRGBA(image.Rect(0, 0, 1, 1))
+		if f, err := mbdtfPaintings.Open("assets/mbdtf-" + name + ".jpg"); err == nil {
+			if d, err := jpeg.Decode(f); err == nil {
+				img = d
+			}
+			f.Close()
+		}
+		m.covers[key] = img
+	}
+	return m.cover(key, n, n)
+}
+
+// mbdtfBox is the gallery wall: the mosaic in pixels, the label beside it in cells.
+type mbdtfBox struct {
+	mx, my, ms, cell int
+	lx, ly, lw, lh   int
+}
+
+// mbdtfPlan hangs the painting as big as the window height allows and the wall label
+// right of it, the pair centred. ok is false when the window is too small.
+func mbdtfPlan(m *Model) (b mbdtfBox, ok bool) {
+	tk := m.curTrack()
+	b.lw = min(30, max(len([]rune(tk.Title)), len([]rune(tk.Artist)), len(mbdtfCredit), 13)+4)
+	b.lh = 7
+	gap := 6
+	b.ms = min((2*m.h-16)/8*8, (m.w-b.lw-gap-10)/8*8)
+	b.cell = b.ms / 8
+	fw := b.ms + 4
+	x0 := (m.w - fw - gap - b.lw) / 2
+	b.mx = x0 + 2
+	b.my = (2*(m.h-2)-fw)/2 + 2
+	b.lx = x0 + fw + gap
+	b.ly = (b.my+b.ms/2)/2 - 1
+	return b, b.ms >= 32
+}
+
+// mbdtfLayout takes the whole screen for the wall: no cover and no queue. Narrow and
+// portrait windows keep the usual player with the framed cover.
+func mbdtfLayout(m *Model, g playGeom) playGeom {
+	if !g.side || g.mini || g.split {
+		return g
+	}
+	if _, ok := mbdtfPlan(m); !ok {
+		return g
+	}
+	g.noCover, g.noQueue = true, true
+	return g
+}
+
+// mbdtfCanvas is the red of the cover with diagonal brush strokes, lit by a soft
+// gallery spot on the painting.
+func mbdtfCanvas(m *Model, b mbdtfBox, px, py int) col {
+	d := (float64(px)*0.6 - float64(py)) / 5
+	i := int(math.Floor(d))
+	stroke := hash(i, 0, 81) + (hash(i+1, 0, 81)-hash(i, 0, 81))*smooth(d-float64(i))
+	c := mbdtfCanvasC.mul(0.93 + 0.08*stroke + 0.04*hash(px, py, 82))
+	cx, cy := float64(b.mx+b.ms/2), float64(b.my+b.ms/2)
+	dx, dy := (float64(px)-cx)/(float64(m.w)*0.55), (float64(py)-cy)/(float64(m.h)*1.6)
+	return c.mul(0.72 + 0.28*math.Exp(-(dx*dx+dy*dy)))
+}
+
+// mbdtfAlong is where a frame pixel sits along the frame, clockwise from the top left, 0..1.
+func mbdtfAlong(b mbdtfBox, px, py int) float64 {
+	s := float64(b.ms + 3)
+	fx, fy := float64(px-b.mx+2), float64(py-b.my+2)
+	var t float64
+	switch {
+	case fy <= 1 && fx < s-1:
+		t = fx
+	case fx >= s-1 && fy < s-1:
+		t = s + fy
+	case fy >= s-1 && fx > 1:
+		t = 2*s + s - fx
+	default:
+		t = 3*s + s - fy
+	}
+	return t / (4 * s)
+}
+
+// mbdtfWall draws the screen: the painting of the track blown up on the red canvas,
+// falling in block by block, its frame gilding clockwise as the track plays, the
+// wall label beside it.
+func mbdtfWall(m *Model, f *fb, b mbdtfBox) {
+	rows := m.h
+	if m.typing {
+		rows = m.h - 4
+	}
+	for py := 0; py < rows*2; py++ {
+		for px := 0; px < m.w; px++ {
+			f.pixel(px, py, mbdtfCanvas(m, b, px, py))
+		}
+	}
+
+	tk := m.curTrack()
+	frac := 0.0
+	if tk.Dur > 0 {
+		frac = min(1, m.pos/tk.Dur)
+	}
+	for py := b.my - 2; py < b.my+b.ms+2; py++ {
+		for px := b.mx - 2; px < b.mx+b.ms+2; px++ {
+			in := px >= b.mx && px < b.mx+b.ms && py >= b.my && py < b.my+b.ms
+			if in {
+				continue
+			}
+			outer := px < b.mx-1 || px > b.mx+b.ms || py < b.my-1 || py > b.my+b.ms
+			t := mbdtfAlong(b, px, py)
+			c := mbdtfDull
+			if outer {
+				c = mbdtfDullLo
+			}
+			if t < frac {
+				c = mbdtfGold
+				if outer {
+					c = mbdtfGoldLo
+				}
+			}
+			if frac > 0 && frac < 1 && math.Abs(t-frac) < 0.006 {
+				c = mbdtfGlint
+			}
+			f.pixel(px, py, c)
+		}
+	}
+
+	name := mbdtfPainting(*tk)
+	cg := mbdtfCanvasOf(m, name, b.ms)
+	span := mbdtfMosaicU1 - mbdtfMosaicU0
+	for j := 0; j < 8; j++ {
+		for i := 0; i < 8; i++ {
+			shown := m.trackT >= 0.15+hash(i, j, 71)
+			u, v := mbdtfMosaicU0+(float64(i)+0.5)*span/8, mbdtfMosaicU0+(float64(j)+0.5)*span/8
+			block := cg.at(int(u*200), int(v*200))
+			for py := 0; py < b.cell; py++ {
+				for px := 0; px < b.cell; px++ {
+					x, y := i*b.cell+px, j*b.cell+py
+					c := mbdtfDullLo.mul(0.6)
+					switch {
+					case !shown:
+					case name == "":
+						c = block
+					default:
+						c = cg.at(x, y)
+					}
+					f.pixel(b.mx+x, b.my+y, c)
+				}
+			}
+		}
+	}
+
+	f.fill(b.lx, b.ly, b.lw, b.lh, mbdtfCard)
+	tw := b.lw - 4
+	title := trunc(tk.Title, tw)
+	f.textS(b.lx+2, b.ly+1, title, mbdtfCardInk, true, false)
+	f.text(b.lx+2, b.ly+2, trunc(tk.Artist, tw), mbdtfCardInk)
+	f.textS(b.lx+2, b.ly+4, trunc(mbdtfCredit, tw), mbdtfCardDim, false, true)
+	f.text(b.lx+2, b.ly+5, fmtDur(m.pos)+" / "+fmtDur(tk.Dur), mbdtfCardDim)
+	m.titleBox = image.Rect(b.lx+2, (b.ly+1)*2, b.lx+2+len([]rune(title)), (b.ly+1)*2+2)
+	m.barBox = image.Rect(b.lx+2, b.ly+5, b.lx+b.lw-2, b.ly+6)
+
+	if !m.typing {
+		help := tr("? клавиши", "? keys")
+		f.text(3, m.h-2, tr("/ сказать агенту", "/ talk to the agent"), mbdtfCard)
+		f.text(m.w-3-len([]rune(help)), m.h-2, help, mbdtfCard)
+	}
+}
+
+func mbdtfOver(m *Model, f *fb, g playGeom) {
+	if !g.noCover {
+		mbdtfFrame(m, f, g)
+		return
+	}
+	b, _ := mbdtfPlan(m)
+	mbdtfWall(m, f, b)
 }
