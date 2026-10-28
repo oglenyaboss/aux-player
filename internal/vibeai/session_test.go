@@ -683,3 +683,89 @@ func TestReserveSkipsRejectsWhenFull(t *testing.T) {
 		t.Errorf("запас: %v, want пусто", names)
 	}
 }
+
+func TestSetPlanRecountsKnown(t *testing.T) {
+	favs := favArtists(t, 5)
+	s := NewSession(favs, favs, 20)
+	if v := s.Take(Suggestion{Artist: "k1", Title: "o1"}, Song{ID: "o1", Artist: "k1", Title: "o1"}); !v.Accepted {
+		t.Fatalf("take: rejected: %s", v.Reason)
+	}
+	s.SetPlan(Plan{Seeds: []Seed{{Artist: "k1", Mode: "and_similar"}}})
+	for i := 2; i <= 5; i++ {
+		artist, title := fmt.Sprintf("k%d", i), fmt.Sprintf("t%d", i)
+		v := s.Offer(Suggestion{Artist: artist, Title: title}, Song{ID: fmt.Sprintf("o%d", i), Artist: artist, Title: title}, true)
+		if !v.Accepted {
+			t.Fatalf("k%d: rejected: %s", i, v.Reason)
+		}
+	}
+	if got := s.KnownLeft(); got != 0 {
+		t.Errorf("KnownLeft = %d, want 0", got)
+	}
+}
+
+func TestFavoritesModeAllowsKnownAndLibrary(t *testing.T) {
+	favs := favArtists(t, 6)
+	lib := append(favs, Song{ID: "l1", Artist: "k6", Title: "deep"})
+	s := NewSession(lib, favs, 20)
+	s.SetPlan(Plan{FromFavorites: true})
+	for i := 1; i <= 5; i++ {
+		v := s.Offer(Suggestion{Artist: favs[i-1].Artist, Title: favs[i-1].Title}, favs[i-1], true)
+		if !v.Accepted {
+			t.Fatalf("fav%d: rejected: %s", i, v.Reason)
+		}
+	}
+	s2 := NewSession(lib, favs, 20)
+	s2.SetPlan(Plan{FromFavorites: true})
+	v := s2.Offer(Suggestion{Artist: "k6", Title: "deep"}, Song{ID: "l1", Artist: "k6", Title: "deep"}, true)
+	if !v.Accepted {
+		t.Errorf("l1: rejected: %s", v.Reason)
+	}
+}
+
+func TestFavoritesModeRejectsNew(t *testing.T) {
+	favs := favArtists(t, 6)
+	lib := append(favs, Song{ID: "u1", Artist: "Stranger", Title: "y"})
+	s := NewSession(lib, favs, 20)
+	s.SetPlan(Plan{FromFavorites: true})
+	v := s.Offer(Suggestion{Artist: "Newbie", Title: "x"}, Song{ID: "n1", Artist: "Newbie", Title: "x"}, true)
+	if v.Accepted || v.Reason != "режим любимого: нет в библиотеке" {
+		t.Errorf("n1: got (%v, %q), want (false, \"режим любимого: нет в библиотеке\")", v.Accepted, v.Reason)
+	}
+	v = s.Offer(Suggestion{Artist: "Stranger", Title: "y"}, Song{ID: "u1", Artist: "Stranger", Title: "y"}, true)
+	if v.Accepted || v.Reason != "режим любимого: артист не из Favorites" {
+		t.Errorf("u1: got (%v, %q), want (false, \"режим любимого: артист не из Favorites\")", v.Accepted, v.Reason)
+	}
+}
+
+func TestFavoritesModeArtistLimit(t *testing.T) {
+	favs := favArtists(t, 6)
+	lib := append(favs,
+		Song{ID: "a1", Artist: "k1", Title: "x1"},
+		Song{ID: "a2", Artist: "k1", Title: "x2"},
+		Song{ID: "a3", Artist: "k1", Title: "x3"})
+	s := NewSession(lib, favs, 20)
+	s.SetPlan(Plan{FromFavorites: true})
+	for i := 1; i <= 2; i++ {
+		v := s.Offer(Suggestion{Artist: "k1", Title: fmt.Sprintf("x%d", i)}, Song{ID: fmt.Sprintf("a%d", i), Artist: "k1", Title: fmt.Sprintf("x%d", i)}, true)
+		if !v.Accepted {
+			t.Fatalf("x%d: rejected: %s", i, v.Reason)
+		}
+	}
+	v := s.Offer(Suggestion{Artist: "k1", Title: "x3"}, Song{ID: "a3", Artist: "k1", Title: "x3"}, true)
+	if v.Accepted || v.Reason != "лимит артиста: k1" {
+		t.Errorf("x3: got (%v, %q), want (false, \"лимит артиста: k1\")", v.Accepted, v.Reason)
+	}
+}
+
+func TestFavoritesModeKnownLeft(t *testing.T) {
+	favs := favArtists(t, 6)
+	lib := append(favs, Song{ID: "l1", Artist: "k6", Title: "deep"})
+	s := NewSession(lib, favs, 5)
+	s.SetPlan(Plan{FromFavorites: true})
+	if v := s.Offer(Suggestion{Artist: "k1", Title: "fav1"}, favs[0], true); !v.Accepted {
+		t.Fatalf("fav1: rejected: %s", v.Reason)
+	}
+	if got := s.KnownLeft(); got != 4 {
+		t.Errorf("KnownLeft = %d, want 4", got)
+	}
+}

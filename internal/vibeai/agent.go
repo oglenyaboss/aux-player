@@ -137,7 +137,8 @@ const setPlanSchema = `{
         "required": ["artist", "mode"]
       }
     },
-    "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Имена артистов, которых не должно быть в подборке. Только артисты, не альбомы и не треки."}
+    "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Имена артистов, которых не должно быть в подборке. Только артисты, не альбомы и не треки."},
+    "from_favorites": {"type": "boolean", "description": "Режим «из любимого»: владелец просит свою любимую, знакомую музыку. Только треки из Favorites и из библиотеки у артистов из Favorites."}
   },
   "required": ["seeds", "exclusions"]
 }`
@@ -338,13 +339,14 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 		return a.askLater(args)
 	case "set_plan":
 		var args struct {
-			Seeds      []planSeedArg `json:"seeds"`
-			Exclusions []string      `json:"exclusions"`
+			Seeds         []planSeedArg `json:"seeds"`
+			Exclusions    []string      `json:"exclusions"`
+			FromFavorites bool          `json:"from_favorites"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
 			return "ошибка: " + err.Error()
 		}
-		return a.setPlan(args.Seeds, args.Exclusions)
+		return a.setPlan(args.Seeds, args.Exclusions, args.FromFavorites)
 	case "describe":
 		var args struct {
 			Kind   string `json:"kind"`
@@ -680,7 +682,7 @@ func (a *Agent) askLater(args askLaterArg) string {
 	return "ok: вопрос покажу владельцу, ответ придёт репликой"
 }
 
-func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string) string {
+func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites bool) string {
 	a.progress("set_plan", fmt.Sprintf("ориентиров %d, исключений %d", len(seeds), len(exclusions)))
 	for _, s := range seeds {
 		switch s.Mode {
@@ -693,9 +695,13 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string) string {
 	for i, s := range seeds {
 		ss[i] = Seed{Artist: s.Artist, Mode: s.Mode}
 	}
-	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions})
+	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites})
 	a.planSet = true
-	return fmt.Sprintf("план принят: ориентиров %d, исключений %d", len(seeds), len(exclusions))
+	res := fmt.Sprintf("план принят: ориентиров %d, исключений %d", len(seeds), len(exclusions))
+	if fromFavorites {
+		res += ", режим любимого"
+	}
+	return res
 }
 
 func (a *Agent) describe(ctx context.Context, kind, artist, name string) string {

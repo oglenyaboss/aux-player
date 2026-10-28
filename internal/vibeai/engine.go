@@ -225,7 +225,11 @@ func (e *Engine) history() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Сессия: запрос «%s».\n", e.query)
-	fmt.Fprintf(&b, "План уже задан: ориентиры: %s; исключения: %s. set_plan — только если меняешь направление.\n", strings.Join(seeds, ", "), strings.Join(excl, ", "))
+	favMode := ""
+	if e.session.plan.FromFavorites {
+		favMode = "; режим любимого"
+	}
+	fmt.Fprintf(&b, "План уже задан: ориентиры: %s; исключения: %s%s. set_plan — только если меняешь направление.\n", strings.Join(seeds, ", "), strings.Join(excl, ", "), favMode)
 	b.WriteString("Выдано (сквозная нумерация, как на экране владельца):\n")
 	n := 0
 	for i, portion := range e.portions {

@@ -1190,3 +1190,16 @@ func TestAskUserOnlyOnFirstTurn(t *testing.T) {
 		t.Errorf("UI.Ask вызван %d раз, want 1", ui.asks)
 	}
 }
+
+func TestDispatchSetPlanFromFavorites(t *testing.T) {
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
+	res := a.dispatch(context.Background(), call("p", "set_plan", `{"seeds":[],"exclusions":[],"from_favorites":true}`))
+	if res != "план принят: ориентиров 0, исключений 0, режим любимого" {
+		t.Errorf("from_favorites: got %q", res)
+	}
+	a2 := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
+	res = a2.dispatch(context.Background(), call("p2", "set_plan", `{"seeds":[],"exclusions":[]}`))
+	if res != "план принят: ориентиров 0, исключений 0" {
+		t.Errorf("без поля: got %q", res)
+	}
+}

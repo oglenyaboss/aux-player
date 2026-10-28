@@ -13,8 +13,9 @@ type Seed struct {
 }
 
 type Plan struct {
-	Seeds      []Seed
-	Exclusions []string // имена артистов
+	Seeds         []Seed
+	Exclusions    []string // имена артистов
+	FromFavorites bool
 }
 
 type Entry struct {
@@ -84,6 +85,27 @@ func (s *Session) SetPlan(p Plan) {
 			s.seeds[k] = sd.Mode
 		}
 	}
+	s.recountKnown()
+}
+
+func (s *Session) recountKnown() {
+	s.knownCount = 0
+	for i := range s.portion {
+		counted := false
+		for _, a := range songArtists(s.portion[i].Song) {
+			if !s.known[a] {
+				continue
+			}
+			if _, isSeed := s.seeds[a]; !isSeed {
+				counted = true
+				break
+			}
+		}
+		s.portion[i].knownCounted = counted
+		if counted {
+			s.knownCount++
+		}
+	}
 }
 
 func (s *Session) SetSignals(sig *Signals, sessionID string) {
@@ -145,7 +167,23 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			}
 		}
 	}
-	if s.lib.Has(song) && !s.favs.Has(song) && !s.hasSeedArtist(arts) {
+	if s.plan.FromFavorites {
+		if !s.lib.Has(song) && !s.favs.Has(song) {
+			v.Reason = "режим любимого: нет в библиотеке"
+			return v
+		}
+		favArtist := false
+		for _, a := range arts {
+			if s.known[a] {
+				favArtist = true
+				break
+			}
+		}
+		if !favArtist {
+			v.Reason = "режим любимого: артист не из Favorites"
+			return v
+		}
+	} else if s.lib.Has(song) && !s.favs.Has(song) && !s.hasSeedArtist(arts) {
 		v.Reason = "известный трек (библиотека)"
 		return v
 	}
@@ -176,7 +214,7 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			knownCounted = true
 		}
 	}
-	if knownCounted && s.knownCount+windowKnown >= s.maxKnown() {
+	if !s.plan.FromFavorites && knownCounted && s.knownCount+windowKnown >= s.maxKnown() {
 		v.Reason = "лимит известных"
 		return v
 	}
@@ -269,6 +307,9 @@ func (s *Session) maxKnown() int {
 }
 
 func (s *Session) KnownLeft() int {
+	if s.plan.FromFavorites {
+		return s.Need()
+	}
 	_, tailKnown := s.windowCounts()
 	return max(s.maxKnown()-s.knownCount-tailKnown, 0)
 }
