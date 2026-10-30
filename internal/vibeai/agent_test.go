@@ -1163,7 +1163,7 @@ func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 		"the request is only about a mood or an activity",
 		"no question, straight to set_plan — only if the request names both the referent and the direction of the sound",
 		"Do not ask abstractly about vocals, energy, language or popularity",
-		"Do not ask a duty card",
+		"Do not ask a stock card",
 		`The code answered "not found in Apple Music" — replace those options and call ask_user again`,
 		"the taken field",
 		`Do not repeat questions from the "Questions already asked" list`,
