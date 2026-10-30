@@ -44,9 +44,9 @@ const DeveloperTokenStatus = DeveloperTokenPrefix + " - update aux to continue"
 // DeveloperTokenHelp is the same failure explained where there is room for it.
 //
 //nolint:gosec // G101: prose naming a config key, not a credential
-const DeveloperTokenHelp = `Apple Music rejected AUX's developer token, which is a problem with this
-build rather than with your account. Your saved session has been kept.
-Updating to a newer release restores access; a source build can instead set
+const DeveloperTokenHelp = `Apple Music rejected the web player token AUX fetched from music.apple.com,
+which is a problem with this build rather than with your account. Your saved
+session has been kept. Updating AUX restores access; you can also set
 apple_developer_token in the config.`
 
 // CheckTokens asks Apple Music which of the stored credentials still works.

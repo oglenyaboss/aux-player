@@ -82,6 +82,7 @@ func postToken(port int, states <-chan string, token string) {
 // --- Login error cases ---
 
 func TestLogin_MissingDeveloperToken(t *testing.T) {
+	stubWebPlayerDown(t)
 	cfg := &config.Config{
 		AppleDeveloperToken: "",
 		AuthPort:            17777,
@@ -282,6 +283,7 @@ func TestLogin_ListensOnLoopbackOnly(t *testing.T) {
 	_ = ln.Close()
 
 	states := captureLoginState(t)
+	stubWebPlayer(t, time.Now().Add(70*24*time.Hour))
 	cfg := &config.Config{AppleDeveloperToken: "test-dev-token", AuthPort: port} //nolint:gosec // G101: test value
 	done := make(chan error, 1)
 	go func() { done <- Login(cfg) }()
@@ -392,6 +394,7 @@ func TestLogin_SuccessFlow(t *testing.T) {
 	}
 
 	states := captureLoginState(t)
+	stubWebPlayer(t, time.Now().Add(70*24*time.Hour))
 	go postToken(port, states, "test-user-token")
 
 	if err := Login(cfg); err != nil {
@@ -399,57 +402,5 @@ func TestLogin_SuccessFlow(t *testing.T) {
 	}
 	if cfg.AppleUserToken != "test-user-token" {
 		t.Errorf("AppleUserToken = %q, want %q", cfg.AppleUserToken, "test-user-token")
-	}
-}
-
-// TestLogin_UsesInjectedDevToken verifies that a build-time injected devToken is
-// used when the config has no AppleDeveloperToken set.
-func TestLogin_UsesInjectedDevToken(t *testing.T) {
-	// Temporarily set the package-level injected token.
-	original := devToken
-	devToken = "injected-dev-token" //nolint:gosec // G101: test value, not a real credential
-	t.Cleanup(func() { devToken = original })
-
-	port := 17782
-	cfg := &config.Config{
-		AppleDeveloperToken: "", // intentionally blank
-		AuthPort:            port,
-	}
-
-	// Simulate the browser posting a user token.
-	states := captureLoginState(t)
-	go postToken(port, states, "injected-flow-token")
-
-	if err := Login(cfg); err != nil {
-		t.Fatalf("Login with injected token: %v", err)
-	}
-	if cfg.AppleUserToken != "injected-flow-token" {
-		t.Errorf("AppleUserToken = %q, want %q", cfg.AppleUserToken, "injected-flow-token")
-	}
-}
-
-// TestLogin_EmbeddedTokenOverridesExplicit verifies that the build-time embedded
-// token always takes priority over any value in the config, so release binaries
-// never use a stale user-supplied token.
-func TestLogin_EmbeddedTokenOverridesExplicit(t *testing.T) {
-	original := devToken
-	devToken = "embedded-takes-priority" //nolint:gosec // G101: test value, not a real credential
-	t.Cleanup(func() { devToken = original })
-
-	port := 17783
-	cfg := &config.Config{ //nolint:gosec // G101: test value, not a real credential
-		AppleDeveloperToken: "stale-config-token",
-		AuthPort:            port,
-	}
-
-	states := captureLoginState(t)
-	go postToken(port, states, "explicit-flow-token")
-
-	if err := Login(cfg); err != nil {
-		t.Fatalf("Login: %v", err)
-	}
-	// The embedded token must override the stale config token.
-	if cfg.AppleDeveloperToken != "embedded-takes-priority" {
-		t.Errorf("AppleDeveloperToken = %q, want embedded token %q", cfg.AppleDeveloperToken, "embedded-takes-priority")
 	}
 }
