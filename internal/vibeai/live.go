@@ -25,7 +25,7 @@ func (b *liveBackend) describe(ctx context.Context, kind, artist, name string) (
 	case "track":
 		return describeTrack(ctx, b.api, b.lfm, b.sf, artist, name)
 	default:
-		return nil, fmt.Errorf("неизвестный kind: %s", kind)
+		return nil, fmt.Errorf("unknown kind: %s", kind)
 	}
 }
 
@@ -51,7 +51,7 @@ func describeTrack(ctx context.Context, api *appleAPI, lfm *lastfmClient, sf, ar
 	}
 	m, ok := matchSong(Suggestion{Artist: artist, Title: title}, results)
 	if !ok {
-		return TrackFacts{}, fmt.Errorf("apple: трек «%s — %s» не найден", artist, title)
+		return TrackFacts{}, fmt.Errorf("apple: track \"%s — %s\" not found", artist, title)
 	}
 	body, err := api.get(ctx, "/catalog/"+sf+"/songs/"+url.PathEscape(m.ID)+"?include=albums&l=en-US")
 	if err != nil {

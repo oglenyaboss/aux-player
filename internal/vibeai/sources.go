@@ -51,13 +51,13 @@ func decodeLastfmList[T any](errRaw json.RawMessage, message string, raw json.Ra
 	if err := json.Unmarshal(raw, &one); err == nil {
 		return []T{one}, nil
 	}
-	return nil, fmt.Errorf("lastfm: неожиданный формат %s", what)
+	return nil, fmt.Errorf("lastfm: unexpected format %s", what)
 }
 
 func parseSimilar(body []byte) ([]similar, error) {
 	var env lfEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("lastfm: ответ не JSON: %v", err)
+		return nil, fmt.Errorf("lastfm: response is not JSON: %v", err)
 	}
 	arr, err := decodeLastfmList[lfArtist](env.Error, env.Message, env.Similarartists.Artist, "similarartists.artist")
 	if err != nil || arr == nil {
@@ -98,7 +98,7 @@ type appleSearchResponse struct {
 func parseArtistSearch(body []byte) (id, name string, err error) {
 	var r appleSearchResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return "", "", fmt.Errorf("apple: ответ не JSON: %v", err)
+		return "", "", fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	if len(r.Results.Artists.Data) == 0 {
 		return "", "", nil
@@ -147,10 +147,10 @@ func (a *appleAPI) resolveApplePath(path string) (string, error) {
 	case strings.HasPrefix(path, "http://"), strings.HasPrefix(path, "https://"):
 		pu, err := url.Parse(path)
 		if err != nil {
-			return "", fmt.Errorf("apple: плохой next: %v", err)
+			return "", fmt.Errorf("apple: bad next: %v", err)
 		}
 		if pu.Host != "amp-api.music.apple.com" {
-			return "", fmt.Errorf("apple: next на чужом хосте: %s", pu.Host)
+			return "", fmt.Errorf("apple: next on a foreign host: %s", pu.Host)
 		}
 		return path, nil
 	default:
@@ -177,7 +177,7 @@ func (a *appleAPI) getRaw(ctx context.Context, path string) ([]byte, int, error)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("apple: чтение ответа: %v", err)
+		return nil, resp.StatusCode, fmt.Errorf("apple: reading the response: %v", err)
 	}
 	if resp.StatusCode >= 400 {
 		return nil, resp.StatusCode, fmt.Errorf("apple: HTTP %d", resp.StatusCode)
@@ -225,7 +225,7 @@ func (a *appleAPI) post(ctx context.Context, path string, body any) ([]byte, int
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("apple: чтение ответа: %v", err)
+		return nil, resp.StatusCode, fmt.Errorf("apple: reading the response: %v", err)
 	}
 	if resp.StatusCode >= 300 {
 		return nil, resp.StatusCode, fmt.Errorf("apple: HTTP %d: %s", resp.StatusCode, errSnippet(data))
@@ -251,7 +251,7 @@ type appleLibraryPage struct {
 func parseLibraryPage(body []byte) ([]Song, []string, string, error) {
 	var r appleLibraryPage
 	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, nil, "", fmt.Errorf("apple: ответ не JSON: %v", err)
+		return nil, nil, "", fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	out := make([]Song, 0, len(r.Data))
 	libIDs := make([]string, 0, len(r.Data))
@@ -286,7 +286,7 @@ type appleRatingsResponse struct {
 func parseRatings(body []byte) (map[string]bool, error) {
 	var r appleRatingsResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return nil, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	loved := make(map[string]bool, len(r.Data))
 	for _, d := range r.Data {

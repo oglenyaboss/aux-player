@@ -127,7 +127,10 @@ func TestStageRateNoTrack(t *testing.T) {
 }
 
 func TestStageProgressPhrase(t *testing.T) {
-	m := newModel(nil)
+	ruLang(t)
+	cfg := testCfg()
+	cfg.VibeLang = "ru"
+	m := New(cfg, &mockProvider{}, nil, Options{})
 	press(m, "enter") // the example query launches the scene
 	m.vibeAIP.m.st.Step(2.5)
 	if m.vibeAIP.m.st.Phase() != stage.PhLaunch {
@@ -137,6 +140,21 @@ func TestStageProgressPhrase(t *testing.T) {
 	frame := ansi.Strip(m.vibeAIP.m.Frame(110, 32))
 	if !strings.Contains(frame, "читаю про Blonde") {
 		t.Errorf("frame must show the thought:\n%s", frame)
+	}
+}
+
+func TestThinkingPhraseLang(t *testing.T) {
+	stage.SetLang("en")
+	t.Cleanup(func() { stage.SetLang("ru") })
+	if got := thinkingPhrase("set_plan"); got != "sketched a plan" {
+		t.Errorf("en set_plan = %q", got)
+	}
+	if got := thinkingPhrase("describe artist Frank Ocean"); got != "reading about Frank Ocean" {
+		t.Errorf("en describe = %q", got)
+	}
+	stage.SetLang("ru")
+	if got := thinkingPhrase("set_plan"); got != "наметил план" {
+		t.Errorf("ru set_plan = %q", got)
 	}
 }
 

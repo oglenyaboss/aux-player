@@ -88,12 +88,12 @@ func TestTurnFreshContextEachTurn(t *testing.T) {
 	}
 	user := msgs[1].Content
 	for _, want := range []string{
-		"Сессия: запрос «в духе X».",
-		"ориентиры: X (and_similar)",
-		"1. A — T1 — дослушан",
-		"2. B — T2 — скип на 0:12",
-		"3. C — T3 — не слушал",
-		"Продолжи поток",
+		`Session: request "в духе X".`,
+		"referents: X (and_similar)",
+		"1. A — T1 — played through",
+		"2. B — T2 — skipped at 0:12",
+		"3. C — T3 — not listened",
+		"Continue the stream",
 	} {
 		if !strings.Contains(user, want) {
 			t.Errorf("user не содержит %q:\n%s", want, user)
@@ -120,25 +120,25 @@ func TestTurnReplyLifecycle(t *testing.T) {
 		t.Fatalf("ход 3: %v", err)
 	}
 	user := ch.got[3][1].Content
-	for _, want := range []string{"Порция 2:", "4. D — ", "Новая реплика владельца: «меньше такого»"} {
+	for _, want := range []string{"Portion 2:", "4. D — ", `New reply from the listener: "меньше такого"`} {
 		if !strings.Contains(user, want) {
 			t.Errorf("ход 3: user не содержит %q:\n%s", want, user)
 		}
 	}
-	if strings.Contains(user, "Реплики владельца:") {
+	if strings.Contains(user, "Listener replies:") {
 		t.Errorf("ход 3: user содержит «Реплики владельца:\n%s", user)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
 		t.Fatalf("ход 4: %v", err)
 	}
 	user = ch.got[4][1].Content
-	for _, want := range []string{"Реплики владельца:", "- после порции 2: «меньше такого»"} {
+	for _, want := range []string{"Listener replies:", `- after portion 2: "меньше такого"`} {
 		if !strings.Contains(user, want) {
 			t.Errorf("ход 4: user не содержит %q:\n%s", want, user)
 		}
 	}
 	log := e.log.b.String()
-	for _, want := range []string{"## владелец: (поток)", "## владелец: меньше такого"} {
+	for _, want := range []string{"## listener: (stream)", "## listener: меньше такого"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("лог не содержит %q:\n%s", want, log)
 		}
@@ -168,7 +168,7 @@ func TestTurnFirstTurnGlobalBlock(t *testing.T) {
 	if user != want {
 		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
 	}
-	if !strings.Contains(user, "- "+key+": ранних скипов 2 в 2 сессиях, дослушано 0; запросы: «q1», «q2»") {
+	if !strings.Contains(user, "- "+key+": early skips 2 in 2 sessions, played through 0; queries: \"q1\", \"q2\"") {
 		t.Errorf("нет строки статистики:\n%s", user)
 	}
 }
@@ -182,7 +182,7 @@ func TestSkippedBlock(t *testing.T) {
 		{Artist: "SoFaygo", Title: "Knock Knock"},
 		{Artist: "Ken Carson", Title: "Freestyle 2"},
 	})
-	want := "В прошлых сессиях владелец бросил их до середины (код их отклонит, не предлагай):\n" +
+	want := "In past sessions the listener dropped these before the middle (the code will reject them, do not offer them):\n" +
 		"- Ken Carson: Yale, Freestyle 2\n" +
 		"- SoFaygo: Knock Knock"
 	if got != want {
@@ -213,7 +213,7 @@ func TestTurnFirstTurnSkippedBlock(t *testing.T) {
 
 func TestHistorySkippedBlock(t *testing.T) {
 	e := newTestEngine(t, &fakeChatter{})
-	if h := e.history(); strings.Contains(h, "В прошлых сессиях владелец бросил") {
+	if h := e.history(); strings.Contains(h, "In past sessions the listener dropped") {
 		t.Fatalf("history без записей содержит блок:\n%s", h)
 	}
 	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "other", Artist: "SoFaygo", Title: "Knock Knock"})
@@ -232,35 +232,35 @@ func TestGlobalBlock(t *testing.T) {
 		t.Errorf("globalBlock(nil) = %q, want \"\"", got)
 	}
 	got := globalBlock([]skipStat{{Artist: "ghostemane", Early: 2, Sessions: 2, Played: 1}})
-	want := "Устойчивые скипы прошлых сессий (этих артистов код уже не пропускает):\n" +
-		"- ghostemane: ранних скипов 2 в 2 сессиях, дослушано 1\n" +
-		"Если у них есть общее звучание или направление — запиши его в память одной записью (memory_add или memory_replace), evidence — эти цифры. Об отдельных артистах в память не пиши."
+	want := "Lasting skips from past sessions (the code no longer lets these artists through):\n" +
+		"- ghostemane: early skips 2 in 2 sessions, played through 1\n" +
+		"If they share a sound or a direction — write it to memory as one entry (memory_add or memory_replace), evidence — these numbers. Do not write about single artists to memory."
 	if got != want {
 		t.Errorf("globalBlock:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 func TestPromptRulesReactionWording(t *testing.T) {
-	if !strings.Contains(promptRules, "Шаг в сторону — только от дослушанных треков") {
+	if !strings.Contains(promptRules, "Step aside only from tracks played to the end") {
 		t.Error("нет новой формулировки про шаг в сторону")
 	}
-	if strings.Contains(promptRules, "можно дрейфовать на шаг") {
+	if strings.Contains(promptRules, "may drift a step") {
 		t.Error("осталась старая формулировка про дрейф")
 	}
 }
 
 func TestValidateNoAppleTokens(t *testing.T) {
 	err := Config{}.Validate()
-	if err == nil || !strings.Contains(err.Error(), "нет Apple-токенов") {
-		t.Errorf("пустой конфиг: err = %v, want «нет Apple-токенов»", err)
+	if err == nil || !strings.Contains(err.Error(), "no Apple tokens") {
+		t.Errorf("пустой конфиг: err = %v, want «no Apple tokens»", err)
 	}
 }
 
 func TestValidateNoLLMKey(t *testing.T) {
 	cfg := Config{AppleDeveloperToken: "dev", AppleUserToken: "user"}
 	err := cfg.Validate()
-	if err == nil || !strings.Contains(err.Error(), "ключа LLM") {
-		t.Errorf("без LLM-ключа: err = %v, want «ключа LLM»", err)
+	if err == nil || !strings.Contains(err.Error(), "no LLM key") {
+		t.Errorf("без LLM-ключа: err = %v, want «no LLM key»", err)
 	}
 }
 
@@ -294,7 +294,7 @@ func TestCacheFresh(t *testing.T) {
 func TestLastfmClientNoKey(t *testing.T) {
 	l := &lastfmClient{}
 	_, err := l.call(context.Background(), "artist.getsimilar", url.Values{"artist": {"Yeat"}})
-	if err == nil || err.Error() != "lastfm: нет ключа" {
+	if err == nil || err.Error() != "lastfm: no key" {
 		t.Errorf("err = %v, want «lastfm: нет ключа»", err)
 	}
 }
@@ -381,7 +381,7 @@ func TestTurnPortionNoteAndLater(t *testing.T) {
 		t.Fatalf("Tracks: %d, want 3", len(p2.Tracks))
 	}
 	log := e.log.b.String()
-	for _, want := range []string{"заметка: без крика", "вопрос на потом: убрать хоррор? [да нет]"} {
+	for _, want := range []string{"note: без крика", "later question: убрать хоррор? [да нет]"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("лог не содержит %q:\n%s", want, log)
 		}
@@ -394,10 +394,10 @@ func TestEngineAnswerQuestion(t *testing.T) {
 		Tracks: []Track{{Artist: "A", Title: "T1"}, {Artist: "B", Title: "T2"}}, Default: "1"}
 	e.Answer(q, "1")
 	h := e.history()
-	if !strings.Contains(h, "на вопрос «дальше?» — дрим-поп (A — T1)") {
+	if !strings.Contains(h, `to the question "дальше?" — дрим-поп (A — T1)`) {
 		t.Errorf("history не содержит ответ:\n%s", h)
 	}
-	if !strings.Contains(e.log.b.String(), "## ответ владельца: «дальше?» → дрим-поп (A — T1)") {
+	if !strings.Contains(e.log.b.String(), `## listener answer: "дальше?" → дрим-поп (A — T1)`) {
 		t.Errorf("лог не содержит ответ владельца:\n%s", e.log.b.String())
 	}
 }
@@ -436,10 +436,10 @@ func TestTurnWarmupReplyAndSecondTurnAskUserRejected(t *testing.T) {
 		t.Errorf("UI.Ask вызван %d раз, want 1", ui.asks)
 	}
 	user := ch.got[3][1].Content
-	if !strings.Contains(user, "на вопрос «какая эпоха?» — поздний (B — T2)") {
+	if !strings.Contains(user, `to the question "какая эпоха?" — поздний (B — T2)`) {
 		t.Errorf("ход 2: user не содержит ответ разогрева:\n%s", user)
 	}
-	wantErr := "ошибка: ask_user — только в первом ходе сессии; развилку по скипам спроси через ask_later"
+	wantErr := "error: ask_user is allowed only in the first turn of the session; ask a fork in the skips through ask_later"
 	found := false
 	for _, m := range ch.got[4] {
 		if m.Role == "tool" && strings.Contains(m.Content, wantErr) {
@@ -453,7 +453,7 @@ func TestTurnWarmupReplyAndSecondTurnAskUserRejected(t *testing.T) {
 		t.Fatalf("ход 3: %v", err)
 	}
 	user = ch.got[5][1].Content
-	if n := strings.Count(user, "на вопрос «какая эпоха?» — поздний (B — T2)"); n != 1 {
+	if n := strings.Count(user, `to the question "какая эпоха?" — поздний (B — T2)`); n != 1 {
 		t.Errorf("ход 3: ответ разогрева встречается %d раз, want 1:\n%s", n, user)
 	}
 }
@@ -493,7 +493,7 @@ func TestTurnHistoryListsAskedLaterQuestions(t *testing.T) {
 		t.Fatalf("ход 3: %v", err)
 	}
 	user := ch.got[4][1].Content
-	if !strings.Contains(user, "Вопросы уже заданы (не повторяй): «убрать хоррор?»") {
+	if !strings.Contains(user, `Questions already asked (do not repeat): "убрать хоррор?"`) {
 		t.Errorf("ход 3: user не содержит заданный вопрос:\n%s", user)
 	}
 }
@@ -545,9 +545,9 @@ func TestHistoryTrackOutcomeWithRatings(t *testing.T) {
 	}
 	h := e.history()
 	for _, want := range []string{
-		"1. A — T1 — дослушан, ▲ больше такого",
-		"2. B — T2 — не слушал, ▼ меньше такого",
-		"3. C — T3 — не слушал",
+		"1. A — T1 — played through, ▲ more of this",
+		"2. B — T2 — not listened, ▼ less of this",
+		"3. C — T3 — not listened",
 	} {
 		if !strings.Contains(h, want) {
 			t.Errorf("history не содержит %q:\n%s", want, h)
@@ -558,11 +558,11 @@ func TestHistoryTrackOutcomeWithRatings(t *testing.T) {
 func TestTurnTailAndPromptMentionRatings(t *testing.T) {
 	ch := &fakeChatter{}
 	flowEngine(t, ch)
-	if user := ch.got[2][1].Content; !strings.Contains(user, "▲ — главный ориентир") {
-		t.Errorf("хвост потока не содержит «▲ — главный ориентир»:\n%s", user)
+	if user := ch.got[2][1].Content; !strings.Contains(user, "▲ is the main referent") {
+		t.Errorf("хвост потока не содержит «▲ is the main referent»:\n%s", user)
 	}
-	if !strings.Contains(promptRules, "явные оценки владельца") {
-		t.Error("promptRules не содержит «явные оценки владельца»")
+	if !strings.Contains(promptRules, "explicit ratings from the listener") {
+		t.Error("promptRules не содержит «explicit ratings from the listener»")
 	}
 }
 
@@ -593,7 +593,7 @@ func TestTurnReplyClearsReserve(t *testing.T) {
 	if len(p.Tracks) != 3 || p.Tracks[0].Artist != "E" {
 		t.Errorf("порция 2: %+v, want E, F, G", p.Tracks)
 	}
-	if user := ch.got[start][1].Content; strings.Contains(user, "Кандидаты прошлого хода") {
+	if user := ch.got[start][1].Content; strings.Contains(user, "Candidates from the previous turn") {
 		t.Errorf("после реплики запас не сброшен:\n%s", user)
 	}
 }
@@ -636,7 +636,7 @@ func TestTurnNudgesAskLater(t *testing.T) {
 		t.Fatalf("ход 2: %v", err)
 	}
 	user := ch.got[start][1].Content
-	for _, want := range []string{"Скипнуто с прошлого вопроса: A — T1; B — T2.", "задай ask_later"} {
+	for _, want := range []string{"Skipped since the last question: A — T1; B — T2.", "call ask_later"} {
 		if !strings.Contains(user, want) {
 			t.Errorf("ход 2: user не содержит %q:\n%s", want, user)
 		}
@@ -655,7 +655,7 @@ func TestTurnNoNudgeOneSkip(t *testing.T) {
 	if _, err := e.Turn(context.Background(), ""); err != nil {
 		t.Fatalf("ход 2: %v", err)
 	}
-	if user := ch.got[start][1].Content; strings.Contains(user, "Скипнуто с прошлого вопроса") {
+	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
 		t.Errorf("ход 2: подсказка при одном скипе:\n%s", user)
 	}
 }
@@ -686,7 +686,7 @@ func TestTurnNudgeResetsAfterAskLater(t *testing.T) {
 	if _, err := e.Turn(context.Background(), ""); err != nil {
 		t.Fatalf("ход 3: %v", err)
 	}
-	if user := ch.got[start][1].Content; strings.Contains(user, "Скипнуто с прошлого вопроса") {
+	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
 		t.Errorf("ход 3: подсказка не сброшена после ask_later:\n%s", user)
 	}
 }
@@ -706,7 +706,7 @@ func TestTurnNoNudgeOnReply(t *testing.T) {
 	if _, err := e.Turn(context.Background(), "потише"); err != nil {
 		t.Fatalf("ход 2: %v", err)
 	}
-	if user := ch.got[start][1].Content; strings.Contains(user, "Скипнуто с прошлого вопроса") {
+	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
 		t.Errorf("ход 2: подсказка при реплике:\n%s", user)
 	}
 }
@@ -803,7 +803,7 @@ func TestEngineDropLast(t *testing.T) {
 			t.Errorf("user содержит трек отброшенной порции %q:\n%s", gone, user)
 		}
 	}
-	if !strings.Contains(e.log.b.String(), "## порция 2 отброшена: реплика владельца") {
+	if !strings.Contains(e.log.b.String(), "## portion 2 dropped: listener reply") {
 		t.Errorf("дорог нет:\n%s", e.log.b.String())
 	}
 }

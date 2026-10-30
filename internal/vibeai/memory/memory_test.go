@@ -35,7 +35,7 @@ func TestOpenMissingFileEmpty(t *testing.T) {
 	if got := len(st.Entries()); got != 0 {
 		t.Fatalf("записей: %d, want 0", got)
 	}
-	if !strings.Contains(st.Section(), "(пусто)") {
+	if !strings.Contains(st.Section(), "(empty)") {
 		t.Fatalf("Section без (пусто): %q", st.Section())
 	}
 }
@@ -87,7 +87,7 @@ func TestAddDuplicate(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), DefaultLimit)
 	mustAdd(t, st, "не нравится Gunna", "владелец: «Gunna нет»")
 	err := st.Add("Не нравится gunna!", "x")
-	if err == nil || !strings.Contains(err.Error(), "уже есть похожая запись") {
+	if err == nil || !strings.Contains(err.Error(), "a similar entry already exists") {
 		t.Fatalf("err: %v", err)
 	}
 }
@@ -113,7 +113,7 @@ func TestReplaceAmbiguous(t *testing.T) {
 	mustAdd(t, st, "не нравится Tecca", "слова владельца")
 	mustAdd(t, st, "Tecca слабый", "слова владельца")
 	err := st.Replace("tecca", "новый текст", "e")
-	if err == nil || !strings.Contains(err.Error(), "неоднозначно: 2") {
+	if err == nil || !strings.Contains(err.Error(), "ambiguous: 2") {
 		t.Fatalf("err: %v", err)
 	}
 }
@@ -121,10 +121,10 @@ func TestReplaceAmbiguous(t *testing.T) {
 func TestRemove(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), DefaultLimit)
 	mustAdd(t, st, "не нравится Gunna", "владелец: «Gunna нет»")
-	if err := st.Remove("нет такой", "r"); err == nil || !strings.Contains(err.Error(), "запись не найдена") {
+	if err := st.Remove("нет такой", "r"); err == nil || !strings.Contains(err.Error(), "entry not found") {
 		t.Fatalf("err: %v", err)
 	}
-	if err := st.Remove("Gunna", ""); err == nil || !strings.Contains(err.Error(), "причину") {
+	if err := st.Remove("Gunna", ""); err == nil || !strings.Contains(err.Error(), "reason") {
 		t.Fatalf("err: %v", err)
 	}
 }
@@ -139,7 +139,7 @@ func TestFillAndConsolidate(t *testing.T) {
 			break
 		}
 	}
-	if lastErr == nil || !strings.Contains(lastErr.Error(), "память заполнена") {
+	if lastErr == nil || !strings.Contains(lastErr.Error(), "memory is full") {
 		t.Fatalf("lastErr: %v", lastErr)
 	}
 	if st.Size() == 0 {
@@ -157,7 +157,7 @@ func TestConsolidateNotNeeded(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), 1000)
 	mustAdd(t, st, "нравится джаз", "слова владельца")
 	err := st.Consolidate([]Entry{{Text: "сжато", Evidence: "e"}})
-	if err == nil || !strings.Contains(err.Error(), "консолидация не нужна") {
+	if err == nil || !strings.Contains(err.Error(), "consolidation is not needed") {
 		t.Fatalf("err: %v", err)
 	}
 }

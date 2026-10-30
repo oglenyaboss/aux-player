@@ -144,6 +144,10 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	if p, err := config.ConfigPath(""); err == nil {
 		memDir = filepath.Dir(p)
 	}
+	lang := cfg.VibeLang
+	if lang == "" {
+		lang = stage.DefaultLang()
+	}
 	return vibeai.Config{
 		AppleDeveloperToken: cfg.AppleDeveloperToken,
 		AppleUserToken:      cfg.AppleUserToken,
@@ -151,6 +155,7 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 		LastfmKey:           cfg.LastfmAPIKey,
 		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel, Effort: cfg.VibeLLMEffort},
 		PortionSize:         vibeAIPortion,
+		Lang:                lang,
 		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
 		SignalsPath:         filepath.Join(memDir, "vibe-signals.jsonl"),
 		CacheDir:            cacheDir,
@@ -764,7 +769,7 @@ func vibeAIPlaylistName(query string) string {
 	if len(q) > 40 {
 		q = append(q[:39], '…')
 	}
-	return "Vibes AI · " + string(q)
+	return "AUX · " + string(q)
 }
 
 func vibeAIViewTrack(t vibeai.Track) VibeAITrack {

@@ -24,6 +24,7 @@ type Config struct {
 	SignalsPath         string // журнал сигналов; "" — только в памяти
 	CacheMaxAge         time.Duration
 	PortionSize         int
+	Lang                string
 }
 
 type Track struct {
@@ -65,10 +66,10 @@ type reply struct {
 
 func (c Config) Validate() error {
 	if c.AppleDeveloperToken == "" || c.AppleUserToken == "" {
-		return errors.New("vibe: нет Apple-токенов — войди в Apple Music")
+		return errors.New("vibe: no Apple tokens — sign in to Apple Music")
 	}
 	if c.LLM.APIKey == "" {
-		return errors.New("vibe: нет ключа LLM (vibe_llm_api_key в config.json)")
+		return errors.New("vibe: no LLM key (vibe_llm_api_key in config.json)")
 	}
 	return nil
 }
@@ -118,7 +119,7 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		sessionID: start.Format(time.RFC3339Nano),
 	}
 	session.SetSignals(sig, e.sessionID)
-	e.agent = NewAgent(client, &liveBackend{api: api, lfm: lfm, sf: cfg.Storefront}, session, mem, ui, e.log, favs)
+	e.agent = NewAgent(client, &liveBackend{api: api, lfm: lfm, sf: cfg.Storefront}, session, mem, ui, e.log, favs, cfg.Lang)
 	return e, nil
 }
 
@@ -127,8 +128,8 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 	if e.query == "" {
 		e.query = text
 		e.log.f("# vibe ask %s", text)
-		e.log.f("время: %s", e.start.Format(time.RFC3339))
-		e.log.f("память на старте: %d/%d", e.mem.Size(), e.mem.Limit)
+		e.log.f("time: %s", e.start.Format(time.RFC3339))
+		e.log.f("memory at start: %d/%d", e.mem.Size(), e.mem.Limit)
 		if block := globalBlock(e.sig.globalSkips()); block != "" {
 			message += "\n\n" + block
 		}
@@ -137,19 +138,19 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		}
 	} else {
 		if text == "" {
-			e.log.f("## владелец: (поток)")
+			e.log.f("## listener: (stream)")
 		} else {
-			e.log.f("## владелец: %s", text)
+			e.log.f("## listener: %s", text)
 		}
 		e.agent.Reset()
 		e.session.ResetPortion()
-		tail := "Продолжи поток: следующая порция. Держись ядра запроса. ▲ — главный ориентир, ищи близкое по звучанию; дослушанное — слабый плюс; от ▼ и скипнутого уходи."
+		tail := "Continue the stream: the next portion. Hold the core of the request. ▲ is the main referent, look for something close in sound; played through is a weak plus; move away from ▼ and skipped."
 		if text != "" {
-			tail = "Новая реплика владельца: «" + text + "». Учти её в следующей порции."
+			tail = "New reply from the listener: \"" + text + "\". Take it into account in the next portion."
 			e.session.ClearReserve()
 		}
 		if text == "" && len(e.skipped) >= 2 {
-			tail += "\n\nСкипнуто с прошлого вопроса: " + strings.Join(e.skipped, "; ") + ". Если видна развилка — одно дослушано, другое скипнуто, — задай ask_later: варианты — дослушанные треки из «Выдано»."
+			tail += "\n\nSkipped since the last question: " + strings.Join(e.skipped, "; ") + ". If you see a fork — one played through, the other skipped — call ask_later: options are played-through tracks from the \"Served\" list."
 		}
 		message = e.history() + "\n\n" + tail
 		if text != "" {
@@ -170,24 +171,24 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		e.skipped = nil
 	}
 	for _, r := range e.agent.Warmup {
-		e.replies = append(e.replies, reply{after: 0, text: "на вопрос «" + r.Question + "» — " + r.Answer})
+		e.replies = append(e.replies, reply{after: 0, text: "to the question \"" + r.Question + "\" — " + r.Answer})
 	}
 	e.agent.Warmup = nil
 	e.laterAsked = e.agent.Later != nil
 	if e.laterAsked {
 		e.asked = append(e.asked, e.agent.Later.Question)
 	}
-	e.log.f("## порция %d", e.turns)
+	e.log.f("## portion %d", e.turns)
 	for _, en := range entries {
 		e.log.f("%s — %s", en.Song.Artist, en.Song.Title)
 	}
 	tracks := toTracks(entries)
 	e.portions = append(e.portions, tracks)
 	if e.agent.Note != "" {
-		e.log.f("заметка: %s", e.agent.Note)
+		e.log.f("note: %s", e.agent.Note)
 	}
 	if e.agent.Later != nil {
-		e.log.f("вопрос на потом: %s %v", e.agent.Later.Question, e.agent.Later.Options)
+		e.log.f("later question: %s %v", e.agent.Later.Question, e.agent.Later.Options)
 	}
 	return Portion{Tracks: tracks, Note: e.agent.Note, Later: e.agent.Later}, nil
 }
@@ -202,13 +203,13 @@ func (e *Engine) DropLast() {
 		e.laterAsked = false
 	}
 	e.session.DropLast()
-	e.log.f("## порция %d отброшена: реплика владельца", len(e.portions)+1)
+	e.log.f("## portion %d dropped: listener reply", len(e.portions)+1)
 }
 
 func (e *Engine) Answer(q Question, raw string) {
 	ans := resolveAnswer(q, raw)
-	e.log.f("## ответ владельца: «%s» → %s", q.Question, ans)
-	e.replies = append(e.replies, reply{after: len(e.portions), text: "на вопрос «" + q.Question + "» — " + ans})
+	e.log.f("## listener answer: \"%s\" → %s", q.Question, ans)
+	e.replies = append(e.replies, reply{after: len(e.portions), text: "to the question \"" + q.Question + "\" — " + ans})
 }
 
 func (e *Engine) history() string {
@@ -217,40 +218,40 @@ func (e *Engine) history() string {
 		seeds = append(seeds, sd.Artist+" ("+sd.Mode+")")
 	}
 	if len(seeds) == 0 {
-		seeds = append(seeds, "нет")
+		seeds = append(seeds, "none")
 	}
 	excl := e.session.plan.Exclusions
 	if len(excl) == 0 {
-		excl = append(excl, "нет")
+		excl = append(excl, "none")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Сессия: запрос «%s».\n", e.query)
+	fmt.Fprintf(&b, "Session: request \"%s\".\n", e.query)
 	favMode := ""
 	if e.session.plan.FromFavorites {
-		favMode = "; режим любимого"
+		favMode = "; favorites mode"
 	}
-	fmt.Fprintf(&b, "План уже задан: ориентиры: %s; исключения: %s%s. set_plan — только если меняешь направление.\n", strings.Join(seeds, ", "), strings.Join(excl, ", "), favMode)
-	b.WriteString("Выдано (сквозная нумерация, как на экране владельца):\n")
+	fmt.Fprintf(&b, "Plan is already set: referents: %s; exclusions: %s%s. set_plan — only if you change the direction.\n", strings.Join(seeds, ", "), strings.Join(excl, ", "), favMode)
+	b.WriteString("Served (continuous numbering, as on the listener's screen):\n")
 	n := 0
 	for i, portion := range e.portions {
-		fmt.Fprintf(&b, "Порция %d:\n", i+1)
+		fmt.Fprintf(&b, "Portion %d:\n", i+1)
 		for _, t := range portion {
 			n++
 			fmt.Fprintf(&b, "%d. %s — %s — %s\n", n, t.Artist, t.Title, e.trackOutcome(t))
 		}
 	}
 	if len(e.replies) > 0 {
-		b.WriteString("Реплики владельца:\n")
+		b.WriteString("Listener replies:\n")
 		for _, r := range e.replies {
-			fmt.Fprintf(&b, "- после порции %d: «%s»\n", r.after, r.text)
+			fmt.Fprintf(&b, "- after portion %d: \"%s\"\n", r.after, r.text)
 		}
 	}
 	if len(e.asked) > 0 {
 		qs := make([]string, len(e.asked))
 		for i, q := range e.asked {
-			qs[i] = "«" + q + "»"
+			qs[i] = "\"" + q + "\""
 		}
-		fmt.Fprintf(&b, "Вопросы уже заданы (не повторяй): %s\n", strings.Join(qs, ", "))
+		fmt.Fprintf(&b, "Questions already asked (do not repeat): %s\n", strings.Join(qs, ", "))
 	}
 	if block := globalBlock(e.sig.globalSkips()); block != "" {
 		b.WriteString("\n")
@@ -264,19 +265,19 @@ func (e *Engine) history() string {
 }
 
 func (e *Engine) trackOutcome(t Track) string {
-	out := "не слушал"
+	out := "not listened"
 	if r, ok := e.sig.lastOutcome(e.sessionID, t.ID); ok {
 		if r.Kind == "played" {
-			out = "дослушан"
+			out = "played through"
 		} else {
-			out = fmt.Sprintf("скип на %d:%02d", r.PosSec/60, r.PosSec%60)
+			out = fmt.Sprintf("skipped at %d:%02d", r.PosSec/60, r.PosSec%60)
 		}
 	}
 	switch e.sig.lastRating(e.sessionID, t.ID) {
 	case "more":
-		out += ", ▲ больше такого"
+		out += ", ▲ more of this"
 	case "less":
-		out += ", ▼ меньше такого"
+		out += ", ▼ less of this"
 	}
 	return out
 }
@@ -286,18 +287,18 @@ func globalBlock(stats []skipStat) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Устойчивые скипы прошлых сессий (этих артистов код уже не пропускает):")
+	b.WriteString("Lasting skips from past sessions (the code no longer lets these artists through):")
 	for _, st := range stats {
-		fmt.Fprintf(&b, "\n- %s: ранних скипов %d в %d сессиях, дослушано %d", st.Artist, st.Early, st.Sessions, st.Played)
+		fmt.Fprintf(&b, "\n- %s: early skips %d in %d sessions, played through %d", st.Artist, st.Early, st.Sessions, st.Played)
 		if len(st.Queries) > 0 {
 			qs := make([]string, len(st.Queries))
 			for i, q := range st.Queries {
-				qs[i] = "«" + q + "»"
+				qs[i] = "\"" + q + "\""
 			}
-			fmt.Fprintf(&b, "; запросы: %s", strings.Join(qs, ", "))
+			fmt.Fprintf(&b, "; queries: %s", strings.Join(qs, ", "))
 		}
 	}
-	b.WriteString("\nЕсли у них есть общее звучание или направление — запиши его в память одной записью (memory_add или memory_replace), evidence — эти цифры. Об отдельных артистах в память не пиши.")
+	b.WriteString("\nIf they share a sound or a direction — write it to memory as one entry (memory_add or memory_replace), evidence — these numbers. Do not write about single artists to memory.")
 	return b.String()
 }
 
@@ -306,7 +307,7 @@ func skippedBlock(songs []Song) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("В прошлых сессиях владелец бросил их до середины (код их отклонит, не предлагай):")
+	b.WriteString("In past sessions the listener dropped these before the middle (the code will reject them, do not offer them):")
 	idx := make(map[string]int, len(songs))
 	artists := make([]string, 0, len(songs))
 	titles := make([][]string, 0, len(songs))
@@ -343,7 +344,7 @@ func (e *Engine) Record(outs []Outcome) error {
 		default:
 			continue
 		}
-		e.log.f("сигнал: %s — %s: %s %d/%d с", out.Artist, out.Title, out.Kind, out.PosSec, out.DurSec)
+		e.log.f("signal: %s — %s: %s %d/%d s", out.Artist, out.Title, out.Kind, out.PosSec, out.DurSec)
 		recs = append(recs, signalRec{
 			Time:    now,
 			Session: e.sessionID,
@@ -372,11 +373,11 @@ func trackIDs(tracks []Track) []string {
 }
 
 func (e *Engine) SavePlaylist(ctx context.Context, name string, tracks []Track) (playlistID string, err error) {
-	id, err := createPlaylist(ctx, e.api, name, "Vibes AI · «"+e.query+"»", trackIDs(tracks))
+	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.query+"»", trackIDs(tracks))
 	if err != nil {
 		return "", err
 	}
-	e.log.f("плейлист: %s (%d треков)", name, len(tracks))
+	e.log.f("playlist: %s (%d tracks)", name, len(tracks))
 	return id, nil
 }
 
@@ -384,12 +385,12 @@ func (e *Engine) AppendPlaylist(ctx context.Context, playlistID string, tracks [
 	if err := addToPlaylist(ctx, e.api, playlistID, trackIDs(tracks)); err != nil {
 		return err
 	}
-	e.log.f("плейлист +%d", len(tracks))
+	e.log.f("playlist +%d", len(tracks))
 	return nil
 }
 
 func (e *Engine) Close() (logPath string, err error) {
-	e.log.f("память в конце: %d/%d", e.mem.Size(), e.mem.Limit)
+	e.log.f("memory at end: %d/%d", e.mem.Size(), e.mem.Limit)
 	if e.cfg.RunsDir == "" {
 		return "", nil
 	}

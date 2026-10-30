@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var lang = "ru"
+var lang = "en"
 
 // Tr leans on the active language: Tr(ru, en) returns the ru line while lang is "ru".
 func Tr(ru, en string) string {

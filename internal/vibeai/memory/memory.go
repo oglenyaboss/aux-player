@@ -63,9 +63,9 @@ func sizeOf(entries []Entry) int { return utf8.RuneCountInString(render(entries)
 
 func (s *Store) Section() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Память о владельце (%d/%d символов)\n", s.Size(), s.Limit)
+	fmt.Fprintf(&b, "## Memory about the listener (%d/%d chars)\n", s.Size(), s.Limit)
 	if len(s.entries) == 0 {
-		b.WriteString("(пусто)\n")
+		b.WriteString("(empty)\n")
 		return b.String()
 	}
 	for _, e := range s.entries {
@@ -82,7 +82,7 @@ func (s *Store) Add(text, evidence string) error {
 		return err
 	}
 	if other, dup := findDup(s.entries, e.Text); dup {
-		return fmt.Errorf("уже есть похожая запись: «%s» — используй replace", other.Text)
+		return fmt.Errorf("a similar entry already exists: \"%s\" — use replace", other.Text)
 	}
 	t := s.today()
 	newEntries := append(s.Entries(), Entry{Text: e.Text, Evidence: e.Evidence, Created: t, Updated: t})
@@ -93,10 +93,10 @@ func (s *Store) Replace(old, text, evidence string) error {
 	old = strings.TrimSpace(old)
 	idx := findMatches(s.entries, old)
 	if len(idx) == 0 {
-		return fmt.Errorf("запись не найдена: «%s»", old)
+		return fmt.Errorf("entry not found: \"%s\"", old)
 	}
 	if len(idx) > 1 {
-		return fmt.Errorf("неоднозначно: %d записей содержат «%s» — уточни", len(idx), old)
+		return fmt.Errorf("ambiguous: %d entries contain \"%s\" — be more specific", len(idx), old)
 	}
 	e, err := checkEntry(text, evidence)
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *Store) Replace(old, text, evidence string) error {
 		}
 	}
 	if other, dup := findDup(others, e.Text); dup {
-		return fmt.Errorf("уже есть похожая запись: «%s» — используй replace", other.Text)
+		return fmt.Errorf("a similar entry already exists: \"%s\" — use replace", other.Text)
 	}
 	t := s.today()
 	newEntries := s.Entries()
@@ -124,15 +124,15 @@ func (s *Store) Replace(old, text, evidence string) error {
 
 func (s *Store) Remove(old, reason string) error {
 	if strings.TrimSpace(reason) == "" {
-		return errors.New("укажи причину удаления")
+		return errors.New("give a reason for the removal")
 	}
 	old = strings.TrimSpace(old)
 	idx := findMatches(s.entries, old)
 	if len(idx) == 0 {
-		return fmt.Errorf("запись не найдена: «%s»", old)
+		return fmt.Errorf("entry not found: \"%s\"", old)
 	}
 	if len(idx) > 1 {
-		return fmt.Errorf("неоднозначно: %d записей содержат «%s» — уточни", len(idx), old)
+		return fmt.Errorf("ambiguous: %d entries contain \"%s\" — be more specific", len(idx), old)
 	}
 	newEntries := s.Entries()
 	newEntries = append(newEntries[:idx[0]], newEntries[idx[0]+1:]...)
@@ -142,10 +142,10 @@ func (s *Store) Remove(old, reason string) error {
 func (s *Store) Consolidate(entries []Entry) error {
 	cur := s.Size()
 	if cur*100 < 70*s.Limit {
-		return fmt.Errorf("консолидация не нужна: память заполнена на %d%%", cur*100/s.Limit)
+		return fmt.Errorf("consolidation is not needed: memory is %d%% full", cur*100/s.Limit)
 	}
 	if len(entries) == 0 {
-		return errors.New("передай непустой список записей")
+		return errors.New("pass a non-empty list of entries")
 	}
 	t := s.today()
 	newEntries := make([]Entry, 0, len(entries))
@@ -157,14 +157,14 @@ func (s *Store) Consolidate(entries []Entry) error {
 		for _, prev := range newEntries {
 			n, m := normText(checked.Text), normText(prev.Text)
 			if n == m || strings.Contains(n, m) || strings.Contains(m, n) {
-				return fmt.Errorf("дублирующиеся записи: «%s»", prev.Text)
+				return fmt.Errorf("duplicate entries: \"%s\"", prev.Text)
 			}
 		}
 		newEntries = append(newEntries, Entry{Text: checked.Text, Evidence: checked.Evidence, Created: t, Updated: t})
 	}
 	total := sizeOf(newEntries)
 	if total*100 > 60*s.Limit {
-		return fmt.Errorf("после консолидации %d%% — сожми сильнее (нужно ≤ 60%%)", total*100/s.Limit)
+		return fmt.Errorf("after consolidation %d%% — compress harder (need ≤ 60%%)", total*100/s.Limit)
 	}
 	return s.commit(newEntries)
 }
@@ -173,16 +173,16 @@ func checkEntry(text, evidence string) (Entry, error) {
 	text = strings.TrimSpace(text)
 	evidence = strings.TrimSpace(evidence)
 	if text == "" {
-		return Entry{}, errors.New("укажи текст записи")
+		return Entry{}, errors.New("give the entry text")
 	}
 	if n := utf8.RuneCountInString(text); n > maxTextLen {
-		return Entry{}, fmt.Errorf("текст слишком длинный: %d символов, максимум %d — сократи", n, maxTextLen)
+		return Entry{}, fmt.Errorf("text is too long: %d characters, maximum %d — shorten it", n, maxTextLen)
 	}
 	if evidence == "" {
-		return Entry{}, errors.New("укажи evidence — на чём основано предпочтение")
+		return Entry{}, errors.New("give evidence — what the preference is based on")
 	}
 	if n := utf8.RuneCountInString(evidence); n > maxEvidenceLen {
-		return Entry{}, fmt.Errorf("evidence слишком длинный: %d символов, максимум %d — сократи", n, maxEvidenceLen)
+		return Entry{}, fmt.Errorf("evidence is too long: %d characters, maximum %d — shorten it", n, maxEvidenceLen)
 	}
 	return Entry{Text: text, Evidence: evidence}, nil
 }
@@ -226,7 +226,7 @@ func (s *Store) today() string { return s.now().Format(dateLayout) }
 
 func (s *Store) commitWithinLimit(entries []Entry) error {
 	if sz := sizeOf(entries); sz > s.Limit {
-		return fmt.Errorf("память заполнена (%d/%d) — сначала memory_consolidate", sz, s.Limit)
+		return fmt.Errorf("memory is full (%d/%d) — memory_consolidate first", sz, s.Limit)
 	}
 	return s.commit(entries)
 }
@@ -295,7 +295,7 @@ func parse(content string) ([]Entry, error) {
 		}
 		created, updated, evidence, ok := parseMeta(block[len(block)-1])
 		if !ok {
-			return errors.New("ожидается строка метаданных <!-- ... --> в конце каждой записи")
+			return errors.New("a metadata line <!-- ... --> is expected at the end of each entry")
 		}
 		entries = append(entries, Entry{
 			Text:     strings.Join(block[:len(block)-1], "\n"),

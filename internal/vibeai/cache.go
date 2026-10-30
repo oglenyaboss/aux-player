@@ -21,7 +21,7 @@ func readCache(path string) ([]Song, error) {
 	}
 	var songs []Song
 	if err := json.Unmarshal(data, &songs); err != nil {
-		return nil, fmt.Errorf("кэш %s: %v", path, err)
+		return nil, fmt.Errorf("cache %s: %v", path, err)
 	}
 	return songs, nil
 }
@@ -54,7 +54,7 @@ func loadCaches(ctx context.Context, api *appleAPI, dir string, maxAge time.Dura
 		return library, favs, nil
 	}
 	if progress != nil {
-		progress("загружаю библиотеку Apple Music…")
+		progress("loading the Apple Music library…")
 	}
 	library, libIDs, err := fetchLibrary(ctx, api)
 	if err != nil {
@@ -67,7 +67,7 @@ func loadCaches(ctx context.Context, api *appleAPI, dir string, maxAge time.Dura
 		return nil, nil, err
 	}
 	if progress != nil {
-		progress("ищу любимые треки…")
+		progress("looking for favorite tracks…")
 	}
 	favs, err = fetchFavorites(ctx, api, library, libIDs)
 	if err != nil {

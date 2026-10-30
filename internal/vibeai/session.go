@@ -124,42 +124,42 @@ func (s *Session) Need() int {
 func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 	v := Verdict{Suggestion: sug}
 	if !found {
-		v.Reason = "нет в Apple"
+		v.Reason = "not in Apple"
 		return v
 	}
 	v.Song = song
 	arts := songArtists(song)
 	for _, a := range arts {
 		if name, ok := s.excl[a]; ok {
-			v.Reason = "исключение: " + name
+			v.Reason = "exclusion: " + name
 			return v
 		}
 	}
 	for _, a := range arts {
 		if s.seeds[a] == "not_it" {
-			v.Reason = "сам ориентир (не он)"
+			v.Reason = "the referent itself (not_it)"
 			return v
 		}
 	}
 	k := songKey(song)
 	if s.given[k] || s.inPortion[k] {
-		v.Reason = "уже было"
+		v.Reason = "already served"
 		return v
 	}
 	if s.Need() == 0 {
-		v.Reason = "порция заполнена"
+		v.Reason = "portion is full"
 		s.addReserve(sug, song)
 		return v
 	}
 	windowArts, windowKnown := s.windowCounts()
 	if s.sig != nil {
 		if s.sig.skippedBefore(song, s.sessionID) {
-			v.Reason = "бросал раньше, не дослушав"
+			v.Reason = "dropped early before"
 			return v
 		}
 		for _, a := range arts {
 			if r := s.sig.blockedArtist(a, s.sessionID); r != "" {
-				if strings.HasPrefix(r, "владелец скипает") && (s.seeds[a] == "want_it" || s.seeds[a] == "and_similar") {
+				if strings.HasPrefix(r, "the listener skips") && (s.seeds[a] == "want_it" || s.seeds[a] == "and_similar") {
 					continue
 				}
 				v.Reason = r
@@ -169,7 +169,7 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 	}
 	if s.plan.FromFavorites {
 		if !s.lib.Has(song) && !s.favs.Has(song) {
-			v.Reason = "режим любимого: нет в библиотеке"
+			v.Reason = "favorites mode: not in the library"
 			return v
 		}
 		favArtist := false
@@ -180,11 +180,11 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			}
 		}
 		if !favArtist {
-			v.Reason = "режим любимого: артист не из Favorites"
+			v.Reason = "favorites mode: artist is not from Favorites"
 			return v
 		}
 	} else if s.lib.Has(song) && !s.favs.Has(song) && !s.hasSeedArtist(arts) {
-		v.Reason = "известный трек (библиотека)"
+		v.Reason = "known track (library)"
 		return v
 	}
 	for _, a := range arts {
@@ -192,14 +192,14 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			continue
 		}
 		if s.portionArts[a]+windowArts[a] >= s.PerArtist {
-			v.Reason = "лимит артиста: " + a
+			v.Reason = "artist limit: " + a
 			return v
 		}
 	}
 	maxSimilar := int(math.Ceil(float64(windowSize)*0.15 - 1e-9))
 	for _, a := range arts {
 		if s.seeds[a] == "and_similar" && s.portionArts[a]+windowArts[a] >= maxSimilar {
-			v.Reason = "лимит ориентира"
+			v.Reason = "referent limit"
 			return v
 		}
 	}
@@ -215,7 +215,7 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		}
 	}
 	if !s.plan.FromFavorites && knownCounted && s.knownCount+windowKnown >= s.maxKnown() {
-		v.Reason = "лимит известных"
+		v.Reason = "known limit"
 		return v
 	}
 	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
@@ -234,11 +234,11 @@ func (s *Session) Take(sug Suggestion, song Song) Verdict {
 	v := Verdict{Suggestion: sug, Song: song}
 	k := songKey(song)
 	if s.given[k] || s.inPortion[k] {
-		v.Reason = "уже было"
+		v.Reason = "already served"
 		return v
 	}
 	if s.Need() == 0 {
-		v.Reason = "порция полна"
+		v.Reason = "portion is full"
 		return v
 	}
 	arts := songArtists(song)

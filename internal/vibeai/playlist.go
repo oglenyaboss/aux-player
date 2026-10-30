@@ -40,7 +40,7 @@ func songRefs(ids []string) []playlistRef {
 
 func createPlaylist(ctx context.Context, api *appleAPI, name, description string, ids []string) (string, error) {
 	if len(ids) == 0 {
-		return "", errors.New("apple: пустой плейлист")
+		return "", errors.New("apple: empty playlist")
 	}
 	body := createPlaylistBody{}
 	body.Attributes.Name = name
@@ -52,7 +52,7 @@ func createPlaylist(ctx context.Context, api *appleAPI, name, description string
 	}
 	id := parseCreatedPlaylistID(data)
 	if id == "" {
-		return "", errors.New("apple: плейлист создан, но id не вернулся")
+		return "", errors.New("apple: playlist created but no id returned")
 	}
 	return id, nil
 }

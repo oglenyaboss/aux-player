@@ -287,7 +287,7 @@ func TestVibeAI_SaveTwiceSamePortion(t *testing.T) {
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) != nil {
 		t.Error("saving the same portion twice should be a no-op")
 	}
-	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "Vibes AI · x", n: 3, created: true})
+	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "AUX · x", n: 3, created: true})
 	m.vibeAITurnCmd("", false, false)
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
@@ -885,11 +885,11 @@ func TestVibeAI_ViewQuestionTracks(t *testing.T) {
 }
 
 func TestVibeAIPlaylistName(t *testing.T) {
-	if got := vibeAIPlaylistName("  джаз "); got != "Vibes AI · джаз" {
+	if got := vibeAIPlaylistName("  джаз "); got != "AUX · джаз" {
 		t.Errorf("got %q", got)
 	}
 	long := vibeAIPlaylistName("абвгдеёжзийклмнопрстуфхцчшщъыьэюя абвгдеёжз")
-	if n := len([]rune(long)); n != len([]rune("Vibes AI · "))+40 {
+	if n := len([]rune(long)); n != len([]rune("AUX · "))+40 {
 		t.Errorf("long name has %d runes: %q", n, long)
 	}
 }

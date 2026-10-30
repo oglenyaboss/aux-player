@@ -31,7 +31,7 @@ type appleAlbumSearchResponse struct {
 func parseAlbumSearch(body []byte) ([]appleAlbum, error) {
 	var r appleAlbumSearchResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return nil, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	out := make([]appleAlbum, 0, len(r.Results.Albums.Data))
 	for _, d := range r.Results.Albums.Data {

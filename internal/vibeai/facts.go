@@ -133,10 +133,10 @@ type appleArtistFactsResponse struct {
 func parseArtistFacts(body []byte) (ArtistFacts, error) {
 	var r appleArtistFactsResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return ArtistFacts{}, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return ArtistFacts{}, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	if len(r.Data) == 0 {
-		return ArtistFacts{}, errors.New("apple: артист не найден")
+		return ArtistFacts{}, errors.New("apple: artist not found")
 	}
 	a := r.Data[0]
 	out := ArtistFacts{
@@ -187,10 +187,10 @@ type appleAlbumFactsResponse struct {
 func parseAlbumFacts(body []byte) (AlbumFacts, error) {
 	var r appleAlbumFactsResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return AlbumFacts{}, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return AlbumFacts{}, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	if len(r.Data) == 0 {
-		return AlbumFacts{}, errors.New("apple: альбом не найден")
+		return AlbumFacts{}, errors.New("apple: album not found")
 	}
 	a := r.Data[0]
 	out := AlbumFacts{
@@ -231,10 +231,10 @@ type appleSongFactsResponse struct {
 func parseSongFacts(body []byte) (TrackFacts, error) {
 	var r appleSongFactsResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return TrackFacts{}, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return TrackFacts{}, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	if len(r.Data) == 0 {
-		return TrackFacts{}, errors.New("apple: трек не найден")
+		return TrackFacts{}, errors.New("apple: track not found")
 	}
 	s := r.Data[0]
 	out := TrackFacts{
@@ -256,7 +256,7 @@ func describeArtist(ctx context.Context, api *appleAPI, lfm *lastfmClient, sf, n
 		return ArtistFacts{}, err
 	}
 	if id == "" {
-		return ArtistFacts{}, fmt.Errorf("apple: артист «%s» не найден", name)
+		return ArtistFacts{}, fmt.Errorf("apple: artist \"%s\" not found", name)
 	}
 	body, err := api.get(ctx, "/catalog/"+sf+"/artists/"+url.PathEscape(id)+"?views=full-albums,singles,latest-release,top-songs&l=en-US")
 	if err != nil {
@@ -280,7 +280,7 @@ func describeAlbum(ctx context.Context, api *appleAPI, lfm *lastfmClient, sf, ar
 	}
 	m, ok := matchAlbum(artist, album, results)
 	if !ok {
-		return AlbumFacts{}, fmt.Errorf("apple: альбом «%s — %s» не найден", artist, album)
+		return AlbumFacts{}, fmt.Errorf("apple: album \"%s — %s\" not found", artist, album)
 	}
 	body, err := api.get(ctx, "/catalog/"+sf+"/albums/"+url.PathEscape(m.ID)+"?include=tracks&l=en-US")
 	if err != nil {

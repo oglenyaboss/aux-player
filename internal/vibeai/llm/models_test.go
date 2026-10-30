@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -119,10 +121,10 @@ func TestListModelsHeaders(t *testing.T) {
 	if got.Get("Authorization") != "Bearer k" {
 		t.Errorf("Authorization = %q, want Bearer k", got.Get("Authorization"))
 	}
-	if got.Get("User-Agent") != "vibelab/0.1" {
-		t.Errorf("User-Agent = %q, want vibelab/0.1", got.Get("User-Agent"))
+	if got.Get("User-Agent") != "aux/"+version.Version {
+		t.Errorf("User-Agent = %q, want aux/%s", got.Get("User-Agent"), version.Version)
 	}
-	if sess := got.Get("x-opencode-session"); sess == "" || !strings.HasPrefix(sess, "vibelab-") {
-		t.Errorf("x-opencode-session = %q, want непустой с префиксом vibelab-", sess)
+	if sess := got.Get("x-opencode-session"); sess == "" || !strings.HasPrefix(sess, "aux-") {
+		t.Errorf("x-opencode-session = %q, want непустой с префиксом aux-", sess)
 	}
 }

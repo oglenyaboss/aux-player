@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 type captured struct {
@@ -145,14 +147,14 @@ func TestRequestHeaders(t *testing.T) {
 		if got := r.header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("запрос %d: Content-Type = %q", i, got)
 		}
-		if got := r.header.Get("User-Agent"); got != "vibelab/0.1" {
+		if got := r.header.Get("User-Agent"); got != "aux/"+version.Version {
 			t.Errorf("запрос %d: User-Agent = %q", i, got)
 		}
 		sess := r.header.Get("x-opencode-session")
-		if !strings.HasPrefix(sess, "vibelab-") {
-			t.Errorf("запрос %d: session = %q, нет префикса vibelab-", i, sess)
+		if !strings.HasPrefix(sess, "aux-") {
+			t.Errorf("запрос %d: session = %q, нет префикса aux-", i, sess)
 		}
-		if len(sess) != len("vibelab-")+32 {
+		if len(sess) != len("aux-")+32 {
 			t.Errorf("запрос %d: session = %q, want 16 байт hex", i, sess)
 		}
 		if i > 0 && sess != rs[0].header.Get("x-opencode-session") {
