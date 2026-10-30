@@ -475,6 +475,46 @@ func TestUpdate_DisabledStillReportsTheRelease(t *testing.T) {
 	}
 }
 
+// A build from source reports "dev" as its version. It must report a newer
+// release without replacing itself, and without fetching its assets at all.
+func TestUpdate_DevBuildIsNeverReplaced(t *testing.T) {
+	isolateCache(t)
+	assetName, archive := releaseArchive(t, []byte("new binary"))
+	sum := sha256.Sum256(archive)
+	assetRequests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		base := "http://" + r.Host
+		switch r.URL.Path {
+		case "/checksums.txt":
+			assetRequests++
+			_, _ = w.Write([]byte(hex.EncodeToString(sum[:]) + "  " + assetName + "\n"))
+		case "/asset":
+			assetRequests++
+			_, _ = w.Write(archive)
+		default:
+			_ = json.NewEncoder(w).Encode(ghRelease{TagName: "v1.0.0", Assets: []ghAsset{
+				{Name: "checksums.txt", BrowserDownloadURL: base + "/checksums.txt"},
+				{Name: assetName, BrowserDownloadURL: base + "/asset"},
+			}})
+		}
+	}))
+	defer srv.Close()
+
+	got := update(srv.URL, "dev", true, discard)
+	if got.Outcome != OutcomeDisabled {
+		t.Errorf("Outcome = %v, want OutcomeDisabled", got.Outcome)
+	}
+	if got.Tag != "v1.0.0" {
+		t.Errorf("Tag = %q, want v1.0.0", got.Tag)
+	}
+	if got.Exe != "" {
+		t.Errorf("Exe = %q, want empty", got.Exe)
+	}
+	if assetRequests != 0 {
+		t.Errorf("%d release asset requests, want none", assetRequests)
+	}
+}
+
 // A platform with no published archive - linux/arm64 at the time of writing -
 // must not be told to drop --no-update for a build that is not there.
 func TestUpdate_MissingPlatformAssetIsManual(t *testing.T) {
