@@ -33,7 +33,7 @@ type Question struct {
 }
 
 type UI interface {
-	Ask(qs []Question) []string // по строке на вопрос: "" = по умолчанию, "1".."N" = вариант, иначе свой текст
+	Ask(qs []Question) []string // one line per question: "" = default, "1".."N" = option, otherwise the listener's own text
 	Progress(line string)
 	Picked(p Pick)
 }
@@ -52,7 +52,7 @@ type Agent struct {
 	Memory   *memory.Store
 	UI       UI
 	Log      *runLog
-	MaxSteps int // по умолчанию 15
+	MaxSteps int // 15 by default
 	Note     string
 
 	msgs          []llm.Message

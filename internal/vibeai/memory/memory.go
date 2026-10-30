@@ -21,8 +21,8 @@ const (
 )
 
 type Entry struct {
-	Text     string // само предпочтение, ≤ 300 рун
-	Evidence string // на чём основано: слова/действие владельца, ≤ 200 рун
+	Text     string // the preference itself, ≤ 300 runes
+	Evidence string // what it rests on: the owner's words or action, ≤ 200 runes
 	Created  string // YYYY-MM-DD
 	Updated  string // YYYY-MM-DD
 }
@@ -250,8 +250,8 @@ func (s *Store) save(entries []Entry) error {
 	return os.Rename(tmp, s.path)
 }
 
-// ponytail: текст записи, содержащий строку "§" или строку вида "<!-- ... -->",
-// сломает разбор файла при чтении; при необходимости добавить запрет в checkEntry.
+// ponytail: an entry text that holds a "§" line or a line like "<!-- ... -->"
+// breaks the parsing of the file on read; add a ban to checkEntry when needed.
 func render(entries []Entry) string {
 	var b strings.Builder
 	for i, e := range entries {

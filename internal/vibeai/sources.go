@@ -127,7 +127,7 @@ type appleAPI struct {
 	http *http.Client
 	dev  string
 	user string
-	base string // пусто → appleBaseURL; для тестов на httptest
+	base string // empty → appleBaseURL; for httptest tests
 }
 
 type appleErrorResponse struct {

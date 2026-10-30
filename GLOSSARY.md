@@ -1,64 +1,64 @@
-# Vibes AI
+# AUX picker
 
-Подбор музыки по свободному запросу на живых данных, а не по памяти модели.
+Music picking from a free-text request: the model names candidates, live data checks and filters them.
 
-## Запрос
+## Request
 
-**Запрос**:
-Свободный текст владельца о том, что он хочет слушать сейчас.
-_Avoid_: вайб, промпт, поисковый запрос
+**Request**:
+The listener's free text about what they want to hear right now.
+_Avoid_: vibe, prompt, search query
 
-**Ориентир**:
-Артист, альбом или трек из запроса, который задаёт направление подбора; сколько звучит он сам, зависит от запроса.
-_Avoid_: seed, сид
+**Referent**:
+An artist, album or track from the request that sets the direction of the selection; how much of it plays depends on the request.
+_Avoid_: seed
 
-**Маршрут**:
-Способ найти кандидатов от ориентира: через похожих по аудитории артистов или через общие теги альбомов или треков.
-_Avoid_: стратегия, алгоритм
+**Route**:
+The way to find candidates from the referent: through artists who are neighbors by shared audience, or through shared tags of albums or tracks.
+_Avoid_: strategy, algorithm
 
-**Настроение**:
-Часть запроса о характере музыки или ситуации слушания, без названий артистов.
-_Avoid_: вайб, mood
+**Mood**:
+The part of the request about the character of the music or the situation of listening, without artist names.
+_Avoid_: vibe
 
-**Исключение**:
-Артист или жанр, который запрос явно запретил на весь поток.
-_Avoid_: блэклист, фильтр
+**Exclusion**:
+An artist or genre that the request explicitly banned for the whole stream.
+_Avoid_: blacklist, filter
 
-## Знакомость
+## Familiarity
 
-**Известный трек**:
-Трек, который уже есть в библиотеке владельца, включая другие версии того же трека.
-_Avoid_: прослушанный трек
+**Known track**:
+A track that is already in the listener's library, including other versions of the same track.
+_Avoid_: played track
 
-**Известный артист**:
-Артист, у которого хотя бы один трек отмечен звёздочкой (Favorites).
-_Avoid_: любимый артист
+**Known artist**:
+An artist with at least one track starred (Favorites).
+_Avoid_: favorite artist
 
-**Новый артист**:
-Любой артист, который не является известным, даже если его треки есть в библиотеке.
+**New artist**:
+Any artist that is not known, even if their tracks are in the library.
 
-## Выдача
+## Output
 
-**Поток**:
-Бесконечная последовательность треков по одному запросу без повторов.
-_Avoid_: станция, радио
+**Stream**:
+An endless sequence of tracks from one request without repeats.
+_Avoid_: station, radio
 
-**Дрейф**:
-Переход потока к артистам, похожим на похожих на ориентир; не дальше одного шага.
+**Drift**:
+The stream moving on to artists similar to the ones similar to the referent; no further than one step (no longer in the prompt).
 
-**Порция**:
-Треки, которые агент добавляет в поток за один ход; сейчас 5.
-_Avoid_: батч, пачка
+**Portion**:
+The tracks the agent adds to the stream in one turn; 5 for now.
+_Avoid_: batch, pack
 
-**Окно**:
-Последние 20 треков потока, по которым считаются лимиты отбора: на артиста, на ориентир, на известных артистов.
+**Window**:
+The last 20 tracks of the stream, over which the selection limits are counted: per artist, per referent, per known artist.
 
-**Карточка**:
-Вопрос агента, где каждый вариант — трек с обложкой; выбранный трек сразу играет.
-_Avoid_: опрос, анкета
+**Card**:
+An agent question where every option is a track with artwork; the chosen track plays at once.
+_Avoid_: poll, questionnaire
 
-## Память
+## Memory
 
-**Память**:
-Записи о предпочтениях владельца, которые подборщик накапливает между сессиями из его явных сигналов: что нравится, что нет, какие связи между музыкой верны.
-_Avoid_: профиль, история
+**Memory**:
+Entries about the listener's preferences that the picker accumulates between sessions from their explicit signals: what they like, what they do not, which connections between music hold.
+_Avoid_: profile, history

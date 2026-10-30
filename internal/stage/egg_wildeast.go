@@ -10,11 +10,11 @@ import (
 // a black-and-white photo from Tbilisi. The field runs past the cover across the whole
 // screen as an old film, the camera drifting over it with the playback. On the bangers
 // the crowd is on its feet: silhouettes against the haze of a stage, jumping to the
-// tempo with a flash on every bar, lighters held up on Огней; on Kreem's intro, which
+// tempo with a flash on every bar, lighters held up on Ogney; on Kreem's intro, which
 // opens the second part, it gets up. Snow falls on the cold songs; on Glugicir the
 // film goes quiet at the bridge and the mantra comes up under the cover; the finale is
-// headlights over the field, a moonlit city of the dead for Ведьма, and warm sepia for
-// Home, "в самом красивом кино".
+// headlights over the field, a moonlit city of the dead for Vedma, and warm sepia for
+// Home, "in the most beautiful cinema".
 func init() {
 	eggRules = append(eggRules, eggRule{artist: "SALUKI", album: "WILD EA$T", e: egg{
 		theme: &weTheme, bg: weBg, ink: weInk, over: weOver,
@@ -77,7 +77,7 @@ const (
 )
 
 // weKey folds a title to its letters: "THE GOOD, THE BAD & THE UGLY" and
-// "The Good the Bad & the Ugly", "Замёрзнуть" and "Замерзнуть" meet.
+// "The Good the Bad & the Ugly", "Zamërznut" and "Zamerznut" meet.
 func weKey(title string) string {
 	s := foldTitle(title)
 	if i := strings.Index(s, " ("); i >= 0 {
@@ -207,7 +207,7 @@ var weRows = []struct{ base, s, tone float64 }{
 
 // weStage is the concert at one pixel: the haze lit from the stage, flashing on the
 // first beat of every bar, and the silhouettes jumping to the beat in front of it;
-// on Огней the raised hands hold lighters.
+// on Ogney the raised hands hold lighters.
 func weStage(m *Model, tr weTrack, px, py int) col {
 	H, W := float64(2*m.h), float64(m.w)
 	x, y := float64(px), float64(py)

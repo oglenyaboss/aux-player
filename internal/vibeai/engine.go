@@ -16,12 +16,12 @@ type Config struct {
 	AppleDeveloperToken string
 	AppleUserToken      string
 	Storefront          string
-	LastfmKey           string // пусто → similar_artists и теги отвечают ошибкой, агент работает
+	LastfmKey           string // empty → similar_artists and tags answer with an error, the agent still works
 	LLM                 llm.Config
-	MemoryPath          string // файл памяти
-	CacheDir            string // кэш библиотеки и favorites
-	RunsDir             string // логи сессий; "" — не писать
-	SignalsPath         string // журнал сигналов; "" — только в памяти
+	MemoryPath          string // memory file
+	CacheDir            string // library and Favorites cache
+	RunsDir             string // session logs; "" — do not write
+	SignalsPath         string // signals log; "" — in memory only
 	CacheMaxAge         time.Duration
 	PortionSize         int
 	Lang                string

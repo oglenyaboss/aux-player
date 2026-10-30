@@ -14,7 +14,7 @@ import (
 
 type Release struct {
 	Name   string `json:"name"`
-	Date   string `json:"date"`             // releaseDate как есть
+	Date   string `json:"date"`             // releaseDate as is
 	Tracks int    `json:"tracks,omitempty"` // trackCount
 }
 
@@ -25,7 +25,7 @@ type ArtistFacts struct {
 	Albums    []Release `json:"albums"`
 	Singles   []Release `json:"singles"`
 	Latest    *Release  `json:"latest,omitempty"`
-	TopSongs  []string  `json:"top_songs"` // "Артист — Название"
+	TopSongs  []string  `json:"top_songs"` // "Artist — Title"
 	Tags      []string  `json:"tags,omitempty"`
 }
 

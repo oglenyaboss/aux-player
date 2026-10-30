@@ -11,7 +11,7 @@ type liveBackend struct {
 	api *appleAPI
 	lfm *lastfmClient
 	sf  string
-	mu  sync.Mutex // сериализует вызовы lfm: lastfmClient не потокобезопасен
+	mu  sync.Mutex // serializes lfm calls: lastfmClient is not thread-safe
 }
 
 func (b *liveBackend) describe(ctx context.Context, kind, artist, name string) (any, error) {

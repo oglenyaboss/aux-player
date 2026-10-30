@@ -142,7 +142,7 @@ func (s *Signals) blockedArtist(artist, session string) string {
 			return "skipped in this session"
 		}
 	}
-	// ponytail: окно 60 дней вместо затухания весов; апгрейд — экспоненциальный вес по давности
+	// ponytail: a 60-day window instead of weight decay; the upgrade is an exponential weight by age
 	early, played, sessions, _ := s.skipCounts(artist)
 	if sessions >= 2 && played < early {
 		return fmt.Sprintf("the listener skips (%d sessions)", sessions)

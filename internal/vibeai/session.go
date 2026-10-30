@@ -14,24 +14,24 @@ type Seed struct {
 
 type Plan struct {
 	Seeds         []Seed
-	Exclusions    []string // имена артистов
+	Exclusions    []string // artist names
 	FromFavorites bool
 }
 
 type Entry struct {
 	Song     Song
 	Why      string
-	Favorite bool // трек из Favorites владельца
-	Known    bool // хотя бы один артист песни — известный
+	Favorite bool // the track is from the owner's Favorites
+	Known    bool // at least one artist of the song is known
 
 	knownCounted bool
 }
 
 type Verdict struct {
 	Suggestion Suggestion
-	Song       Song // пусто, если не найден
+	Song       Song // empty if not found
 	Accepted   bool
-	Reason     string // "" если принят
+	Reason     string // "" if accepted
 }
 
 type reserved struct {
