@@ -5,16 +5,17 @@ before:
     - go mod tidy
 
 builds:
-  - id: aux-linux
+  # Linux is the only published platform. Both architectures link GStreamer
+  # through CGO, so each is built natively on its own runner: the amd64 target
+  # in the release job, the arm64 target on the arm64 runner. Each job sets the
+  # other's AUX_SKIP_* variable, so only its own target is built.
+  - id: aux-linux-amd64
     binary: aux
-    # Set to 1 by the darwin release job, which runs this same config on a
-    # macOS runner and cannot build the gstreamer CGO target.
-    skip: '{{ eq (index .Env "AUX_SKIP_LINUX") "1" }}'
+    # Set to 1 by the arm64 release job.
+    skip: '{{ eq (index .Env "AUX_SKIP_AMD64") "1" }}'
     ldflags:
       - -s -w
       - -X 'github.com/oglenyaboss/aux-player/internal/version.Version={{ .Version }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL={{ .Env.AUX_TOKEN_URL }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey={{ .Env.AUX_CLIENT_KEY }}'
     env:
       - CGO_ENABLED=1
       - GOTOOLCHAIN=local
@@ -22,95 +23,49 @@ builds:
       - linux
     goarch:
       - amd64
-      # linux/arm64 is not published here yet: this CGO/GStreamer build needs
-      # an aarch64 toolchain (CC=aarch64-linux-gnu-gcc + arm64 GStreamer) or a
-      # native arm64 runner. Until then arm64 users build from source with
-      # `make build`.
 
-  - id: aux-darwin
+  - id: aux-linux-arm64
     binary: aux
-    # Set to 1 by the linux release job. Darwin is built on a macOS runner so
-    # that CGO_ENABLED=1 below has a working clang and the macOS SDK; the two
-    # jobs each skip the other's target.
-    skip: '{{ eq (index .Env "AUX_SKIP_DARWIN") "1" }}'
+    # Set to 1 by the amd64 release job.
+    skip: '{{ eq (index .Env "AUX_SKIP_ARM64") "1" }}'
     ldflags:
       - -s -w
       - -X 'github.com/oglenyaboss/aux-player/internal/version.Version={{ .Version }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL={{ .Env.AUX_TOKEN_URL }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey={{ .Env.AUX_CLIENT_KEY }}'
     env:
       - CGO_ENABLED=1
       - GOTOOLCHAIN=local
     goos:
-      - darwin
+      - linux
     goarch:
-      - amd64
       - arm64
-    overrides:
-      # macos-latest is arm64, so darwin/amd64 is a cgo cross-compile and clang
-      # has to be told which architecture to emit. Only the compiler vars belong
-      # here: this env is merged into the build's rather than replacing it, so
-      # CGO_ENABLED=1 above still reaches the amd64 target.
-      - goos: darwin
-        goarch: amd64
-        env:
-          - CC=clang -arch x86_64
-          - CXX=clang++ -arch x86_64
-
-  - id: aux-windows
-    binary: aux
-    # Cross-compiled by the Linux release job; no C toolchain is needed.
-    skip: '{{ eq (index .Env "AUX_SKIP_WINDOWS") "1" }}'
-    ldflags:
-      - -s -w
-      - -X 'github.com/oglenyaboss/aux-player/internal/version.Version={{ .Version }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL={{ .Env.AUX_TOKEN_URL }}'
-      - -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey={{ .Env.AUX_CLIENT_KEY }}'
-    env:
-      - CGO_ENABLED=0
-      - GOTOOLCHAIN=local
-    goos:
-      - windows
-    goarch:
-      - amd64
 
 archives:
   - id: aux
     ids:
-      - aux-linux
-      - aux-darwin
+      - aux-linux-amd64
+      - aux-linux-arm64
     name_template: "aux_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
     # Setting files replaces GoReleaser's default list, so the three it adds on
     # its own are restated. The desktop file and icon let a distro package
-    # (#53) install everything from this one archive; they are the same two
-    # files the install script and the Flatpak manifest already ship.
+    # install everything from this one archive; NOTICE carries the upstream
+    # licence notice.
     files:
       - LICENSE*
       - README*
       - CHANGELOG*
-      - flatpak/io.github.oglenyaboss.aux.desktop
-      - assets/logo.png
-
-  - id: aux-windows
-    ids:
-      - aux-windows
-    name_template: "aux_{{ .Os }}_{{ .Arch }}"
-    formats:
-      - zip
-    files:
-      - LICENSE*
-      - README*
-      - CHANGELOG*
+      - NOTICE
+      - internal/assets/io.github.oglenyaboss.aux.desktop
+      - internal/assets/aux-icon.svg
 
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
-  # Darwin archives are built on the macOS job and handed to this one as
-  # ./dist-darwin, outside the dist/ that --clean wipes.
+  # The arm64 archive is built on the arm64 job and handed to the release job
+  # as ./dist-arm64, outside the dist/ that --clean wipes.
   extra_files:
-    - glob: ./dist-darwin/*.tar.gz
+    - glob: ./dist-arm64/*.tar.gz
 
 changelog:
   sort: asc
@@ -131,4 +86,4 @@ release:
   prerelease: auto
   replace_existing_artifacts: true
   extra_files:
-    - glob: ./dist-darwin/*.tar.gz
+    - glob: ./dist-arm64/*.tar.gz

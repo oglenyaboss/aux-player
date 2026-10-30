@@ -12,13 +12,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Darwin is built here rather than in the release job below because its
-  # native backends are CGO: a macOS runner is the only place clang and the
-  # macOS SDK are available. The archives are handed to the release job, which
-  # attaches them to the same release via extra_files.
-  darwin:
-    name: build-darwin
-    runs-on: macos-latest
+  # Linux/arm64 is built here rather than in the release job below because the
+  # GStreamer backends are CGO: cross-compiling needs a full aarch64 toolchain
+  # and arm64 GStreamer development packages, which a native arm64 runner has
+  # already. The archives are handed to the release job, which attaches them to
+  # the same release via extra_files.
+  linux-arm64:
+    name: build-linux-arm64
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,31 +32,22 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - name: Check token broker configuration
-        env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-        run: |
-          # Without these a build has no developer token and cannot reach Apple Music.
-          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --fix-missing libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
-      - name: Build darwin archives
+      - name: Build arm64 archives
         uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
           args: release --clean --skip=publish
         env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-          AUX_SKIP_LINUX: '1'
-          AUX_SKIP_WINDOWS: '1'
+          AUX_SKIP_AMD64: '1'
           GOTOOLCHAIN: local
 
-      - name: Upload darwin archives
+      - name: Upload arm64 archives
         uses: actions/upload-artifact@v4
         with:
-          name: darwin-archives
+          name: arm64-archives
           path: dist/*.tar.gz
           if-no-files-found: error
           # Consumed by the next job; the same bytes ship on the release.
@@ -63,7 +55,7 @@ jobs:
 
   release:
     name: release
-    needs: darwin
+    needs: linux-arm64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -80,22 +72,20 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y --fix-missing libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
-      - name: Download darwin archives
+      - name: Download arm64 archives
         uses: actions/download-artifact@v4
         with:
-          name: darwin-archives
-          path: dist-darwin
+          name: arm64-archives
+          path: dist-arm64
 
-      - name: Check darwin archives
+      - name: Check arm64 archives
         run: |
           # extra_files globs quietly when nothing matches, so without this the
-          # release would publish with no macOS binaries and no error anywhere.
-          for arch in amd64 arm64; do
-            f="dist-darwin/aux_darwin_${arch}.tar.gz"
-            [ -s "$f" ] || { echo "missing $f"; exit 1; }
-            tar tzf "$f" | grep -qx aux || { echo "$f contains no aux binary"; exit 1; }
-          done
-          ls -l dist-darwin
+          # release would publish with no arm64 binary and no error anywhere.
+          f="dist-arm64/aux_linux_arm64.tar.gz"
+          [ -s "$f" ] || { echo "missing $f"; exit 1; }
+          tar tzf "$f" | grep -qx aux || { echo "$f contains no aux binary"; exit 1; }
+          ls -l dist-arm64
 
       - name: Extract CHANGELOG entry
         id: changelog
@@ -108,15 +98,6 @@ jobs:
             echo "No CHANGELOG entry found for version ${VERSION}" > release_notes.md
           fi
 
-      - name: Check token broker configuration
-        env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-        run: |
-          # Without these a build has no developer token and cannot reach Apple Music.
-          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -124,8 +105,5 @@ jobs:
           args: release --clean --release-notes=release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-          PROJECT_DIR: ${{ github.workspace }}
-          AUX_SKIP_DARWIN: '1'
+          AUX_SKIP_ARM64: '1'
           GOTOOLCHAIN: local

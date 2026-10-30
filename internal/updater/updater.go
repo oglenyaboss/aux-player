@@ -179,6 +179,12 @@ func UpdateNow(current string, noUpdate bool, log func(string)) Result {
 // whether a newer release may replace this binary.
 func update(api, current string, install bool, log func(string)) Result {
 	log("Checking for updates…")
+	// A build from source reports "dev" as its version and is never replaced in
+	// place: a newer release is still reported, but installing it would throw
+	// away the user's checkout and its build flags.
+	if current == "dev" {
+		install = false
+	}
 
 	rel, err := fetchLatestRelease(api)
 	if err != nil {

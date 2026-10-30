@@ -90,18 +90,16 @@ case "${ARCH_RAW}" in
     *)               die "Unsupported architecture: ${ARCH_RAW}" ;;
 esac
 
-# Releases publish linux/amd64, darwin/amd64 and darwin/arm64 (.goreleaser.yml).
+# Releases publish linux/amd64 and linux/arm64 (.goreleaser.yml).
 case "${OS}" in
     linux)
         PLATFORM="Linux ${ARCH_RAW}"
-        [ "${ARCH}" = "amd64" ] || \
-            die "no prebuilt Linux/${ARCH} binary is published yet — build from source: git clone https://github.com/oglenyaboss/aux-player && cd aux-player && make build"
         ;;
     darwin)
-        PLATFORM="macOS ${ARCH_RAW}"
+        die "Prebuilt releases are Linux-only for now. On macOS, build from source: git clone https://github.com/oglenyaboss/aux-player && cd aux-player && make build"
         ;;
     *)
-        die "AUX supports Linux and macOS (got: ${OS})"
+        die "AUX releases support Linux only (got: ${OS})"
         ;;
 esac
 
@@ -199,6 +197,16 @@ chmod 755 "${INSTALL_DIR}/${BIN}"
 
 success "${INSTALL_DIR}/${BIN}"
 
+# ── GStreamer check ───────────────────────────────────────────────────────────
+
+step "Checking GStreamer…"
+
+if ldconfig -p 2>/dev/null | grep -q 'libgstreamer-1.0.so.0'; then
+    success "GStreamer 1.0 found"
+else
+    warn "GStreamer 1.0 was not found. AUX needs it for playback: install gstreamer, gst-plugins-base, gst-plugins-good and gst-libav (AAC decoder) with your package manager."
+fi
+
 # ── desktop integration (XDG, Linux only) ─────────────────────────────────────
 
 if [ "${OS}" = "linux" ]; then
@@ -208,12 +216,12 @@ if [ "${OS}" = "linux" ]; then
     APP_ID="io.github.oglenyaboss.aux"
 
     DESKTOP_DIR="${HOME}/.local/share/applications"
-    ICON_DIR="${HOME}/.local/share/icons/hicolor/512x512/apps"
+    ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 
     mkdir -p "${DESKTOP_DIR}" "${ICON_DIR}"
 
-    download "${RAW_BASE}/flatpak/${APP_ID}.desktop" "${DESKTOP_DIR}/${APP_ID}.desktop"
-    download "${RAW_BASE}/assets/logo.png"            "${ICON_DIR}/${APP_ID}.png"
+    download "${RAW_BASE}/internal/assets/${APP_ID}.desktop" "${DESKTOP_DIR}/${APP_ID}.desktop"
+    download "${RAW_BASE}/internal/assets/aux-icon.svg"        "${ICON_DIR}/${APP_ID}.svg"
 
     # Refresh desktop and icon caches so the DE picks up the new entries immediately.
     command -v update-desktop-database >/dev/null 2>&1 \
@@ -223,36 +231,6 @@ if [ "${OS}" = "linux" ]; then
 
     success "Desktop file and icon installed"
 fi
-
-# ── Chrome check (macOS) ──────────────────────────────────────────────────────
-
-# AUX plays full tracks through an installed Google Chrome on macOS; it never
-# downloads one. Mirrors the lookup order in internal/player/cdp/browser_darwin.go
-# so the installer warns about exactly what the player would fail to find.
-if [ "${OS}" = "darwin" ]; then
-    step "Checking Google Chrome…"
-
-    CHROME=""
-    for candidate in \
-        "${AUX_CHROME_PATH:-}" \
-        "${CHROME_PATH:-}" \
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-        "${HOME}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    do
-        if [ -n "${candidate}" ] && [ -x "${candidate}" ]; then
-            CHROME="${candidate}"
-            break
-        fi
-    done
-
-    if [ -n "${CHROME}" ]; then
-        success "${CHROME}"
-    else
-        warn "Google Chrome not found — full-track playback needs it."
-        info "Install it with: brew install --cask google-chrome"
-    fi
-fi
-
 
 step "Checking PATH…"
 
@@ -304,6 +282,5 @@ esac
 printf '\n'
 printf '%s    ♪  AUX %s installed successfully!%s\n' "${BOLD}${GREEN}" "${VERSION}" "${RESET}"
 printf '\n'
-printf '    Run %saux auth login%s to connect your Apple Music account.\n' "${BOLD}" "${RESET}"
-printf '    Then %saux%s to start.\n' "${BOLD}" "${RESET}"
+printf '    Run %saux%s  (first launch walks you through setup)\n' "${BOLD}" "${RESET}"
 printf '\n'

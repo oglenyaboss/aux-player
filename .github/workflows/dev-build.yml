@@ -66,32 +66,20 @@ jobs:
           go-version: "1.26"
           cache: true
 
-      - name: Check token broker configuration
-        env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-        run: |
-          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
-
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y --fix-missing libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev g++-mingw-w64-x86-64
 
       - name: Build (linux/amd64)
         env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
           CGO_ENABLED: "1"
           GOTOOLCHAIN: local
         run: |
           go build -o aux-linux-amd64 \
-            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.AUX_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.AUX_CLIENT_KEY }}'" \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}'" \
             .
 
       - name: Build (windows/amd64)
         env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
           CGO_ENABLED: "1"
           CC: x86_64-w64-mingw32-gcc
           CXX: x86_64-w64-mingw32-g++
@@ -100,7 +88,7 @@ jobs:
           GOARCH: amd64
         run: |
           go build -o aux-windows-amd64.exe \
-            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.AUX_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.AUX_CLIENT_KEY }}'" \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}'" \
             .
 
       - name: Upload Linux artifact
@@ -133,31 +121,19 @@ jobs:
           go-version: "1.26"
           cache: true
 
-      - name: Check token broker configuration
-        env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
-        run: |
-          [ -n "$AUX_TOKEN_URL" ] || { echo "AUX_TOKEN_URL repository variable is not set"; exit 1; }
-          [ -n "$AUX_CLIENT_KEY" ] || { echo "AUX_CLIENT_KEY secret is not set"; exit 1; }
-
       - name: Build (darwin/arm64)
         env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
           CGO_ENABLED: "1"
           GOOS: darwin
           GOARCH: arm64
           GOTOOLCHAIN: local
         run: |
           go build -o aux-darwin-arm64 \
-            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.AUX_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.AUX_CLIENT_KEY }}'" \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}'" \
             .
 
       - name: Build (darwin/amd64)
         env:
-          AUX_TOKEN_URL: ${{ vars.AUX_TOKEN_URL }}
-          AUX_CLIENT_KEY: ${{ secrets.AUX_CLIENT_KEY }}
           CGO_ENABLED: "1"
           GOOS: darwin
           GOARCH: amd64
@@ -169,7 +145,7 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           go build -o aux-darwin-amd64 \
-            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=${{ env.AUX_TOKEN_URL }}' -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=${{ env.AUX_CLIENT_KEY }}'" \
+            -ldflags "-s -w -X 'github.com/oglenyaboss/aux-player/internal/version.Version=${{ needs.setup.outputs.version }}'" \
             .
 
       - name: Upload Darwin AMD64 artifact
