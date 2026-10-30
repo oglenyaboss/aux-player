@@ -29,10 +29,3 @@ func TestCleanAll(t *testing.T) {
 		t.Errorf("CleanAll = %q", got)
 	}
 }
-
-func TestCleanLinesKeepsNewlines(t *testing.T) {
-	got := CleanLines("line one\x1b[31m\nline\ttwo\u202e\n")
-	if want := "line one[31m\nline two\n"; got != want {
-		t.Errorf("CleanLines = %q, want %q", got, want)
-	}
-}

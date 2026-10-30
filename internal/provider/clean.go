@@ -13,10 +13,6 @@ import (
 // commands, or make one string read as another.
 func Clean(s string) string { return clean(s, false) }
 
-// CleanLines is Clean for text that is meant to span lines, such as plain
-// lyrics: newlines are kept.
-func CleanLines(s string) string { return clean(s, true) }
-
 func clean(s string, keepNewlines bool) string {
 	isSpace := func(r rune) bool { return r == '\t' || (r == '\n' && !keepNewlines) }
 	dirty := false

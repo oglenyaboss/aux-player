@@ -180,15 +180,6 @@ func (m *Model) drawLaunch(f *fb) {
 	}
 }
 
-func spaced(s string) string {
-	rs := []rune(strings.ToUpper(s))
-	out := make([]string, len(rs))
-	for i, r := range rs {
-		out[i] = string(r)
-	}
-	return strings.Join(out, " ")
-}
-
 func trunc(s string, n int) string {
 	rs := []rune(s)
 	if n <= 0 {

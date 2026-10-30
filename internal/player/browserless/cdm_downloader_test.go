@@ -60,13 +60,6 @@ func TestExtractLibraryFromCRX(t *testing.T) {
 	}
 }
 
-func TestCanDownloadCDM(t *testing.T) {
-	// On supported platforms (linux/amd64, darwin/arm64, darwin/amd64), it must be true
-	if !CanDownloadCDM() {
-		t.Log("CanDownloadCDM returned false on this platform")
-	}
-}
-
 func TestDownloadCDMReal(t *testing.T) {
 	if testing.Short() || os.Getenv("AUX_TEST_NETWORK") != "1" {
 		t.Skip("skipping live 21 MB CDN download test (set AUX_TEST_NETWORK=1 to run)")
@@ -113,19 +106,5 @@ func TestFallbackCDNsAreWellFormed(t *testing.T) {
 		if _, ok := mozillaPlatformKeys[key]; !ok {
 			t.Errorf("%s: no Mozilla manifest platform key", key)
 		}
-	}
-}
-
-func TestExtractCDMFromCRX3FindsWindowsDLL(t *testing.T) {
-	payload := make([]byte, 2*1024*1024)
-	copy(payload, "MZ")
-	crx := buildFakeCRX3(t, "_platform_specific/win_x64/widevinecdm.dll", payload)
-
-	got, err := extractCDMFromCRX3(crx)
-	if err != nil {
-		t.Fatalf("extractCDMFromCRX3: %v", err)
-	}
-	if !bytes.Equal(got, payload) {
-		t.Errorf("extracted %d bytes, want %d", len(got), len(payload))
 	}
 }

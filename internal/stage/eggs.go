@@ -527,13 +527,6 @@ func (m *Model) jewel(f *fb, g playGeom) {
 // gemRows is the diamond silhouette: half-width of each pixel row, table on top, pavilion to a point.
 var gemRows = []int{2, 3, 4, 3, 2, 1, 0}
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // drawTag leaves the producer credit next to the artist once the cold open is over.
 func (m *Model) drawTag(f *fb, x, y, w int, e *egg) {
 	if w < 8 {

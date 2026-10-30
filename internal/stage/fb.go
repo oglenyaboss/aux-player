@@ -54,12 +54,6 @@ type fb struct {
 
 func newFB(w, h int) *fb { return &fb{w: w, h: h, c: make([]cell, w*h)} }
 
-func (f *fb) clone() *fb {
-	g := *f
-	g.c = append([]cell(nil), f.c...)
-	return &g
-}
-
 func (f *fb) at(x, y int) *cell {
 	if x < 0 || y < 0 || x >= f.w || y >= f.h {
 		return nil

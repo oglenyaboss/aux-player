@@ -47,5 +47,3 @@ func ConfigValue(kbps int) (string, error) {
 		return "", fmt.Errorf("unsupported Apple Music bitrate %d kbps: %s", kbps, unsupportedMessage)
 	}
 }
-
-func UnsupportedMessage() string { return unsupportedMessage }

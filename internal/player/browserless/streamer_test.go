@@ -3,10 +3,8 @@
 package browserless
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -223,26 +221,7 @@ func TestSeekTargetAndPlayerSeek(t *testing.T) {
 	}
 }
 
-func TestExtractCDMFromCRX3(t *testing.T) {
-	// Undersized payload should be rejected.
-	smallCRX := buildFakeCRX3(t, "_platform_specific/linux_x64/libwidevinecdm.so", []byte("small"))
-	if _, err := extractCDMFromCRX3(smallCRX); err == nil {
-		t.Fatalf("expected undersized libwidevinecdm.so to be rejected")
-	}
-
-	// Valid >1 MiB payload should be extracted cleanly.
-	soPayload := make([]byte, 1024*1024+64)
-	copy(soPayload, []byte{0x7f, 'E', 'L', 'F', 'w', 'i', 'd', 'e', 'v', 'i', 'n', 'e'})
-	crx := buildFakeCRX3(t, "_platform_specific/linux_x64/libwidevinecdm.so", soPayload)
-
-	got, err := extractCDMFromCRX3(crx)
-	if err != nil {
-		t.Fatalf("extractCDMFromCRX3 failed: %v", err)
-	}
-	if !bytes.Equal(got, soPayload) {
-		t.Errorf("extracted payload length = %d, want %d", len(got), len(soPayload))
-	}
-
+func TestIsAllowedCDMHost(t *testing.T) {
 	if !isAllowedCDMHost("https://edgedl.me.gvt1.com/edgedl/release2/chrome_component/test.crx3") {
 		t.Errorf("expected edgedl.me.gvt1.com to be allowed")
 	}
@@ -252,29 +231,4 @@ func TestExtractCDMFromCRX3(t *testing.T) {
 	if isAllowedCDMHost("https://evil.example.com/test.crx3") {
 		t.Errorf("expected unknown host to be rejected")
 	}
-}
-
-func buildFakeCRX3(t *testing.T, name string, payload []byte) []byte {
-	t.Helper()
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-	fw, err := zw.Create(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fw.Write(payload); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	fakeProtoHeader := []byte("crx3-proto-header")
-	var crx bytes.Buffer
-	crx.WriteString("Cr24")
-	_ = binary.Write(&crx, binary.LittleEndian, uint32(3))
-	_ = binary.Write(&crx, binary.LittleEndian, uint32(17))
-	crx.Write(fakeProtoHeader)
-	crx.Write(zipBuf.Bytes())
-	return crx.Bytes()
 }

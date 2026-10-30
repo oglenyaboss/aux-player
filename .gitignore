@@ -37,3 +37,11 @@ Thumbs.db
 # Cloudflare Wrangler
 .wrangler/
 worker/.wrangler/
+
+# Lab (local data and keys)
+lab/*.env
+lab/library.tsv
+lab/*-out.txt
+lab/cache/
+lab/runs/
+lab/memory/

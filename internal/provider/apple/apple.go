@@ -21,7 +21,6 @@ import (
 
 const (
 	defaultBaseURL         = "https://api.music.apple.com/v1"
-	defaultCatalogURL      = "https://amp-api.music.apple.com/v1" // no longer used by search; see newCatalogRequest
 	favoritesPlaylistID    = "aux:favorites"
 	favoritesPlaylistName  = "Favorites"
 	ratingBatchSize        = 100
@@ -57,19 +56,17 @@ func resolveURL(base, endpoint string) (string, error) {
 }
 
 type AppleProvider struct {
-	cfg            *config.Config
-	client         *http.Client
-	baseURL        string
-	catalogBaseURL string
-	sf             string // cached storefront, populated on first use
+	cfg     *config.Config
+	client  *http.Client
+	baseURL string
+	sf      string // cached storefront, populated on first use
 }
 
 func New(cfg *config.Config) *AppleProvider {
 	return &AppleProvider{
-		cfg:            cfg,
-		client:         &http.Client{Timeout: 15 * time.Second},
-		baseURL:        defaultBaseURL,
-		catalogBaseURL: defaultCatalogURL,
+		cfg:     cfg,
+		client:  &http.Client{Timeout: 15 * time.Second},
+		baseURL: defaultBaseURL,
 	}
 }
 
@@ -107,11 +104,8 @@ func (a *AppleProvider) storefront(ctx context.Context) (string, error) {
 func (a *AppleProvider) Name() string { return "apple" }
 
 // SetBaseURL overrides the API base URL. Intended for use in tests only.
-// It also sets catalogBaseURL to the same value so both sub-requests hit the
-// same test server.
 func (a *AppleProvider) SetBaseURL(url string) {
 	a.baseURL = url
-	a.catalogBaseURL = url
 }
 
 func (a *AppleProvider) IsAuthenticated() bool {
@@ -120,30 +114,6 @@ func (a *AppleProvider) IsAuthenticated() bool {
 
 func (a *AppleProvider) newRequest(ctx context.Context, method, endpoint string) (*http.Request, error) {
 	u, err := resolveURL(a.baseURL, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, method, u, nil) //nolint:gosec // G107: URL is constructed from config, not user input
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
-	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
-	req.Header.Set("Origin", "https://music.apple.com")
-	return req, nil
-}
-
-// newCatalogRequest builds a request against the catalog (amp-api) base URL.
-// amp-api.music.apple.com is the endpoint used by the Apple Music web player,
-// and the only one that returns extendedAssetUrls in search responses.
-//
-// Nothing reaches this any more: #82 moved album and playlist tracks to the
-// standard host, and #93 moved catalog search there too, so every
-// fetchSongsPaginated caller now passes isCatalog=false. Kept rather than
-// deleted because removing it is a judgement call about whether AUX is done
-// with amp-api, not a consequence of either change.
-func (a *AppleProvider) newCatalogRequest(ctx context.Context, method, endpoint string) (*http.Request, error) {
-	u, err := resolveURL(a.catalogBaseURL, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -579,13 +549,8 @@ func (a *AppleProvider) Search(ctx context.Context, query string) (*provider.Sea
 	return result, nil
 }
 
-func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint string, isCatalog bool) ([]provider.Track, error) {
-	reqBuilder := a.newRequest
-	if isCatalog {
-		reqBuilder = a.newCatalogRequest
-	}
-
-	req, err := reqBuilder(ctx, http.MethodGet, baseEndpoint)
+func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint string) ([]provider.Track, error) {
+	req, err := a.newRequest(ctx, http.MethodGet, baseEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +570,7 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 		}
 		endpoint := firstPage.Next
 		for endpoint != "" {
-			req, err := reqBuilder(ctx, http.MethodGet, endpoint)
+			req, err := a.newRequest(ctx, http.MethodGet, endpoint)
 			if err != nil {
 				return nil, err
 			}
@@ -676,7 +641,7 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 			q.Set("limit", strconv.Itoa(limit))
 			u.RawQuery = q.Encode()
 
-			req, err := reqBuilder(ctx, http.MethodGet, u.String())
+			req, err := a.newRequest(ctx, http.MethodGet, u.String())
 			if err != nil {
 				select {
 				case errChan <- err:
@@ -735,7 +700,7 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 
 func (a *AppleProvider) GetLibraryTracks(ctx context.Context) ([]provider.Track, error) {
 	endpoint := "/me/library/songs?limit=100"
-	tracks, err := a.fetchSongsPaginated(ctx, endpoint, false)
+	tracks, err := a.fetchSongsPaginated(ctx, endpoint)
 	if err != nil {
 		if strings.Contains(err.Error(), "404 Not Found") {
 			return nil, nil
@@ -930,7 +895,7 @@ func (a *AppleProvider) GetPlaylistTracks(ctx context.Context, playlistID string
 	}
 
 	endpoint := fmt.Sprintf("/me/library/playlists/%s/tracks?limit=100", url.PathEscape(playlistID))
-	tracks, err := a.fetchSongsPaginated(ctx, endpoint, false)
+	tracks, err := a.fetchSongsPaginated(ctx, endpoint)
 	if err != nil {
 		if strings.Contains(err.Error(), "404 Not Found") {
 			fallbackReq, reqErr := a.newRequest(ctx, http.MethodGet, fmt.Sprintf("/me/library/playlists/%s?include=tracks", url.PathEscape(playlistID)))
@@ -960,7 +925,7 @@ func (a *AppleProvider) GetAlbumTracks(ctx context.Context, albumID string) ([]p
 		return nil, fmt.Errorf("GetAlbumTracks: %w", err)
 	}
 	endpoint := fmt.Sprintf("/catalog/%s/albums/%s/tracks?limit=100", sf, url.PathEscape(albumID))
-	return a.fetchSongsPaginated(ctx, endpoint, false)
+	return a.fetchSongsPaginated(ctx, endpoint)
 }
 
 // searchArtistLimit caps the artists a search returns.
@@ -1005,7 +970,7 @@ func (a *AppleProvider) GetArtistAlbums(ctx context.Context, artistID string) ([
 
 func (a *AppleProvider) GetLibraryAlbumTracks(ctx context.Context, albumID string) ([]provider.Track, error) {
 	endpoint := fmt.Sprintf("/me/library/albums/%s/tracks?limit=100", url.PathEscape(albumID))
-	return a.fetchSongsPaginated(ctx, endpoint, false)
+	return a.fetchSongsPaginated(ctx, endpoint)
 }
 
 func (a *AppleProvider) GetCatalogPlaylistTracks(ctx context.Context, playlistID string) ([]provider.Track, error) {
@@ -1014,7 +979,7 @@ func (a *AppleProvider) GetCatalogPlaylistTracks(ctx context.Context, playlistID
 		return nil, fmt.Errorf("GetCatalogPlaylistTracks: %w", err)
 	}
 	endpoint := fmt.Sprintf("/catalog/%s/playlists/%s/tracks?limit=100", sf, url.PathEscape(playlistID))
-	return a.fetchSongsPaginated(ctx, endpoint, false)
+	return a.fetchSongsPaginated(ctx, endpoint)
 }
 
 func (a *AppleProvider) getFavoriteTracks(ctx context.Context) ([]provider.Track, error) {

@@ -4,7 +4,6 @@ package browserless
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/binary"
@@ -82,18 +81,6 @@ func isAllowedCDMHost(rawURL string) bool {
 	default:
 		return false
 	}
-}
-
-// CanDownloadCDM reports whether the current OS and architecture have a known Widevine package.
-func CanDownloadCDM() bool {
-	key := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
-	_, ok := fallbackCDNs[key]
-	return ok
-}
-
-// Available reports whether the browserless engine can be used on this system.
-func Available() bool {
-	return FindCDM() != "" || CanDownloadCDM()
 }
 
 // resolveDownloadSpec resolves the official Google CDN download URL and SHA-512 hash for the current platform.
@@ -236,52 +223,6 @@ func DownloadCDM(ctx context.Context, destPath string, progress ...func(string))
 	}
 
 	return destPath, nil
-}
-
-// extractCDMFromCRX3 strips the CRX3 header and extracts the Widevine CDM shared
-// library from the embedded ZIP archive in memory.
-func extractCDMFromCRX3(crx []byte) ([]byte, error) {
-	if len(crx) < 12 || string(crx[:4]) != "Cr24" {
-		return nil, errors.New("invalid CRX3 magic header")
-	}
-	version := binary.LittleEndian.Uint32(crx[4:8])
-	if version != 3 {
-		return nil, fmt.Errorf("unsupported CRX version %d (want 3)", version)
-	}
-	hdrLen := binary.LittleEndian.Uint32(crx[8:12])
-	zipStart := int64(12) + int64(hdrLen)
-	if zipStart >= int64(len(crx)) {
-		return nil, errors.New("truncated CRX3 header")
-	}
-
-	zipPayload := crx[zipStart:]
-	zr, err := zip.NewReader(bytes.NewReader(zipPayload), int64(len(zipPayload)))
-	if err != nil {
-		return nil, fmt.Errorf("opening CRX3 zip payload: %w", err)
-	}
-
-	for _, f := range zr.File {
-		base := filepath.Base(f.Name)
-		if base == "libwidevinecdm.so" || base == "libwidevinecdm.dylib" || base == "widevinecdm.dll" {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
-			}
-			data, readErr := io.ReadAll(io.LimitReader(rc, maxCDMBytes+1))
-			_ = rc.Close()
-			if readErr != nil {
-				return nil, readErr
-			}
-			if len(data) > maxCDMBytes {
-				return nil, fmt.Errorf("extracted %s exceeds %d bytes limit", base, maxCDMBytes)
-			}
-			if len(data) < 1024*1024 {
-				return nil, fmt.Errorf("extracted %s is unexpectedly small (%d bytes)", base, len(data))
-			}
-			return data, nil
-		}
-	}
-	return nil, errors.New("widevine cdm library not found inside CRX3 archive")
 }
 
 // extractLibraryFromCRX reads a Chromium CRX3 package, locates the ZIP archive
