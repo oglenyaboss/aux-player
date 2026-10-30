@@ -1,29 +1,28 @@
 # AUX
 
-Самостоятельное приложение `aux` (модуль `github.com/oglenyaboss/aux-player`), выросло из форка `simonepelosi/vibez` (Apple Music TUI на Go/Bubble Tea). Сцена — `internal/stage/`, подборщик — `internal/vibeai/`, хост сцены и мост к агенту — `internal/tui/` (`model.go`, `stage.go`, `vibeai.go`). Плеер и Apple-провайдер — код предка: правим минимально, фиксы из `upstream` переносим вручную (пути модуля разошлись).
+`aux` (module `github.com/oglenyaboss/aux-player`) grew out of a fork of `simonepelosi/vibez`, an Apple Music TUI in Go/Bubble Tea. The stage lives in `internal/stage/`, the music picker agent in `internal/vibeai/`, and the stage host and the bridge to the agent in `internal/tui/` (`model.go`, `stage.go`, `vibeai.go`). The player and the Apple provider are inherited code: change them minimally and port fixes from `upstream` by hand (the module paths have diverged).
 
 ## GitHub
 
-Все issues и PR — только в `oglenyaboss/aux-player`. Remote `upstream` (`simonepelosi/vibez`) — источник фиксов, туда ничего не создаём. Если `gh repo view` показывает другой репо — `gh repo set-default oglenyaboss/aux-player`.
+Issues and PRs go to `oglenyaboss/aux-player` only. The `upstream` remote (`simonepelosi/vibez`) is a source of fixes; nothing is created there. If `gh repo view` shows another repo, run `gh repo set-default oglenyaboss/aux-player`.
 
-## Vibes AI
+## Picker agent
 
-- Решения по подбору — `lab/SPEC.md` и `lab/PLAN.md`; меняются только с согласия владельца.
-- Живые данные владельца для оценки изменений: логи сессий `~/.cache/aux/vibe/runs/`, сигналы `~/.config/aux/vibe-signals.jsonl`, память `~/.config/aux/vibe-memory.md`.
-- `~/.config/aux/config.json` и `lab/*.env` содержат токены и ключи — читаем точечно, в вывод не печатаем.
-- Тексты для владельца, промпт, брифы, доки `lab/` — по-русски. Код апстрима — в его стиле, по-английски.
-- Брифы воркерам — `lab/briefs/NNx-*.md`.
+- Live data for judging a change to the picker: session logs in `~/.cache/aux/vibe/runs/`, signals in `~/.config/aux/vibe-signals.jsonl`, memory in `~/.config/aux/vibe-memory.md`.
+- `~/.config/aux/config.json` and `lab/*.env` hold tokens and keys: read single fields, never print them.
+- `lab/scene` renders the stage without a player (`go run ./lab/scene -demo`, `-egg "artist title"`, `-shots 3,10`).
+- Code, comments, docs and commit messages are in English. User-facing strings go through `stage.Tr(ru, en)`.
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues `oglenyaboss/aux-player` через `gh`. See `docs/agents/issue-tracker.md`.
+GitHub Issues on `oglenyaboss/aux-player` through `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Пять стандартных меток: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+Five labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` + `docs/adr/` в корне. See `docs/agents/domain.md`.
+Single context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
