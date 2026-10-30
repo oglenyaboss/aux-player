@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -174,7 +175,7 @@ func (a *appleAPI) getRaw(ctx context.Context, path string) ([]byte, int, error)
 	if err != nil {
 		return nil, 0, fmt.Errorf("apple: %v", safeErr(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("apple: reading the response: %v", err)
@@ -222,7 +223,7 @@ func (a *appleAPI) post(ctx context.Context, path string, body any) ([]byte, int
 	if err != nil {
 		return nil, 0, fmt.Errorf("apple: %v", safeErr(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("apple: reading the response: %v", err)
@@ -342,9 +343,7 @@ func fetchFavorites(ctx context.Context, api *appleAPI, library []Song, libIDs [
 		if err != nil {
 			return nil, err
 		}
-		for k, v := range l {
-			loved[k] = v
-		}
+		maps.Copy(loved, l)
 	}
 	favs := make([]Song, 0, len(loved))
 	for i, s := range library {

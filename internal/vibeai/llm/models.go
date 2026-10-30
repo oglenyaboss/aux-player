@@ -45,7 +45,7 @@ func ListModels(ctx context.Context, h *http.Client, baseURL, apiKey string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("llm: models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return nil, fmt.Errorf("llm: models: %w", err)
@@ -66,7 +66,7 @@ func verifyKey(ctx context.Context, h *http.Client, base, apiKey, session string
 	if err != nil {
 		return fmt.Errorf("llm: models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if err != nil {
 		return fmt.Errorf("llm: models: %w", err)

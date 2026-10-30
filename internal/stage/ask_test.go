@@ -69,7 +69,7 @@ func TestAskLongTitle(t *testing.T) {
 	steps(m, 1.5)
 	frame := stripANSI(m.View())
 	var line string
-	for _, l := range strings.Split(frame, "\n") {
+	for l := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(l, strings.Repeat("я", 10)) {
 			line = l
 			break

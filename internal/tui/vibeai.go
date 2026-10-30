@@ -296,10 +296,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		if v.quit {
 			return nil
 		}
-		dt := now.Sub(v.last)
-		if dt > 100*time.Millisecond {
-			dt = 100 * time.Millisecond
-		}
+		dt := min(now.Sub(v.last), 100*time.Millisecond)
 		v.last = now
 		if e := v.initErr; e != "" {
 			switch v.st.Phase() {

@@ -329,9 +329,9 @@ func TestSystemPromptSections(t *testing.T) {
 			t.Errorf("systemPrompt не содержит %q", want)
 		}
 	}
-	if i := strings.Index(sp, "## Memory about the listener"); i >= 0 {
-		if cyrillic.MatchString(sp[:i]) {
-			t.Errorf("кириллица в systemPrompt до секции памяти:\n%s", sp[:i])
+	if before, _, ok := strings.Cut(sp, "## Memory about the listener"); ok {
+		if cyrillic.MatchString(before) {
+			t.Errorf("кириллица в systemPrompt до секции памяти:\n%s", before)
 		}
 	}
 	ru := systemPrompt(st, nil, "ru")
@@ -554,7 +554,7 @@ func TestTurnOffersReserve(t *testing.T) {
 
 func TestTurnStopsAtSlack(t *testing.T) {
 	tracks := make([]string, 0, 18)
-	for i := 0; i < 18; i++ {
+	for i := range 18 {
 		tracks = append(tracks, fmt.Sprintf(`{"artist":"A%d","title":"T%d","why":"w"}`, i, i))
 	}
 	ch := &fakeChatter{resps: []llm.Response{
@@ -610,15 +610,16 @@ func TestSubmitOverLimitAndBadMode(t *testing.T) {
 	if res := a.dispatch(context.Background(), call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)); !strings.HasPrefix(res, "plan accepted") {
 		t.Fatalf("set_plan: %q", res)
 	}
-	tracks := `{"tracks":[`
-	for i := 0; i < 31; i++ {
+	var tracks strings.Builder
+	tracks.WriteString(`{"tracks":[`)
+	for i := range 31 {
 		if i > 0 {
-			tracks += ","
+			tracks.WriteString(",")
 		}
-		tracks += fmt.Sprintf(`{"artist":"A%d","title":"T%d","why":"w"}`, i, i)
+		_, _ = fmt.Fprintf(&tracks, `{"artist":"A%d","title":"T%d","why":"w"}`, i, i)
 	}
-	tracks += `]}`
-	res := a.dispatch(context.Background(), call("s", "submit_candidates", tracks))
+	tracks.WriteString(`]}`)
+	res := a.dispatch(context.Background(), call("s", "submit_candidates", tracks.String()))
 	if res != "error: 1–30 tracks" {
 		t.Errorf("31 трек: got %q", res)
 	}

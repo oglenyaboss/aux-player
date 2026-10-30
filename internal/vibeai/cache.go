@@ -15,7 +15,7 @@ const (
 )
 
 func readCache(path string) ([]Song, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is a file inside the user cache dir
 	if err != nil {
 		return nil, err
 	}
@@ -31,11 +31,11 @@ func writeCache(path string, songs []Song) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -60,7 +60,7 @@ func loadCaches(ctx context.Context, api *appleAPI, dir string, maxAge time.Dura
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, nil, err
 	}
 	if err := writeCache(filepath.Join(dir, libraryCacheName), library); err != nil {

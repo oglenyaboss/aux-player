@@ -12,7 +12,7 @@ func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 // runTo steps until the phase becomes p or the step budget runs out.
 func runTo(m *Model, p Phase, maxSteps int) bool {
-	for i := 0; i < maxSteps; i++ {
+	for range maxSteps {
 		if m.Phase() == p {
 			return true
 		}
@@ -104,7 +104,7 @@ func TestCandidatePacing(t *testing.T) {
 	m.SetSize(110, 32)
 	toScan(t, m)
 	tr := Track{Artist: "Solo", Title: "One"}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		m.Candidate(tr, true, "")
 	}
 	if len(m.cands) != 1 {

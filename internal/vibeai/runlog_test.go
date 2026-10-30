@@ -19,7 +19,7 @@ func TestRunLogSave(t *testing.T) {
 	if !strings.HasSuffix(path, "20261021-150405-dontoliverhardstonepsycho.md") {
 		t.Errorf("path = %q, want suffix 20261021-150405-dontoliverhardstonepsycho.md", path)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file the test just wrote under its temp dir
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

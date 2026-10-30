@@ -33,7 +33,7 @@ func hashStr(s string) uint32 {
 // Missing covers fall back to a generated gradient inside the stage.
 func loadCovers(tracks []stage.Track) map[string]image.Image {
 	dir := filepath.Join(os.TempDir(), "vibez-scene-covers")
-	_ = os.MkdirAll(dir, 0o755)
+	_ = os.MkdirAll(dir, 0o750)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	out := map[string]image.Image{}
@@ -49,11 +49,11 @@ func loadCovers(tracks []stage.Track) map[string]image.Image {
 					return
 				}
 			}
-			f, err := os.Open(path)
+			f, err := os.Open(path) //nolint:gosec // G304: the path is the demo cover cache this run wrote
 			if err != nil {
 				return
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			img, _, err := image.Decode(f)
 			if err != nil {
 				return
@@ -74,7 +74,7 @@ func fetchCover(ctx context.Context, t stage.Track, path string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var res struct {
 		Results []struct {
 			ArtworkURL100 string `json:"artworkUrl100"`
@@ -89,12 +89,12 @@ func fetchCover(ctx context.Context, t stage.Track, path string) error {
 	if err != nil {
 		return err
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	data, err := io.ReadAll(resp2.Body)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // itunesResults decodes one iTunes Search / Lookup response: artist, collection,
@@ -119,7 +119,7 @@ func itunesGet(ctx context.Context, query string) (itunesResults, error) {
 	if err != nil {
 		return itunesResults{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var res itunesResults
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return itunesResults{}, err
@@ -180,7 +180,7 @@ func fetchImage(ctx context.Context, u string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	img, _, err := image.Decode(resp.Body)
 	return img, err
 }

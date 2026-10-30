@@ -30,8 +30,8 @@ func (g *pixgrid) at(x, y int) col {
 func sample(img image.Image, w, h int) *pixgrid {
 	g := &pixgrid{w: w, h: h, p: make([]col, w*h)}
 	b := img.Bounds()
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			x0 := b.Min.X + x*b.Dx()/w
 			x1 := b.Min.X + (x+1)*b.Dx()/w
 			y0 := b.Min.Y + y*b.Dy()/h
@@ -57,8 +57,8 @@ func procedural(key string, w, h int) *pixgrid {
 	s := float64(hashStr(key) % 360)
 	c1, c2 := hsv(s, 0.7, 0.85), hsv(s+70, 0.8, 0.35)
 	g := &pixgrid{w: w, h: h, p: make([]col, w*h)}
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			u, v := float64(x)/float64(w), float64(y)/float64(h)
 			c := c2.lerp(c1, (u+v)/2)
 			d := math.Hypot(u-0.62, v-0.38)
@@ -89,8 +89,8 @@ func (m *Model) cover(key string, w, h int) *pixgrid {
 // themeOf derives the UI palette from a cover: dominant hues become accents, the darkest tone the backdrop.
 func themeOf(g *pixgrid) theme {
 	type bucket struct {
-		h, s, v, n float64
-		c          col
+		n float64
+		c col
 	}
 	var bs [12]bucket
 	var avg col

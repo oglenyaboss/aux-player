@@ -20,6 +20,7 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
+//nolint:unused // cdpPlatformHooks is used by cmd/root_chrome.go, built on darwin and windows only
 type cdpPlatformHooks struct {
 	initStatus  string
 	afterReady  func(*cdp.Player)
@@ -27,6 +28,7 @@ type cdpPlatformHooks struct {
 	backend     func(audioBitrateKbps int) string
 }
 
+//nolint:unused // runCDPFlow is used by cmd/root_chrome.go, built on darwin and windows only
 func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront func(string), audioBitrateKbps int, hooks cdpPlatformHooks) error {
 	// Without a stored user token the sign-in waits for the AUX onboarding to ask.
 	var ask chan struct{}
@@ -164,7 +166,8 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		if hooks.afterReady != nil {
 			hooks.afterReady(cdpPlayer)
 		}
-		go lastfmScrobbleLoop(lfm, cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		lfmLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
+		go lastfmScrobbleLoop(lfm, cfg, startLastfmScrobbler(cfg, cdpPlayer, lfmLog), cdpPlayer, lfmLog)
 		stopRPC = startDiscordRPC(cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 
 		prog.Send(tui.EngineReadyMsg{

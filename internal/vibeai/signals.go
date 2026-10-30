@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -39,14 +40,14 @@ func OpenSignals(path string) (*Signals, error) {
 	if path == "" {
 		return s, nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is the user's own signals file
 	if err != nil {
 		if os.IsNotExist(err) {
 			return s, nil
 		}
 		return nil, err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -65,7 +66,7 @@ func (s *Signals) append(recs ...signalRec) error {
 	if s.path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
 	var b strings.Builder
@@ -77,11 +78,11 @@ func (s *Signals) append(recs ...signalRec) error {
 		b.Write(line)
 		b.WriteByte('\n')
 	}
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.WriteString(b.String())
 	return err
 }
@@ -259,10 +260,5 @@ func (s *Signals) lastRating(session, id string) string {
 }
 
 func recHasArtist(r signalRec, artist string) bool {
-	for _, a := range songArtists(Song{Artist: r.Artist, Title: r.Title}) {
-		if a == artist {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(songArtists(Song{Artist: r.Artist, Title: r.Title}), artist)
 }

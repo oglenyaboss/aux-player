@@ -83,7 +83,7 @@ func dsotmBeam(m *Model, f *fb, g playGeom) {
 	}
 	by := g.cy*2 + int(0.49*float64(g.ch*2))
 	light := hex(0xfdfdff)
-	for x := 0; x < hx; x++ {
+	for x := range hx {
 		f.pixel(x, by, light)
 		f.pixel(x, by-1, f.pixelAt(x, by-1).lerp(light, 0.25))
 		f.pixel(x, by+1, f.pixelAt(x, by+1).lerp(light, 0.25))
@@ -104,11 +104,12 @@ func dsotmBridge(m *Model, f *fb, g playGeom) {
 	if head <= 0 {
 		return
 	}
-	for i := 0; i < len(dsotmSpectrum); i++ {
+	for i := range dsotmSpectrum {
 		ys := float64(g.cy*2) + (0.41+0.02*float64(i))*float64(g.ch*2)
 		ye := float64((m.barBox.Min.Y-1)*2 + i)
-		for x := x0; x < x0+head; x++ {
-			t := (float64(x-x0) + 0.5) / float64(n)
+		for dx := range head {
+			x := x0 + dx
+			t := (float64(dx) + 0.5) / float64(n)
 			f.pixel(x, int(math.Round(lerpf(ys, ye, t))), dsotmSpectrum[i])
 		}
 	}

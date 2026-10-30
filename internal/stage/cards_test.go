@@ -25,8 +25,8 @@ func redCover(t *testing.T, m *Model, key string) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	red := color.RGBA{R: 255, A: 255}
-	for yy := 0; yy < 8; yy++ {
-		for xx := 0; xx < 8; xx++ {
+	for yy := range 8 {
+		for xx := range 8 {
 			img.Set(xx, yy, red)
 		}
 	}
@@ -141,7 +141,7 @@ func TestTrackCardNarrow(t *testing.T) {
 			t.Fatalf("кадр без %q:\n%s", s, frame)
 		}
 	}
-	for _, line := range strings.Split(frame, "\n") {
+	for line := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(line, "←→") && !strings.HasSuffix(strings.TrimRight(line, " "), "│") {
 			t.Fatalf("подсказка рвёт рамку карточки: %q", line)
 		}
@@ -197,7 +197,7 @@ func TestLaterTrackToast(t *testing.T) {
 	w := min(46, m.w-6)
 	x := m.w - w - 3 + int(tt.x.x)
 	hit, total := 0, 0
-	for k := 0; k < 2; k++ {
+	for k := range 2 {
 		ox := x + 2 + k*14
 		for yy := yBase(m) - 8 + 1 + 3; yy < yBase(m)-8+1+6; yy++ {
 			for xx := ox; xx < ox+6; xx++ {
@@ -245,7 +245,7 @@ func TestScanSlotsOption(t *testing.T) {
 	}
 	m.PortionDone(tracks, "")
 	sawDone := false
-	for i := 0; i < int(10/eventDT); i++ {
+	for range int(10 / eventDT) {
 		m.Step(eventDT)
 		if m.Phase() == PhDone {
 			sawDone = true

@@ -195,7 +195,7 @@ type pt struct{ x, y int }
 
 func perim(x, y, w, h int) []pt {
 	var p []pt
-	for i := 0; i < w; i++ {
+	for i := range w {
 		p = append(p, pt{x + i, y})
 	}
 	for j := 1; j < h-1; j++ {
@@ -364,7 +364,7 @@ func (m *Model) drawScale(f *fb, q Question, x, y, w int, a float64) {
 	reveal := easeOut(prog(m.qT, 0.55, 0.5))
 	kpx := tx + int(math.Round(kx*float64(tw-1)))
 	step := max(1, (tw-1)/(steps-1))
-	for i := 0; i < tw; i++ {
+	for i := range tw {
 		u := float64(i) / float64(tw-1)
 		if u > reveal {
 			break
@@ -416,7 +416,7 @@ func (m *Model) drawTrackOptions(f *fb, q Question, x, y, w int, ca float64) {
 		ox := cx + (colW-cw)/2
 		g := m.cover(tk.Key(), cw, 2*ch)
 		for py := 0; py < 2*ch; py++ {
-			for px := 0; px < cw; px++ {
+			for px := range cw {
 				f.pixel(ox+px, (y+4)*2+py, g.at(px, py).mul(oa*(0.5+0.5*hl)))
 			}
 		}
@@ -464,8 +464,8 @@ func (m *Model) drawTrackList(f *fb, q Question, x, y, w int) {
 			f.fade(x+2, ry, "▌", m.th.a1, hl*oa, false)
 		}
 		g := m.cover(tk.Key(), 4, 4)
-		for py := 0; py < 4; py++ {
-			for px := 0; px < 4; px++ {
+		for py := range 4 {
+			for px := range 4 {
 				f.pixel(x+3+px, ry*2+py, g.at(px, py).mul(oa*(0.5+0.5*hl)))
 			}
 		}
@@ -580,8 +580,8 @@ func (m *Model) drawScan(f *fb) {
 			}
 			g := m.cover(s.tr.Key(), 4, 4)
 			r := easeOut(age / 0.35)
-			for yy := 0; yy < 4; yy++ {
-				for xx := 0; xx < 4; xx++ {
+			for yy := range 4 {
+				for xx := range 4 {
 					f.pixel(px+xx, py*2+yy, f.pixelAt(px+xx, py*2+yy).lerp(g.at(xx, yy).lerp(white, 0.4*wave), r))
 				}
 			}
@@ -711,7 +711,7 @@ func (m *Model) drawPlay(f *fb) {
 	if e != nil && e.switchAt > 0 && m.pos < e.switchAt {
 		mark = int(e.switchAt / tk.Dur * float64(bw))
 	}
-	for i := 0; i < bw; i++ {
+	for i := range bw {
 		var r rune
 		var c col
 		switch {
@@ -756,8 +756,8 @@ func (m *Model) drawPlay(f *fb) {
 				rp = prog(m.t-m.queueT, 0.08*float64(k), 0.4)
 			}
 			tg := m.cover(next.Key(), 4, 4)
-			for yy := 0; yy < 4; yy++ {
-				for xx := 0; xx < 4; xx++ {
+			for yy := range 4 {
+				for xx := range 4 {
 					if hash(xx, yy, k) < rp {
 						f.pixel(x+xx, y*2+yy, tg.at(xx, yy).mul(0.85*(1-0.7*m.pause)))
 					}
@@ -841,20 +841,20 @@ func (m *Model) drawNextStrip(f *fb, x, y, pw int) {
 	n := m.next
 	d := prog(m.t-n.goneAt, 0, 0.4)
 	k := min(m.portionSize(), (pw+1)/5)
-	for i := 0; i < k; i++ {
+	for i := range k {
 		sx := x + 5*i
 		if n.state == nextGathering {
 			b := 0.18 + 0.12*(0.5+0.5*math.Sin(m.t*3-float64(i)*0.8))
-			for yy := 0; yy < 4; yy++ {
-				for xx := 0; xx < 4; xx++ {
+			for yy := range 4 {
+				for xx := range 4 {
 					f.pixel(sx+xx, y*2+yy, m.th.dim.mul(b))
 				}
 			}
 		}
 		if i < len(n.gone) && d < 1 {
 			g := m.cover(n.gone[i].Key(), 4, 4)
-			for yy := 0; yy < 4; yy++ {
-				for xx := 0; xx < 4; xx++ {
+			for yy := range 4 {
+				for xx := range 4 {
 					if hash(xx, yy, i+23) >= d {
 						f.pixel(sx+xx, y*2+yy, g.at(xx, yy).mul(0.7*(1-0.7*m.pause)))
 					}
@@ -868,8 +868,8 @@ func (m *Model) drawNextStrip(f *fb, x, y, pw int) {
 			}
 			g := m.cover(n.tracks[i].Key(), 4, 4)
 			rp := prog(m.t-n.born[i], 0, 0.5)
-			for yy := 0; yy < 4; yy++ {
-				for xx := 0; xx < 4; xx++ {
+			for yy := range 4 {
+				for xx := range 4 {
 					if hash(xx, yy, i+11) < rp {
 						f.pixel(sx+xx, y*2+yy, g.at(xx, yy).mul(b*(1-0.7*m.pause)))
 					}
@@ -979,8 +979,8 @@ func (m *Model) drawToasts(f *fb) {
 					}
 				}
 				g := m.cover(tk.Key(), 6, 6)
-				for py := 0; py < 6; py++ {
-					for px := 0; px < 6; px++ {
+				for py := range 6 {
+					for px := range 6 {
 						c := g.at(px, py)
 						if t.picked >= 0 && t.picked != k {
 							c = c.mul(0.5)
@@ -1062,7 +1062,7 @@ func (m *Model) orb(f *fb, cx, cy, grow float64) {
 				continue
 			}
 			ang := math.Atan2(dy, dx)/(2*math.Pi) + m.t*0.35
-			c := m.th.grad(ang).lerp(white, 0.75*math.Pow(1-d/r, 2))
+			c := m.th.grad(ang).lerp(white, 0.75*math.Pow(1-d/r, 2)) //nolint:staticcheck // QF1005: keeps the float result pixel-exact
 			f.pixel(px, py, f.pixelAt(px, py).lerp(c, clamp01(r-d)))
 		}
 	}
@@ -1107,8 +1107,8 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 	for _, r := range rs {
 		g := font3[r]
 		gw := len(g[0])
-		for gy := 0; gy < 5; gy++ {
-			for gx := 0; gx < gw; gx++ {
+		for gy := range 5 {
+			for gx := range gw {
 				if g[gy][gx] != '#' {
 					continue
 				}

@@ -125,7 +125,7 @@ func TestToolCallRoundtrip(t *testing.T) {
 
 func TestRequestHeaders(t *testing.T) {
 	c, reqs := newTestClient(t, func(int) (int, string) { return http.StatusOK, okBody })
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
 			t.Fatal(err)
 		}

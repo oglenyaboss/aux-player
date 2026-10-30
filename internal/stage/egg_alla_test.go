@@ -15,8 +15,8 @@ var (
 // allaPortrait is a grey cover with a pink stain at the top left, like the eye.
 func allaPortrait() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 60, 60))
-	for y := 0; y < 60; y++ {
-		for x := 0; x < 60; x++ {
+	for y := range 60 {
+		for x := range 60 {
 			c := color.RGBA{uint8(60 + 2*x), uint8(60 + 2*x), uint8(60 + 2*x), 255}
 			if x < 20 && y < 20 {
 				c = color.RGBA{220, 110, 150, 255}

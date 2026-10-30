@@ -379,7 +379,7 @@ func (m *Model) appendLog(line string) {
 	ts := time.Now().Format("15:04:05")
 	m.debugLog = append(m.debugLog, ts+"  "+line)
 	if m.logW != nil {
-		fmt.Fprintf(m.logW, "%s  %s\n", time.Now().Format("2006-01-02 15:04:05.000"), line)
+		_, _ = fmt.Fprintf(m.logW, "%s  %s\n", time.Now().Format("2006-01-02 15:04:05.000"), line)
 	}
 	if len(m.debugLog) > maxLines {
 		m.debugLog = m.debugLog[len(m.debugLog)-maxLines:]

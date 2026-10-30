@@ -155,7 +155,7 @@ func (m *Model) completeStep() {
 
 func (m *Model) onboardKey(k, text string) {
 	o := m.ob
-	if o.t < obReady-0.4 || o.waitT >= 0 && !(o.step == 2 && k == "tab") || o.step > 2 {
+	if o.t < obReady-0.4 || o.waitT >= 0 && (o.step != 2 || k != "tab") || o.step > 2 {
 		return
 	}
 	o.errMsg = ""
@@ -454,22 +454,22 @@ type discView struct {
 }
 
 // toDisc maps a screen pixel to the record plane, unit radius; the top edge leans away from the viewer.
-func (d discView) toDisc(sx, sy float64) (X, Y float64, ok bool) {
+func (d discView) toDisc(sx, sy float64) (float64, float64, bool) {
 	u, v := (sx-d.cx)/d.R, (sy-d.cy)/d.R
 	sn, cs := math.Sin(d.tilt), math.Cos(d.tilt)
 	den := obFocal*cs + v*sn
 	if den <= 0.05 {
 		return 0, 0, false
 	}
-	Y = v * obFocal / den
-	s := obFocal / (obFocal - Y*sn)
-	return u / s, Y, true
+	y := v * obFocal / den
+	s := obFocal / (obFocal - y*sn)
+	return u / s, y, true
 }
 
-func (d discView) toScreen(X, Y, z float64) (sx, sy float64) {
+func (d discView) toScreen(x, y, z float64) (sx, sy float64) {
 	sn, cs := math.Sin(d.tilt), math.Cos(d.tilt)
-	s := obFocal / (obFocal - Y*sn)
-	return d.cx + X*s*d.R, d.cy + (Y*cs*s-z*sn)*d.R
+	s := obFocal / (obFocal - y*sn)
+	return d.cx + x*s*d.R, d.cy + (y*cs*s-z*sn)*d.R
 }
 
 type discLook struct {
@@ -520,15 +520,15 @@ func (m *Model) discState() (discView, *discLook) {
 
 // ---------- record ----------
 
-func (lk *discLook) shade(X, Y, spin float64) (col, float64) {
-	r := math.Hypot(X, Y)
+func (lk *discLook) shade(x, y, spin float64) (col, float64) {
+	r := math.Hypot(x, y)
 	if r > 1 || r < 0.03 || r < 1-lk.fill {
 		return col{}, 0
 	}
-	th := math.Atan2(Y, X)
+	th := math.Atan2(y, x)
 	var c col
 	if r < 0.34 {
-		c = lk.labelAt(X, Y, r, spin)
+		c = lk.labelAt(x, y, r, spin)
 	} else {
 		c = lk.vinyl(r, th, spin)
 	}
@@ -536,23 +536,23 @@ func (lk *discLook) shade(X, Y, spin float64) (col, float64) {
 		c = c.lerp(lk.accent.lerp(white, 0.4), math.Exp(-(r-(1-lk.fill))/0.03))
 	}
 	if lk.ripple >= 0 {
-		d := math.Hypot(X-lk.rx, Y-lk.ry)
+		d := math.Hypot(x-lk.rx, y-lk.ry)
 		rr := lk.ripple * 1.4
 		c = c.lerp(lk.accent.lerp(white, 0.3), 0.7*math.Exp(-(d-rr)*(d-rr)/0.0008)*(1-lk.ripple/1.2))
 	}
 	return c, 1
 }
 
-func (lk *discLook) labelAt(X, Y, r, spin float64) col {
+func (lk *discLook) labelAt(x, y, r, spin float64) col {
 	gray := lk.label
 	edge := 0.34 * lk.wipe
 	c := gray.lerp(lk.accent.mul(0.9), smooth((edge-r)/0.04+0.5))
 	if r > 0.325 {
 		c = c.mul(0.75)
 	}
-	c = c.mul(0.92 - 0.12*Y)
+	c = c.mul(0.92 - 0.12*y)
 	cs, sn := math.Cos(spin), math.Sin(spin)
-	lx, ly := X*cs+Y*sn, -X*sn+Y*cs
+	lx, ly := x*cs+y*sn, -x*sn+y*cs
 	const unit = 0.36 / 17
 	gx, gy := int(math.Floor((lx+0.18)/unit)), int(math.Floor((ly+0.21)/unit))
 	if lk.print && gx >= 0 && gx < 17 && gy >= 0 && gy < 5 && gx%6 < 5 {
@@ -742,7 +742,7 @@ func (l *lightbuf) add(x, y, a float64) {
 func (l *lightbuf) blur(passes int) {
 	tmp := make([]float64, len(l.v))
 	const r = 2
-	for i := 0; i < passes; i++ {
+	for range passes {
 		for y := 0; y < l.h; y++ {
 			for x := 0; x < l.w; x++ {
 				s := 0.0
@@ -768,7 +768,7 @@ func (l *lightbuf) blur(passes int) {
 	}
 }
 
-func (m *Model) drawWave(f *fb, R float64) {
+func (m *Model) drawWave(f *fb, r float64) {
 	t := m.ob.t
 	fade := 1 - prog(t, 2.6, 0.8)
 	if fade <= 0 {
@@ -779,11 +779,11 @@ func (m *Model) drawWave(f *fb, R float64) {
 	grow := easeInOut(prog(t, 0.45, 1.0))
 	curl := easeInOut(prog(t, 1.5, 1.1))
 	level := easeOut(prog(t, 0.5, 0.9))
-	lw := math.Min(float64(f.w)-8, 2*math.Pi*R)
+	lw := math.Min(float64(f.w)-8, 2*math.Pi*r)
 	dot := easeOut(prog(t, 0.1, 0.4)) * (1 - grow)
 	lb.add(cx, cy, 6*dot)
 	const n = 1400
-	wgt := lerpf(lw, 2*math.Pi*R, curl) / n * 1.2
+	wgt := lerpf(lw, 2*math.Pi*r, curl) / n * 1.2
 	core := make([][2]float64, 0, n+1)
 	for i := 0; i <= n; i++ {
 		u := float64(i) / n
@@ -792,9 +792,9 @@ func (m *Model) drawWave(f *fb, R float64) {
 		}
 		env := lerpf(math.Pow(math.Sin(math.Pi*u), 1.5), 0.7, curl)
 		amp := env * level * (0.55*math.Sin(u*38+t*7) + 0.3*math.Sin(u*91-t*11) + 0.15*math.Sin(u*173+t*17))
-		lx, ly := cx+(u-0.5)*lw, cy+amp*R*0.4
+		lx, ly := cx+(u-0.5)*lw, cy+amp*r*0.4
 		ang := -math.Pi/2 + u*2*math.Pi
-		rad := R * (1 + amp*0.14)
+		rad := r * (1 + amp*0.14)
 		x, y := lerpf(lx, cx+math.Cos(ang)*rad, curl), lerpf(ly, cy+math.Sin(ang)*rad, curl)
 		lb.add(x, y, wgt)
 		core = append(core, [2]float64{x, y})

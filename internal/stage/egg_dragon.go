@@ -73,16 +73,16 @@ func dragonCompass(m *Model, f *fb) {
 	}
 	offset := int(fr * float64(bw) * 3)
 	dr := easeOut(prog(m.trackT, 6, 1))
-	for i := 0; i < bw; i++ {
+	for i := range bw {
 		if hash(i, 0, 71) >= dr {
 			continue
 		}
 		var r rune
 		var c col
-		switch {
-		case i == 0:
+		switch i {
+		case 0:
 			r, c = '╟', hex(0x8a5a3a)
-		case i == bw-1:
+		case bw - 1:
 			r, c = '╢', hex(0x8a5a3a)
 		default:
 			r = dragonTape[(i+offset)%len(dragonTape)]

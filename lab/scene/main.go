@@ -96,10 +96,10 @@ func main() {
 
 	if *shots != "" {
 		var w, h int
-		fmt.Sscanf(*size, "%dx%d", &w, &h)
+		_, _ = fmt.Sscanf(*size, "%dx%d", &w, &h)
 		s.m.SetSize(w, h)
 		var times []float64
-		for _, v := range strings.Split(*shots, ",") {
+		for v := range strings.SplitSeq(*shots, ",") {
 			f, _ := strconv.ParseFloat(v, 64)
 			times = append(times, f)
 		}

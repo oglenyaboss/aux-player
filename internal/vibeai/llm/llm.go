@@ -18,12 +18,12 @@ import (
 type Config struct{ BaseURL, APIKey, Model, Effort string }
 
 func LoadEnv(path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is the user's own config file
 	if err != nil {
 		return Config{}, fmt.Errorf("llm: %w", err)
 	}
 	vals := map[string]string{}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -99,7 +99,7 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool, jsonMod
 		return Response{}, err
 	}
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		if attempt > 0 {
 			c.sleep(time.Duration(attempt) * time.Second)
 		}
@@ -206,7 +206,7 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 	if err != nil {
 		return Response{}, retryableError{fmt.Errorf("llm: %w", err)}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))

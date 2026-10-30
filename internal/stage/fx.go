@@ -5,22 +5,25 @@ import (
 )
 
 func prog(t, start, dur float64) float64 { return clamp01((t - start) / dur) }
-func easeOut(t float64) float64          { t = clamp01(t); return 1 - math.Pow(1-t, 3) }
-func easeIn(t float64) float64           { t = clamp01(t); return t * t * t }
+func easeOut(t float64) float64 {
+	t = clamp01(t)
+	return 1 - math.Pow(1-t, 3) //nolint:staticcheck // QF1005: keeps the float result pixel-exact
+}
+func easeIn(t float64) float64 { t = clamp01(t); return t * t * t }
 
 func easeInOut(t float64) float64 {
 	t = clamp01(t)
 	if t < 0.5 {
 		return 4 * t * t * t
 	}
-	return 1 - math.Pow(-2*t+2, 3)/2
+	return 1 - math.Pow(-2*t+2, 3)/2 //nolint:staticcheck // QF1005: keeps the float result pixel-exact
 }
 
 type spring struct{ x, v, to float64 }
 
 func (s *spring) step(dt float64) {
 	const k, c = 240.0, 31.0
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		h := dt / 4
 		s.v += (k*(s.to-s.x) - c*s.v) * h
 		s.x += s.v * h
@@ -28,6 +31,7 @@ func (s *spring) step(dt float64) {
 }
 
 func hash(x, y, s int) float64 {
+	//nolint:gosec // G115: the wrap-around of negative coordinates is what mixes the hash
 	h := uint32(x)*374761393 + uint32(y)*668265263 + uint32(s)*2246822519
 	h = (h ^ (h >> 13)) * 1274126177
 	h ^= h >> 16
@@ -124,7 +128,7 @@ func (a theme) lerp(b theme, t float64) theme {
 
 // grad is the single accent breathing toward its pale tint for u in [0,1).
 func (a theme) grad(u float64) col {
-	u = u - math.Floor(u)
+	u -= math.Floor(u)
 	return a.a1.lerp(a.a2, 0.5-0.5*math.Cos(2*math.Pi*u))
 }
 

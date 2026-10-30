@@ -186,7 +186,7 @@ func TestStageModelsReachScene(t *testing.T) {
 	m := New(cfg, &mockProvider{}, nil, Options{})
 	s := m.vibeAIP.m
 	st := s.st
-	for i := 0; i < 182; i++ { // ≈6 s, past obReady
+	for range 182 { // ≈6 s, past obReady
 		st.Step(0.033)
 	}
 	if _, _, _, ok := st.Onboarding(); !ok {
@@ -206,7 +206,7 @@ func TestStageModelsReachScene(t *testing.T) {
 		t.Fatal("no command after the agent key was confirmed")
 	}
 	m.handleVibeAIMsg(cmd())
-	for i := 0; i < 46; i++ { // 1.5 s: the loading substep gives way to the model list
+	for range 46 { // 1.5 s: the loading substep gives way to the model list
 		st.Step(0.033)
 	}
 	_, sub, _, ok := st.Onboarding()
@@ -227,7 +227,7 @@ func TestStageSetupSaves(t *testing.T) {
 	if got := vibeAIConfig(m.cfg).LLM.Effort; got != "high" {
 		t.Fatalf("engine effort = %q, want high", got)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestStageLastfmConnect(t *testing.T) {
 	if m.cfg.LastfmSessionKey != "sess" {
 		t.Fatalf("session key = %q, want sess", m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestStageLastfmTypedKeys(t *testing.T) {
 		t.Fatalf("cfg = (%q,%q,%q), ждём (k,s,sess)",
 			m.cfg.LastfmAPIKey, m.cfg.LastfmAPISecret, m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestStageEggsSaves(t *testing.T) {
 	if m.cfg.VibeEggs == nil || *m.cfg.VibeEggs {
 		t.Fatalf("VibeEggs = %v, ждём false", m.cfg.VibeEggs)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json"))
+	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}

@@ -195,8 +195,8 @@ func openDebugLog() (*os.File, error) {
 		return nil, fmt.Errorf("debug log: %w", err)
 	}
 	dir = filepath.Join(dir, "aux")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("debug log: %w", err)
 	}
-	return os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	return os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // G304: the path is the user cache dir plus a fixed name
 }

@@ -55,7 +55,7 @@ func (q Question) trackCard() bool {
 type Chip struct{ Token, Label string }
 
 // Action is what the screen sends to the host through Options.OnAction.
-type Action interface{}
+type Action any
 
 // Query is the line typed on the intro input, sent on enter.
 type Query struct{ Text string }
@@ -679,7 +679,7 @@ func (m *Model) buildLogo() {
 	x0 := (m.w - width) / 2
 	y0 := (m.h/2 - 4 - 5*sc/2) * 2
 	m.logo = m.logo[:0]
-	rng := rand.New(rand.NewSource(3))
+	rng := rand.New(rand.NewSource(3)) //nolint:gosec // G404: the intro particle jitter is deterministic on purpose
 	for i, r := range word {
 		g := font5[r]
 		for gy, row := range g {
@@ -759,7 +759,7 @@ func (m *Model) launch() {
 		if at := strings.Index(m.query, s.Token); at >= 0 {
 			start := len([]rune(m.query[:at]))
 			n := len([]rune(s.Token))
-			for k := 0; k < n; k++ {
+			for k := range n {
 				owner[start+k] = ci
 				offset[start+k] = k * len([]rune(s.Label)) / n
 			}

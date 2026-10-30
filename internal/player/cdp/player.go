@@ -201,8 +201,8 @@ func New(devToken, userToken, storefront string, wsl bool, audioBitrateKbps int)
 	pageURL := "https://music.apple.com/aux/" + rand.Text() + "/"
 	if err := pg.Route(pageURL, func(r playwright.Route) {
 		_ = r.Fulfill(playwright.RouteFulfillOptions{
-			Status:      playwright.Int(200),
-			ContentType: playwright.String("text/html; charset=utf-8"),
+			Status:      new(200),
+			ContentType: new("text/html; charset=utf-8"),
 			Body:        html,
 		})
 	}); err != nil {

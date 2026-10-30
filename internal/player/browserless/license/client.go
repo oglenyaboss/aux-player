@@ -42,12 +42,13 @@ type Asset struct {
 }
 
 func NewClient(cfg *config.Config) *Client {
-	return &Client{
-		cfg: cfg,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-	}
+	return NewClientWithHTTPClient(cfg, &http.Client{Timeout: 15 * time.Second})
+}
+
+// NewClientWithHTTPClient is NewClient with the transport under the caller's
+// control: the browserless tests point MZPlay requests at a local server.
+func NewClientWithHTTPClient(cfg *config.Config, httpClient *http.Client) *Client {
+	return &Client{cfg: cfg, httpClient: httpClient}
 }
 
 // FetchPlaybackInfo requests playback metadata and HLS stream URLs from Apple MZPlay.

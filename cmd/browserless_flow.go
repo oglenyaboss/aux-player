@@ -135,7 +135,8 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 		}
 
 		// Last.fm scrobbler & Discord RPC integration
-		go lastfmScrobbleLoop(lfm, cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		lfmLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
+		go lastfmScrobbleLoop(lfm, cfg, startLastfmScrobbler(cfg, blPlayer, lfmLog), blPlayer, lfmLog)
 		stopRPC = startDiscordRPC(cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
 
 		backendLabel := fmt.Sprintf("Browserless (In-Process Widevine + GStreamer) · %d kbps AAC", audioBitrateKbps)

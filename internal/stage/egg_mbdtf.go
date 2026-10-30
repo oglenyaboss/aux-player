@@ -127,7 +127,7 @@ var (
 	mbdtfShadow  = hex(0xd6d6d1)
 )
 
-const mbdtfCredit = "George Condo, 2010"
+const mbdtfCredit = "George Condo, 2010" //nolint:gosec // G101: album cover credit, not a credential
 
 // mbdtfPaintings are the other covers Condo painted for the album, the inside of the
 // gold frame; the phoenix original is left out.
@@ -155,7 +155,8 @@ func mbdtfPainting(t Track) string {
 		return p
 	}
 	h := fnv.New32a()
-	h.Write([]byte(k))
+	_, _ = h.Write([]byte(k))
+	//nolint:gosec // G115: mbdtfRest is a five-element literal slice, the conversion cannot overflow
 	return mbdtfRest[h.Sum32()%uint32(len(mbdtfRest))]
 }
 
@@ -171,7 +172,7 @@ func mbdtfCanvasOf(m *Model, name string, n int) *pixgrid {
 			if d, err := jpeg.Decode(f); err == nil {
 				img = d
 			}
-			f.Close()
+			_ = f.Close()
 		}
 		m.covers[key] = img
 	}
@@ -302,8 +303,8 @@ func mbdtfWall(m *Model, f *fb, b mbdtfBox) {
 	name := mbdtfPainting(*tk)
 	cg := mbdtfCanvasOf(m, name, b.ms)
 	span := mbdtfMosaicU1 - mbdtfMosaicU0
-	for j := 0; j < 8; j++ {
-		for i := 0; i < 8; i++ {
+	for j := range 8 {
+		for i := range 8 {
 			shown := m.trackT >= 0.15+hash(i, j, 71)
 			u, v := mbdtfMosaicU0+(float64(i)+0.5)*span/8, mbdtfMosaicU0+(float64(j)+0.5)*span/8
 			block := cg.at(int(u*200), int(v*200))
@@ -397,7 +398,7 @@ var mbdtfPoses = [2][]string{{
 func mbdtfDancers(m *Model, f *fb, b mbdtfBox) {
 	floor := b.my + b.ms + 1
 	span := float64(m.w + 30)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		x := int(math.Mod(hash(i, 1, 91)*span+float64(i)*span/5+m.pos*3, span)) - 15
 		pose := mbdtfPoses[0]
 		if math.Mod(m.pos/2.4+hash(i, 2, 91), 1) > 0.6 {

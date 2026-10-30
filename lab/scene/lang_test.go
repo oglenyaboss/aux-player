@@ -52,7 +52,7 @@ func frameText(t *testing.T, w, h int, at float64) string {
 }
 
 func rowWith(frame, sub string) string {
-	for _, l := range strings.Split(frame, "\n") {
+	for l := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(l, sub) {
 			return l
 		}

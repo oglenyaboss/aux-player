@@ -12,8 +12,8 @@ var atakePluto = Track{Artist: "Lil Uzi Vert", Title: "Baby Pluto", Album: "Eter
 var atakeBlack = image.NewRGBA(image.Rect(0, 0, 120, 120))
 
 func init() {
-	for y := 0; y < 120; y++ {
-		for x := 0; x < 120; x++ {
+	for y := range 120 {
+		for x := range 120 {
 			atakeBlack.Set(x, y, color.RGBA{0, 0, 0, 255})
 		}
 	}
@@ -189,7 +189,7 @@ func TestAtakeStarPlacement(t *testing.T) {
 func TestAtakeNoStone(t *testing.T) {
 	pinkPixels := func(m *Model, f *fb) int {
 		n := 0
-		for py := 0; py < 10; py++ {
+		for py := range 10 {
 			for px := 0; px < m.geom().cw; px++ {
 				c := f.pixelAt(m.geom().cx+px, m.geom().cy*2+py)
 				if c.r > 0.8 && c.b > 0.5 && c.g < 0.5 {

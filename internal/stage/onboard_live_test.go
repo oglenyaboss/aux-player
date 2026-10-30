@@ -24,7 +24,7 @@ func liveOnboard(t *testing.T, o Options, r *recorder) *Model {
 
 // frameRow is the first frame line carrying sub.
 func frameRow(frame, sub string) string {
-	for _, l := range strings.Split(frame, "\n") {
+	for l := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(l, sub) {
 			return l
 		}
@@ -143,7 +143,7 @@ func TestOnboardCustomURL(t *testing.T) {
 	m.Key("enter", "")
 	m.StepDone(0, "")
 	steps(m, 2)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		m.Key("down", "")
 	}
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubProvider {

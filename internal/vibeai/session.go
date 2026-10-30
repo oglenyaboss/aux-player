@@ -114,11 +114,7 @@ func (s *Session) SetSignals(sig *Signals, sessionID string) {
 }
 
 func (s *Session) Need() int {
-	n := s.Size - len(s.portion)
-	if n < 0 {
-		n = 0
-	}
-	return n
+	return max(s.Size-len(s.portion), 0)
 }
 
 func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {

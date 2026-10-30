@@ -15,8 +15,8 @@ var yeezusNext = Track{Artist: "Someone Else", Title: "Queued Next", Dur: 200}
 // green, and the red tape in its box on the right edge.
 func yeezusCaseCover() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 200, 200))
-	for y := 0; y < 200; y++ {
-		for x := 0; x < 200; x++ {
+	for y := range 200 {
+		for x := range 200 {
 			u, v := float64(x)/200, float64(y)/200
 			c := color.RGBA{0, 0, 255, 255}
 			if u >= 0.5 {
@@ -172,7 +172,7 @@ func yeezusDiscProbe(m *Model, f *fb) col {
 func TestYeezusSpin(t *testing.T) {
 	m, _ := yeezusFrame(t, Options{}, 60, 9)
 	seen := map[bool]bool{}
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		c := yeezusDiscProbe(m, m.render())
 		if !yeezusBlueOrGreen(c) {
 			t.Fatalf("диск %+v, ждём пиксель обложки", c)

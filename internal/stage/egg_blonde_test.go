@@ -17,8 +17,8 @@ var (
 // blondeGreen is a flat green own cover: the day keeps it, the night swaps it for the smoke.
 func blondeGreen() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 60, 60))
-	for y := 0; y < 60; y++ {
-		for x := 0; x < 60; x++ {
+	for y := range 60 {
+		for x := range 60 {
 			img.Set(x, y, color.RGBA{40, 160, 60, 255})
 		}
 	}
@@ -95,7 +95,7 @@ func TestBlondeDayWashed(t *testing.T) {
 func TestBlondeDayLeak(t *testing.T) {
 	lo, hi := 2.0, 0.0
 	m, _ := blondeFrame(t, Options{}, blondeNikes, 0, 9)
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		l := m.render().at(m.w-6, 6).bg.lum()
 		lo, hi = min(lo, l), max(hi, l)
 		steps(m, 2)

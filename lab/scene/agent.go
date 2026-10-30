@@ -28,13 +28,13 @@ type scene struct {
 }
 
 func newScene(firstRun, pilot bool) *scene {
-	s := &scene{pilot: pilot, r: rand.New(rand.NewSource(7))}
+	s := &scene{pilot: pilot, r: rand.New(rand.NewSource(7))} //nolint:gosec // G404: the demo narrates the same takes on every run
 	s.m = stage.New(stage.Options{
 		Onboard:  firstRun,
 		SelfPlay: true,
 		Hook:     s.hook,
 		OnAction: s.onAction,
-		Example:  func() string { return demoQuery() },
+		Example:  demoQuery,
 		Chips:    demoChips,
 	})
 	return s
@@ -72,7 +72,7 @@ func (s *scene) onAction(a stage.Action) {
 	case stage.Restart:
 		s.next, s.batch, s.inBatch, s.clock = 0, 0, 0, 0
 		s.emit, s.accepted = false, nil
-		s.r = rand.New(rand.NewSource(7))
+		s.r = rand.New(rand.NewSource(7)) //nolint:gosec // G404: the demo narrates the same takes on every run
 	}
 }
 

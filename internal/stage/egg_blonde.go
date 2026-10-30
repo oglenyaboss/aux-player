@@ -94,7 +94,7 @@ func blondeLights(m *Model, c col, x, y int) col {
 		return c
 	}
 	w := float64(m.w)
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		r := 3 + 5*hash(i, 1, 51)
 		span := w + 4*r
 		lx := math.Mod(hash(i, 2, 51)*span-m.pos*r*0.9, span)

@@ -62,7 +62,7 @@ func utopiaOver(m *Model, f *fb, g playGeom) {
 			c.bg = c.bg.mul(kb).lerp(utopiaHaze, 0.3*lb)
 		}
 	}
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		px := int(hash(i, 0, 62)*float64(m.w) + 2*math.Sin(m.trackT*0.3+float64(i)))
 		py := int(math.Mod(hash(i, 1, 62)*float64(2*m.h)+m.trackT*(0.4+0.6*hash(i, 2, 62)), float64(2*m.h)))
 		c := f.at(px, py/2)

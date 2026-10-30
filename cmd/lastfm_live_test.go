@@ -23,9 +23,10 @@ func TestScrobbleLoopStartsOnSignal(t *testing.T) {
 	p := &countingPlayer{}
 	ch := make(chan struct{}, 1)
 	done := make(chan struct{})
+	started := startLastfmScrobbler(cfg, p, func(string) {})
 	go func() {
 		defer close(done)
-		lastfmScrobbleLoop(ch, cfg, p, func(string) {})
+		lastfmScrobbleLoop(ch, cfg, started, p, func(string) {})
 	}()
 	time.Sleep(20 * time.Millisecond)
 	if got := p.subs.Load(); got != 0 {
@@ -53,9 +54,13 @@ func TestScrobbleLoopStartsAtOnce(t *testing.T) {
 	p := &countingPlayer{}
 	ch := make(chan struct{}, 1)
 	done := make(chan struct{})
+	started := startLastfmScrobbler(cfg, p, func(string) {})
+	if !started {
+		t.Fatal("a stored session must start the scrobbler at once")
+	}
 	go func() {
 		defer close(done)
-		lastfmScrobbleLoop(ch, cfg, p, func(string) {})
+		lastfmScrobbleLoop(ch, cfg, started, p, func(string) {})
 	}()
 	if !waitSubs(p, 1) {
 		t.Fatal("the scrobbler must start at once with a stored session")

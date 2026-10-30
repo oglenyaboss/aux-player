@@ -76,7 +76,7 @@ func hvLayer(m *Model, base col, px, py int) col {
 	}
 	fx, fy := float64(px), float64(py)
 	if after {
-		for i := 0; i < 24; i++ {
+		for i := range 24 {
 			ex := int(hash(i, 0, 41)*float64(m.w) + 3*math.Sin(t*0.7+float64(i)))
 			ey := 2*m.h - 1 - int(math.Mod(t*(2.4+2*hash(i, 1, 41))+hash(i, 2, 41)*float64(2*m.h), float64(2*m.h)))
 			if ex == px && ey == py {

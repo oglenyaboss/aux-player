@@ -135,7 +135,7 @@ func TestPulsarBeat(t *testing.T) {
 		return max(x1, x2)
 	}
 	peak, trough := 0.0, -1.0
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		steps(m, 1.0/30)
 		p := math.Mod(m.pos, 1.3373)
 		switch {
@@ -249,7 +249,8 @@ func TestPulsarDeterminism(t *testing.T) {
 		steps(m, 10)
 		return m.View()
 	}
-	if run() != run() {
+	first, second := run(), run()
+	if first != second {
 		t.Error("два прогона дают разные кадры")
 	}
 }

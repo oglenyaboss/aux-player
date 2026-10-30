@@ -9,7 +9,7 @@ import (
 
 func rowText(f *fb, y, x, n int) string {
 	var b strings.Builder
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c := f.at(x+i, y)
 		if c == nil {
 			break
@@ -44,8 +44,8 @@ func TestQueueThumb(t *testing.T) {
 	tr := threeTracks()
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	red := color.RGBA{R: 255, A: 255}
-	for x := 0; x < 8; x++ {
-		for y := 0; y < 8; y++ {
+	for x := range 8 {
+		for y := range 8 {
 			img.Set(x, y, red)
 		}
 	}
@@ -183,7 +183,7 @@ func TestSplitLayout(t *testing.T) {
 		return string(r[x:])
 	}
 	alpha, time := -1, -1
-	for y := 0; y < len(lines); y++ {
+	for y := range lines {
 		if strings.HasPrefix(at(y, g.px), "Alpha") {
 			alpha = y
 		}
@@ -204,7 +204,7 @@ func TestSplitLayout(t *testing.T) {
 		t.Errorf("полоска времени в строке %d, ждём внутри [%d,%d)", time, g.cy, g.cy+g.ch)
 	}
 	next := -1
-	for y := 0; y < len(lines); y++ {
+	for y := range lines {
 		if strings.HasPrefix(at(y, 3+6), "Two") {
 			next = y
 			break

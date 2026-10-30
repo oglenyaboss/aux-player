@@ -26,7 +26,7 @@ func eqStrings(a, b []string) bool {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if a[i] != b[i] { //nolint:gosec // G602: the lengths are compared above
 			return false
 		}
 	}
@@ -161,7 +161,7 @@ func TestAnswersRaw(t *testing.T) {
 	steps(m, 0.8)
 	m.Key("down", "")
 	m.Key("enter", "")
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		if _, answered := m.Asking(); !answered {
 			break
 		}
@@ -174,7 +174,7 @@ func TestAnswersRaw(t *testing.T) {
 		m.Step(eventDT)
 	}
 	ans := recorded[Answers](r)
-	if len(ans) != 1 || !(len(ans[0].Raw) == 2 && ans[0].Raw[0] == "2" && ans[0].Raw[1] == "4") {
+	if len(ans) != 1 || len(ans[0].Raw) != 2 || ans[0].Raw[0] != "2" || ans[0].Raw[1] != "4" {
 		t.Fatalf("ждём Answers{Raw:[2 4]}, записано %v", r.acts)
 	}
 	if p := m.Phase(); p != PhScan {
@@ -194,7 +194,7 @@ func TestPortionShrinks(t *testing.T) {
 	m.Candidate(Track{Artist: "Delta", Title: "Four"}, false, "no")
 	m.PortionDone(tracks, "n")
 	sawDone := false
-	for i := 0; i < int(5/eventDT); i++ {
+	for range int(5 / eventDT) {
 		m.Step(eventDT)
 		if m.Phase() == PhDone {
 			sawDone = true

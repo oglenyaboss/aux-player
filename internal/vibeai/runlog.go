@@ -15,7 +15,7 @@ func (l *runLog) f(format string, args ...any) {
 }
 
 func (l *runLog) save(dir, name string, now time.Time) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
 	slug := []rune(normKey(name))
@@ -23,7 +23,7 @@ func (l *runLog) save(dir, name string, now time.Time) (string, error) {
 		slug = slug[:40]
 	}
 	path := filepath.Join(dir, now.Format("20060102-150405")+"-"+string(slug)+".md")
-	if err := os.WriteFile(path, []byte(l.b.String()), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(l.b.String()), 0o600); err != nil {
 		return "", err
 	}
 	return path, nil

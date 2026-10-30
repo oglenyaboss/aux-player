@@ -131,8 +131,8 @@ func TestNextStripThumb(t *testing.T) {
 	m := playStart(t)
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 	red := color.RGBA{R: 255, A: 255}
-	for x := 0; x < 8; x++ {
-		for y := 0; y < 8; y++ {
+	for x := range 8 {
+		for y := range 8 {
 			img.Set(x, y, red)
 		}
 	}
@@ -203,7 +203,7 @@ func TestNextStripFitsLongQueue(t *testing.T) {
 	m := New(Options{Slots: 5})
 	m.SetSize(80, 24)
 	var tr []Track
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		tr = append(tr, Track{ID: fmt.Sprintf("q%d", i), Artist: "Q", Title: fmt.Sprintf("T%d", i), Dur: 120})
 	}
 	m.JumpPlay(tr, 0, 0)
@@ -267,7 +267,7 @@ func TestNextSizeAfterShortPortion(t *testing.T) {
 	if row := nextRow(m); row != "собираю следующие 5" {
 		t.Errorf("строка %q, ждём «собираю следующие 5»", row)
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		m.NextPick(pk(i))
 	}
 	tracks := make([]Track, 5)

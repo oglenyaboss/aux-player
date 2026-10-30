@@ -26,8 +26,8 @@ var (
 // weCrowdCover is a field of grey bodies: a pattern with structure for the crowd to move.
 func weCrowdCover() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 120, 120))
-	for y := 0; y < 120; y++ {
-		for x := 0; x < 120; x++ {
+	for y := range 120 {
+		for x := range 120 {
 			v := uint8(40 + 180*hash(x/4, y/3, 9))
 			img.Set(x, y, color.RGBA{v, v, v, 255})
 		}

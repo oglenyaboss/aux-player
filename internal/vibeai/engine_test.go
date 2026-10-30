@@ -273,7 +273,7 @@ func TestCacheFresh(t *testing.T) {
 	lib := filepath.Join(dir, "library.json")
 	favs := filepath.Join(dir, "favorites.json")
 	for _, p := range []string{lib, favs} {
-		if err := os.WriteFile(p, []byte("[]"), 0o644); err != nil {
+		if err := os.WriteFile(p, []byte("[]"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

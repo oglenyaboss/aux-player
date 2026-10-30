@@ -360,7 +360,7 @@ func weFree(f *fb, g playGeom, px, py, rows int) bool {
 func weSnowfall(m *Model, f *fb, rows int) {
 	g := m.geom()
 	h := float64(2 * m.h)
-	for i := 0; i < 110; i++ {
+	for i := range 110 {
 		speed := 2.5 + 3*hash(i, 1, 85)
 		px := int(math.Mod(hash(i, 0, 85)*float64(m.w)+2*math.Sin(m.pos*0.5+float64(i)), float64(m.w)))
 		py := int(math.Mod(hash(i, 2, 85)*h+m.pos*speed, h))

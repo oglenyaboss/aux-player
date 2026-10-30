@@ -45,14 +45,14 @@ func TestMbdtfTrigger(t *testing.T) {
 // an 8×8 grid where each cell has its own colour.
 func mbdtfCensored() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 200, 200))
-	for y := 0; y < 200; y++ {
-		for x := 0; x < 200; x++ {
+	for y := range 200 {
+		for x := range 200 {
 			u, v := float64(x)/200, float64(y)/200
 			c := color.RGBA{238, 40, 67, 255}
 			if u >= mbdtfMosaicU0 && u < mbdtfMosaicU1 && v >= mbdtfMosaicU0 && v < mbdtfMosaicU1 {
 				i := int((u - mbdtfMosaicU0) / (mbdtfMosaicU1 - mbdtfMosaicU0) * 8)
 				j := int((v - mbdtfMosaicU0) / (mbdtfMosaicU1 - mbdtfMosaicU0) * 8)
-				c = color.RGBA{uint8(i * 32), uint8(j * 32), 200, 255}
+				c = color.RGBA{uint8(i * 32), uint8(j * 32), 200, 255} //nolint:gosec // G115: i and j are cell indexes in [0,8)
 			}
 			img.Set(x, y, c)
 		}
@@ -89,8 +89,8 @@ func TestMbdtfMosaic(t *testing.T) {
 	if b.cell < 4 {
 		t.Fatalf("клетка мозаики %d пикселей, ждём крупную", b.cell)
 	}
-	for j := 0; j < 8; j++ {
-		for i := 0; i < 8; i++ {
+	for j := range 8 {
+		for i := range 8 {
 			c := f.pixelAt(b.mx+i*b.cell+b.cell/2, b.my+j*b.cell+b.cell/2)
 			want := col{float64(i*32) / 255, float64(j*32) / 255, 200.0 / 255}
 			if !mbdtfNear(c, want, 0.03) {
@@ -105,8 +105,8 @@ func TestMbdtfMosaicEntrance(t *testing.T) {
 	m, f := mbdtfWallFrame(t, 160, 45, 20, 0.6)
 	b, _ := mbdtfPlan(m)
 	empty := 0
-	for j := 0; j < 8; j++ {
-		for i := 0; i < 8; i++ {
+	for j := range 8 {
+		for i := range 8 {
 			if c := f.pixelAt(b.mx+i*b.cell+b.cell/2, b.my+j*b.cell+b.cell/2); c.b < 0.5 {
 				empty++
 			}

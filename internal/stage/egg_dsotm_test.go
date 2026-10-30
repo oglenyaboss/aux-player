@@ -166,7 +166,7 @@ func TestDsotmBridge(t *testing.T) {
 		t.Errorf("мост: %d цветных пикселей, want ≥ 4", hits)
 	}
 
-	m, f = eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
+	_, f = eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
 	hits = 0
 	for y := g.cy * 2; y < (g.cy+g.ch)*2; y++ {
 		if _, s, v := toHSV(f.pixelAt(g.cx+g.cw+1, y)); s > 0.5 && v > 0.3 {
@@ -290,7 +290,7 @@ func TestDsotmSizes(t *testing.T) {
 // The prism stands over the queue too: the text check reads the cell under the pixel, not a cell further down.
 func TestDsotmPrismOverQueue(t *testing.T) {
 	tracks := []Track{dsotmMoney}
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		tracks = append(tracks, Track{Artist: "Queue Artist With A Long Name", Title: "Queue Title That Runs Far To The Right", Dur: 200})
 	}
 	m := New(Options{SelfPlay: true})

@@ -53,7 +53,7 @@ type yeezusBox struct {
 // title has a letter outside font3 or the window is too narrow.
 func yeezusPlan(m *Model) (b yeezusBox, ok bool) {
 	var words [][]rune
-	for _, w := range strings.Fields(strings.ToUpper(m.curTrack().Title)) {
+	for w := range strings.FieldsSeq(strings.ToUpper(m.curTrack().Title)) {
 		rs := []rune(w)
 		for _, r := range rs {
 			if _, ok := font3[r]; !ok {
@@ -182,7 +182,7 @@ func yeezusOver(m *Model, f *fb, g playGeom) {
 		gx := 0
 		for _, r := range line {
 			gl := font3[r]
-			for gy := 0; gy < 5; gy++ {
+			for gy := range 5 {
 				for x := 0; x < len(gl[0]); x++ {
 					if gl[gy][x] != '#' {
 						continue

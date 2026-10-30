@@ -36,7 +36,7 @@ type Store struct {
 
 func Open(path string, limit int) (*Store, error) {
 	s := &Store{path: path, Limit: limit, now: time.Now}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is the user's own memory file
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return s, nil
@@ -240,11 +240,11 @@ func (s *Store) commit(entries []Entry) error {
 }
 
 func (s *Store) save(entries []Entry) error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(render(entries)), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(render(entries)), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
@@ -306,7 +306,7 @@ func parse(content string) ([]Entry, error) {
 		block = block[:0]
 		return nil
 	}
-	for _, line := range strings.Split(strings.TrimRight(content, "\n\r"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(content, "\n\r"), "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if strings.TrimSpace(line) == "§" {
 			if err := flush(); err != nil {

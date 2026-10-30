@@ -704,7 +704,7 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites 
 	}
 	ss := make([]Seed, len(seeds))
 	for i, s := range seeds {
-		ss[i] = Seed{Artist: s.Artist, Mode: s.Mode}
+		ss[i] = Seed(s)
 	}
 	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites})
 	a.planSet = true
@@ -786,17 +786,15 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	sem := make(chan struct{}, 6)
 	var wg sync.WaitGroup
 	for i, t := range tracks {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			song, ok, err := a.Backend.findSong(ctx, Suggestion{Artist: t.Artist, Title: t.Title, Why: t.Why})
+			song, ok, err := a.Backend.findSong(ctx, Suggestion(t))
 			if err != nil {
 				ok = false
 			}
 			results[i] = found{song: song, ok: ok}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -807,7 +805,7 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	}
 	rejected := make([]rejectedRow, 0)
 	for i, t := range tracks {
-		sug := Suggestion{Artist: t.Artist, Title: t.Title, Why: t.Why}
+		sug := Suggestion(t)
 		v := a.Session.Offer(sug, results[i].song, results[i].ok)
 		if a.UI != nil {
 			if v.Accepted {

@@ -2,6 +2,7 @@ package stage
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -60,6 +61,7 @@ type eggRule struct {
 
 var eggRules = []eggRule{
 	{artist: "Lil Uzi Vert", e: egg{knob: '◆', knobCol: hex(0xff5fae), jewel: true, tint: hex(0xff5fae)}},
+	//nolint:gosec // G101: the egg fields are song titles and a producer credit, not credentials
 	{artist: "Playboi Carti", title: "Magnolia", e: egg{
 		cold:   []string{"YO PI'ERRE,", "YOU WANNA COME OUT HERE?"},
 		credit: "prod. pi'erre bourne",
@@ -246,12 +248,7 @@ func artistFold(want, have string) bool {
 	}
 	h = strings.ReplaceAll(h, ", ", "\x00")
 	h = strings.ReplaceAll(h, " & ", "\x00")
-	for _, p := range strings.Split(h, "\x00") {
-		if p == w {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(h, "\x00"), w)
 }
 
 // fold lowers the case and unwinds the typographic apostrophe.
@@ -547,7 +544,7 @@ func (m *Model) drip(f *fb, x, y int, bottom string, sc, seed int) {
 		grow := easeOut(prog(m.trackT, 1.2+1.2*h, 3.5))*(0.8+0.8*h) + math.Min(1, m.trackT/120)*0.4*h
 		l := min(int(math.Round(float64(sc)*grow)), dripMax*sc-1)
 		px := x + gx*sc + sc/2
-		for i := 0; i < l; i++ {
+		for i := range l {
 			f.pixel(px, y+i, m.th.a1.mul(0.9-0.3*float64(i)/float64(3*sc)))
 		}
 		if l > 0 {

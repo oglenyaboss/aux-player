@@ -16,8 +16,8 @@ var (
 // hvBurning is a dark cover with a bright orange figure on the left, like the man on fire.
 func hvBurning() image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 60, 60))
-	for y := 0; y < 60; y++ {
-		for x := 0; x < 60; x++ {
+	for y := range 60 {
+		for x := range 60 {
 			c := color.RGBA{12, 26, 26, 255}
 			if x >= 10 && x < 25 && y >= 10 && y < 50 {
 				c = color.RGBA{255, 190, 90, 255}

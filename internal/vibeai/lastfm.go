@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -116,9 +117,7 @@ func (l *lastfmClient) call(ctx context.Context, method string, params url.Value
 	}
 	l.last = time.Now()
 	v := make(url.Values, len(params)+3)
-	for k, vs := range params {
-		v[k] = vs
-	}
+	maps.Copy(v, params)
 	v.Set("method", method)
 	v.Set("api_key", l.key)
 	v.Set("format", "json")
@@ -130,7 +129,7 @@ func (l *lastfmClient) call(ctx context.Context, method string, params url.Value
 	if err != nil {
 		return nil, fmt.Errorf("lastfm %s: %v", method, safeErr(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("lastfm %s: reading the response: %v", method, err)

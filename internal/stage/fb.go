@@ -90,7 +90,7 @@ func (f *fb) fill(x, y, w, h int, bg col) {
 
 // blank wipes the glyphs of w cells from (x, y); the backgrounds stay.
 func (f *fb) blank(x, y, w int) {
-	for i := 0; i < w; i++ {
+	for i := range w {
 		if c := f.at(x+i, y); c != nil {
 			c.ch, c.pix, c.bold, c.ital = ' ', false, false, false
 		}
@@ -245,8 +245,8 @@ func (f *fb) png(path string) error {
 	}
 	b.WriteString("</svg>")
 	svg := strings.TrimSuffix(path, ".png") + ".svg"
-	if err := os.WriteFile(svg, []byte(b.String()), 0o644); err != nil {
+	if err := os.WriteFile(svg, []byte(b.String()), 0o600); err != nil {
 		return err
 	}
-	return exec.Command("magick", svg, path).Run()
+	return exec.Command("magick", svg, path).Run() //nolint:gosec // G204: a fixed convert binary on the file this call just wrote
 }

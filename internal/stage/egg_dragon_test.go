@@ -81,7 +81,7 @@ func TestDragonCompass(t *testing.T) {
 	if !strings.ContainsRune(row, '▼') {
 		t.Errorf("there is no quest marker on the compass: %q", row)
 	}
-	for _, r := range []rune("━─●") {
+	for _, r := range "━─●" {
 		if strings.ContainsRune(row, r) {
 			t.Errorf("the rune %q of the old bar remained: %q", r, row)
 		}

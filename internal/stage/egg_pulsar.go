@@ -89,10 +89,10 @@ func pulsarOver(m *Model, f *fb, g playGeom) {
 		}
 		front := j == e
 		base := 1 + 3*d
-		for c := 0; c < n; c++ {
+		for c := range n {
 			lvs[c] = pulsarLevel(c, j, n, base, A, s, front)
 		}
-		for c := 0; c < n; c++ {
+		for c := range n {
 			if float64(c) >= rc {
 				continue
 			}
@@ -127,12 +127,12 @@ func pulsarOver(m *Model, f *fb, g playGeom) {
 
 // pulsarLevel: the braille level (0..11) of pulse j in dot column c; the central
 // spike sits at p 0.5 and j's own ridges ride behind it.
-func pulsarLevel(c, j, n int, base, A, s float64, front bool) int {
+func pulsarLevel(c, j, n int, base, amp, s float64, front bool) int {
 	p := float64(c) / float64(n-1)
 	noise := (hash(c, j, 41) - 0.5) * 0.8
 	k := 3 + int(hash(j, 0, 42)*3)
 	peaks := 0.0
-	for i := 0; i < k; i++ {
+	for i := range k {
 		at, hgt := 0.5, 4.0
 		if i > 0 {
 			at, hgt = 0.32+0.36*hash(j, i, 43), 1.5+2*hash(j, i, 44)
@@ -145,7 +145,7 @@ func pulsarLevel(c, j, n int, base, A, s float64, front bool) int {
 	if front {
 		mult = s
 	}
-	h := max(-0.5, min(4, noise+A*mult*peaks))
+	h := max(-0.5, min(4, noise+amp*mult*peaks))
 	return min(11, max(0, int(math.Round(base+h))))
 }
 

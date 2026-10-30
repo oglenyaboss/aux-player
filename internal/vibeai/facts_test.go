@@ -10,7 +10,7 @@ import (
 
 func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	body, err := os.ReadFile(filepath.Join("testdata", name))
+	body, err := os.ReadFile(filepath.Join("testdata", name)) //nolint:gosec // G304: fixtures of this package
 	if err != nil {
 		t.Fatalf("прочитать %s: %v", name, err)
 	}

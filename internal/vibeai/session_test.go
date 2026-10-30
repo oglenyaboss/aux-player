@@ -2,6 +2,7 @@ package vibeai
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -224,7 +225,7 @@ func TestWindowArtistLimitExpires(t *testing.T) {
 	}
 	s.ClosePortion()
 	for p := 2; p <= 4; p++ {
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			artist, title := fmt.Sprintf("P%dE%d", p, i), fmt.Sprintf("Q%d", i)
 			song := Song{ID: fmt.Sprintf("%d-%d", p, i), Artist: artist, Title: title}
 			v := s.Offer(Suggestion{Artist: artist, Title: title}, song, true)
@@ -250,7 +251,7 @@ func TestWindowKnownLimit(t *testing.T) {
 			t.Fatalf("k%d: rejected: %s", i, v.Reason)
 		}
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		artist, title := fmt.Sprintf("n%d", i), fmt.Sprintf("u%d", i)
 		v := s.Offer(Suggestion{Artist: artist, Title: title}, Song{ID: title, Artist: artist, Title: title}, true)
 		if !v.Accepted {
@@ -556,7 +557,7 @@ func TestReserveDedupAndCap(t *testing.T) {
 			t.Fatalf("%s: rejected: %s", want, v.Reason)
 		}
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		v := s.Offer(Suggestion{Artist: "C", Title: "T3"}, Song{ID: "c", Artist: "C", Title: "T3"}, true)
 		if v.Accepted || v.Reason != "portion is full" {
 			t.Fatalf("C %d-й: got (%v, %q)", i, v.Accepted, v.Reason)
@@ -616,7 +617,7 @@ func TestClearReserve(t *testing.T) {
 func TestSessionDone(t *testing.T) {
 	fill := func(s *Session, n int) {
 		t.Helper()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			artist, title := fmt.Sprintf("A%d", i), fmt.Sprintf("T%d", i)
 			v := s.Offer(Suggestion{Artist: artist, Title: title}, Song{ID: fmt.Sprintf("%d", i), Artist: artist, Title: title}, true)
 			if !v.Accepted {
@@ -705,7 +706,7 @@ func TestSetPlanRecountsKnown(t *testing.T) {
 
 func TestFavoritesModeAllowsKnownAndLibrary(t *testing.T) {
 	favs := favArtists(t, 6)
-	lib := append(favs, Song{ID: "l1", Artist: "k6", Title: "deep"})
+	lib := append(slices.Clone(favs), Song{ID: "l1", Artist: "k6", Title: "deep"})
 	s := NewSession(lib, favs, 20)
 	s.SetPlan(Plan{FromFavorites: true})
 	for i := 1; i <= 5; i++ {
@@ -724,7 +725,7 @@ func TestFavoritesModeAllowsKnownAndLibrary(t *testing.T) {
 
 func TestFavoritesModeRejectsNew(t *testing.T) {
 	favs := favArtists(t, 6)
-	lib := append(favs, Song{ID: "u1", Artist: "Stranger", Title: "y"})
+	lib := append(slices.Clone(favs), Song{ID: "u1", Artist: "Stranger", Title: "y"})
 	s := NewSession(lib, favs, 20)
 	s.SetPlan(Plan{FromFavorites: true})
 	v := s.Offer(Suggestion{Artist: "Newbie", Title: "x"}, Song{ID: "n1", Artist: "Newbie", Title: "x"}, true)
@@ -739,7 +740,7 @@ func TestFavoritesModeRejectsNew(t *testing.T) {
 
 func TestFavoritesModeArtistLimit(t *testing.T) {
 	favs := favArtists(t, 6)
-	lib := append(favs,
+	lib := append(slices.Clone(favs),
 		Song{ID: "a1", Artist: "k1", Title: "x1"},
 		Song{ID: "a2", Artist: "k1", Title: "x2"},
 		Song{ID: "a3", Artist: "k1", Title: "x3"})
@@ -759,7 +760,7 @@ func TestFavoritesModeArtistLimit(t *testing.T) {
 
 func TestFavoritesModeKnownLeft(t *testing.T) {
 	favs := favArtists(t, 6)
-	lib := append(favs, Song{ID: "l1", Artist: "k6", Title: "deep"})
+	lib := append(slices.Clone(favs), Song{ID: "l1", Artist: "k6", Title: "deep"})
 	s := NewSession(lib, favs, 5)
 	s.SetPlan(Plan{FromFavorites: true})
 	if v := s.Offer(Suggestion{Artist: "k1", Title: "fav1"}, favs[0], true); !v.Accepted {

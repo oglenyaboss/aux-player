@@ -59,7 +59,7 @@ func TestOpenSignalsMissingFileAndAppend(t *testing.T) {
 		signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "A", Title: "T"},
 		signalRec{Time: testNow, Kind: "played", Session: "s1", Artist: "B", Title: "U"},
 	)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file the test just wrote under its temp dir
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestOpenSignalsMissingFileAndAppend(t *testing.T) {
 func TestOpenSignalsSkipsBrokenLines(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	content := "{\"kind\":\"served\",\"artist\":\"A\",\"title\":\"T\",\"session\":\"s1\"}\nмусор\n\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	sig, err := OpenSignals(path)

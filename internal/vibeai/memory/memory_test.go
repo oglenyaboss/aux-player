@@ -133,7 +133,7 @@ func TestFillAndConsolidate(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), 200)
 	text := func(i int) string { return strings.Repeat("очень ", 12) + fmt.Sprintf("артист %d", i) }
 	var lastErr error
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		if err := st.Add(text(i), "слова владельца"); err != nil {
 			lastErr = err
 			break
