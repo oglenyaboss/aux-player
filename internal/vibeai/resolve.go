@@ -40,7 +40,7 @@ type appleSongSearchResponse struct {
 func parseSongSearch(body []byte) ([]Song, error) {
 	var r appleSongSearchResponse
 	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, fmt.Errorf("apple: ответ не JSON: %v", err)
+		return nil, fmt.Errorf("apple: response is not JSON: %v", err)
 	}
 	data := r.Results.Songs.Data
 	out := make([]Song, 0, len(data))

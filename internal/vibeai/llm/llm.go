@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/oglenyaboss/aux-player/internal/version"
 )
 
 type Config struct{ BaseURL, APIKey, Model, Effort string }
@@ -39,7 +41,7 @@ func LoadEnv(path string) (Config, error) {
 		}
 	}
 	if len(missing) > 0 {
-		return Config{}, fmt.Errorf("llm: LoadEnv: нет обязательных ключей: %s", strings.Join(missing, ", "))
+		return Config{}, fmt.Errorf("llm: LoadEnv: missing required keys: %s", strings.Join(missing, ", "))
 	}
 	return Config{BaseURL: vals["LLM_BASE_URL"], APIKey: vals["LLM_API_KEY"], Model: vals["LLM_MODEL"]}, nil
 }
@@ -162,7 +164,7 @@ func (c *Client) requestBody(msgs []Message, tools []Tool, jsonMode bool) ([]byt
 	for i, m := range msgs {
 		rm, err := marshalMessage(m)
 		if err != nil {
-			return nil, fmt.Errorf("llm: сообщение %d: %w", i, err)
+			return nil, fmt.Errorf("llm: message %d: %w", i, err)
 		}
 		rawMsgs[i] = rm
 	}
@@ -217,20 +219,20 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 
 	var wire wireResponse
 	if err := json.NewDecoder(resp.Body).Decode(&wire); err != nil {
-		return Response{}, fmt.Errorf("llm: декодирование ответа: %w", err)
+		return Response{}, fmt.Errorf("llm: decoding the response: %w", err)
 	}
 	if len(wire.Choices) == 0 {
-		return Response{}, retryableError{errors.New("llm: ответ без choices")}
+		return Response{}, retryableError{errors.New("llm: response without choices")}
 	}
 	msg, err := parseMessage(wire.Choices[0].Message)
 	if err != nil {
 		return Response{}, err
 	}
 	if msg.Content == "" && len(msg.ToolCalls) == 0 {
-		return Response{}, retryableError{errors.New("llm: ответ без content и tool_calls")}
+		return Response{}, retryableError{errors.New("llm: response without content and tool_calls")}
 	}
 	if jsonMode && msg.Content != "" && !json.Valid([]byte(msg.Content)) {
-		return Response{}, retryableError{errors.New("llm: jsonMode: content не JSON")}
+		return Response{}, retryableError{errors.New("llm: jsonMode: content is not JSON")}
 	}
 	return Response{
 		Message:      msg,
@@ -280,7 +282,7 @@ type wireToolCall struct {
 func parseMessage(raw json.RawMessage) (Message, error) {
 	var wm wireMessageResp
 	if err := json.Unmarshal(raw, &wm); err != nil {
-		return Message{}, fmt.Errorf("llm: разбор message: %w", err)
+		return Message{}, fmt.Errorf("llm: parsing message: %w", err)
 	}
 	m := Message{Role: wm.Role, Content: wm.Content, Raw: raw}
 	for _, tc := range wm.ToolCalls {
@@ -291,7 +293,7 @@ func parseMessage(raw json.RawMessage) (Message, error) {
 
 func setHeaders(req *http.Request, apiKey, session string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("User-Agent", "vibelab/0.1")
+	req.Header.Set("User-Agent", "aux/"+version.Version)
 	req.Header["x-opencode-session"] = []string{session}
 }
 

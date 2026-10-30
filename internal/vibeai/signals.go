@@ -138,13 +138,13 @@ func (s *Signals) blockedArtist(artist, session string) string {
 			continue
 		}
 		if recHasArtist(r, artist) {
-			return "скипнут в этой сессии"
+			return "skipped in this session"
 		}
 	}
 	// ponytail: окно 60 дней вместо затухания весов; апгрейд — экспоненциальный вес по давности
 	early, played, sessions, _ := s.skipCounts(artist)
 	if sessions >= 2 && played < early {
-		return fmt.Sprintf("владелец скипает (%d сессий)", sessions)
+		return fmt.Sprintf("the listener skips (%d sessions)", sessions)
 	}
 	return ""
 }

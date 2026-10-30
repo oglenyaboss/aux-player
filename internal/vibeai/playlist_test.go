@@ -46,7 +46,7 @@ func postServer(t *testing.T, status int, respBody string) (*appleAPI, *[]captur
 
 func TestCreatePlaylist(t *testing.T) {
 	api, reqs := postServer(t, http.StatusCreated, `{"data":[{"id":"p.abc"}]}`)
-	id, err := createPlaylist(context.Background(), api, "Порция 1", "Vibes AI · «рейдж»", []string{"1", "2"})
+	id, err := createPlaylist(context.Background(), api, "Порция 1", "AUX · «рейдж»", []string{"1", "2"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestCreatePlaylist(t *testing.T) {
 	if r.user != "secret-user-token" {
 		t.Errorf("Music-User-Token = %q", r.user)
 	}
-	if !strings.Contains(r.body, `"name":"Порция 1"`) || !strings.Contains(r.body, `"description":"Vibes AI · «рейдж»"`) {
+	if !strings.Contains(r.body, `"name":"Порция 1"`) || !strings.Contains(r.body, `"description":"AUX · «рейдж»"`) {
 		t.Errorf("атрибуты: %s", r.body)
 	}
 	if n := strings.Count(r.body, `{"id":"1","type":"songs"}`) + strings.Count(r.body, `{"id":"2","type":"songs"}`); n != 2 {
@@ -80,15 +80,15 @@ func TestCreatePlaylist(t *testing.T) {
 func TestCreatePlaylistNoID(t *testing.T) {
 	api, _ := postServer(t, http.StatusCreated, "")
 	_, err := createPlaylist(context.Background(), api, "X", "desc", []string{"1"})
-	if err == nil || !strings.Contains(err.Error(), "id не вернулся") {
+	if err == nil || !strings.Contains(err.Error(), "no id returned") {
 		t.Errorf("err = %v, want «id не вернулся»", err)
 	}
 }
 
 func TestCreatePlaylistEmpty(t *testing.T) {
 	api, reqs := postServer(t, http.StatusCreated, `{"data":[{"id":"p.1"}]}`)
-	if _, err := createPlaylist(context.Background(), api, "X", "desc", nil); err == nil || err.Error() != "apple: пустой плейлист" {
-		t.Errorf("err = %v, want «apple: пустой плейлист»", err)
+	if _, err := createPlaylist(context.Background(), api, "X", "desc", nil); err == nil || err.Error() != "apple: empty playlist" {
+		t.Errorf("err = %v, want «apple: empty playlist»", err)
 	}
 	if len(*reqs) != 0 {
 		t.Errorf("пустой список не должен ходить на сервер")
@@ -161,10 +161,10 @@ func TestEngineSaveAndAppendPlaylist(t *testing.T) {
 	if err != nil || id != "p.abc" {
 		t.Fatalf("SavePlaylist: (%q, %v)", id, err)
 	}
-	if !strings.Contains(e.log.b.String(), "плейлист: Порция 1 (2 треков)") {
+	if !strings.Contains(e.log.b.String(), "playlist: Порция 1 (2 tracks)") {
 		t.Errorf("лог: %q", e.log.b.String())
 	}
-	if !strings.Contains((*reqs)[0].body, `"description":"Vibes AI · «рейдж 2024»"`) {
+	if !strings.Contains((*reqs)[0].body, `"description":"AUX · «рейдж 2024»"`) {
 		t.Errorf("description: %s", (*reqs)[0].body)
 	}
 
@@ -174,7 +174,7 @@ func TestEngineSaveAndAppendPlaylist(t *testing.T) {
 	if err := e2.AppendPlaylist(context.Background(), "p.abc", tracks); err != nil {
 		t.Fatalf("AppendPlaylist: %v", err)
 	}
-	if !strings.Contains(e2.log.b.String(), "плейлист +2") {
+	if !strings.Contains(e2.log.b.String(), "playlist +2") {
 		t.Errorf("лог: %q", e2.log.b.String())
 	}
 	if len(*reqs2) != 1 || (*reqs2)[0].path != "/me/library/playlists/p.abc/tracks" {

@@ -103,7 +103,7 @@ func TestCleanEditorial(t *testing.T) {
 
 func TestParseArtistFactsEmpty(t *testing.T) {
 	_, err := parseArtistFacts([]byte(`{"data":[]}`))
-	if err == nil || !strings.Contains(err.Error(), "артист не найден") {
+	if err == nil || !strings.Contains(err.Error(), "artist not found") {
 		t.Errorf("err = %v, want «артист не найден»", err)
 	}
 }

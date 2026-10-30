@@ -65,7 +65,9 @@ type Agent struct {
 	Warmup        []answerRow
 }
 
-const askUserErr = "ошибка: 1–2 вопроса; в каждом 2–4 варианта {artist, title, label}; default — номер варианта"
+const askUserErr = "error: 1–2 questions; each with 2–4 options {artist, title, label}; default — the option number"
+
+const askLaterErr = "error: a question and 2–3 options {n, label}; n is a track number from the \"Served\" list; default is the option number"
 
 const askUserSchema = `{
   "type": "object",
@@ -87,12 +89,12 @@ const askUserSchema = `{
               "properties": {
                 "artist": {"type": "string"},
                 "title": {"type": "string"},
-                "label": {"type": "string", "description": "Подпись варианта до 3 слов: направление, альбом или грань"}
+                "label": {"type": "string", "description": "Option label of up to 3 words: a direction, an album or an edge"}
               },
               "required": ["artist", "title", "label"]
             }
           },
-          "default": {"type": "integer", "minimum": 1, "description": "Номер варианта по умолчанию"}
+          "default": {"type": "integer", "minimum": 1, "description": "Default option number"}
         },
         "required": ["question", "options", "default"]
       }
@@ -112,8 +114,8 @@ const askLaterSchema = `{
       "items": {
         "type": "object",
         "properties": {
-          "n": {"type": "integer", "minimum": 1, "description": "Номер трека из списка «Выдано»"},
-          "label": {"type": "string", "description": "Подпись: куда вести дальше, до 3 слов"}
+          "n": {"type": "integer", "minimum": 1, "description": "Track number from the \"Served\" list"},
+          "label": {"type": "string", "description": "Label: where to lead next, up to 3 words"}
         },
         "required": ["n", "label"]
       }
@@ -137,8 +139,8 @@ const setPlanSchema = `{
         "required": ["artist", "mode"]
       }
     },
-    "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Имена артистов, которых не должно быть в подборке. Только артисты, не альбомы и не треки."},
-    "from_favorites": {"type": "boolean", "description": "Режим «из любимого»: владелец просит свою любимую, знакомую музыку. Только треки из Favorites и из библиотеки у артистов из Favorites."}
+    "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Artist names that must not be in the selection. Artists only, not albums and not tracks."},
+    "from_favorites": {"type": "boolean", "description": "Favorites mode: the listener asks for their own favorite, familiar music. Only tracks from Favorites and from the library of Favorites artists."}
   },
   "required": ["seeds", "exclusions"]
 }`
@@ -178,7 +180,7 @@ const submitSchema = `{
         "required": ["artist", "title", "why"]
       }
     },
-    "note": {"type": "string", "description": "Заметка владельцу над порцией, до 8 слов: что держишь и куда сдвигаешь"}
+    "note": {"type": "string", "description": "Note to the listener above the portion, up to 8 words: what you hold and where you shift"}
   },
   "required": ["tracks", "note"]
 }`
@@ -231,20 +233,27 @@ const memoryConsolidateSchema = `{
 
 func agentTools() []llm.Tool {
 	return []llm.Tool{
-		{Name: "ask_user", Description: "Спросить владельца карточкой: каждый вариант — реальный трек с обложкой. Выбранный трек сразу встаёт в порцию и играет. Только в первом ходе, один раз; ещё раз — только если ответ велит это полем next.", Parameters: json.RawMessage(askUserSchema)},
-		{Name: "ask_later", Description: "Задать владельцу один вопрос посреди потока, не останавливая музыку: варианты — уже выданные треки (номера из «Выдано»), подпись — направление. Ответ придёт репликой в следующем ходе. Не чаще раза за ход.", Parameters: json.RawMessage(askLaterSchema)},
-		{Name: "set_plan", Description: "Зафиксировать ориентиры с режимами и исключения. Обязательно до submit_candidates.", Parameters: json.RawMessage(setPlanSchema)},
-		{Name: "describe", Description: "Описание ориентира из Apple Music и Last.fm: жанры, аннотация, релизы с датами или треклист, теги.", Parameters: json.RawMessage(describeSchema)},
-		{Name: "similar_artists", Description: "Похожие артисты по общей аудитории Last.fm (шумно, не по звучанию).", Parameters: json.RawMessage(similarSchema)},
-		{Name: "submit_candidates", Description: "Предложить треки в порцию. Код проверит их в Apple Music и по правилам и вернёт принятые и отклонённые с причинами.", Parameters: json.RawMessage(submitSchema)},
-		{Name: "memory_add", Description: "Добавить устойчивое предпочтение владельца в память.", Parameters: json.RawMessage(memoryAddSchema)},
-		{Name: "memory_replace", Description: "Заменить запись памяти, которая содержит подстроку old.", Parameters: json.RawMessage(memoryReplaceSchema)},
-		{Name: "memory_remove", Description: "Удалить запись памяти, которая содержит подстроку old.", Parameters: json.RawMessage(memoryRemoveSchema)},
-		{Name: "memory_consolidate", Description: "Заменить всю память сжатым списком записей. Только когда память почти заполнена.", Parameters: json.RawMessage(memoryConsolidateSchema)},
+		{Name: "ask_user", Description: "Ask the listener with a card: every option is a real track with artwork. The chosen track goes straight into the portion and plays. Only in the first turn, once; again — only if the answer says so in the next field.", Parameters: json.RawMessage(askUserSchema)},
+		{Name: "ask_later", Description: "Ask the listener one question mid-stream without stopping the music: options are tracks already served (numbers from the \"Served\" list), the label is the direction. The answer comes as a reply in the next turn. No more than once per turn.", Parameters: json.RawMessage(askLaterSchema)},
+		{Name: "set_plan", Description: "Fix the referents with modes and exclusions. Always before submit_candidates.", Parameters: json.RawMessage(setPlanSchema)},
+		{Name: "describe", Description: "Description of a referent from Apple Music and Last.fm: genres, annotation, releases with dates or a tracklist, tags.", Parameters: json.RawMessage(describeSchema)},
+		{Name: "similar_artists", Description: "Similar artists by shared Last.fm audience (noisy, not by sound).", Parameters: json.RawMessage(similarSchema)},
+		{Name: "submit_candidates", Description: "Offer tracks for the portion. The code checks them in Apple Music and against the rules and returns the accepted and the rejected ones with reasons.", Parameters: json.RawMessage(submitSchema)},
+		{Name: "memory_add", Description: "Add a lasting preference of the listener to memory.", Parameters: json.RawMessage(memoryAddSchema)},
+		{Name: "memory_replace", Description: "Replace the memory entry that contains the substring old.", Parameters: json.RawMessage(memoryReplaceSchema)},
+		{Name: "memory_remove", Description: "Remove the memory entry that contains the substring old.", Parameters: json.RawMessage(memoryRemoveSchema)},
+		{Name: "memory_consolidate", Description: "Replace the whole memory with a compressed list of entries. Only when memory is almost full.", Parameters: json.RawMessage(memoryConsolidateSchema)},
 	}
 }
 
-func NewAgent(c chatter, b backend, s *Session, m *memory.Store, ui UI, log *runLog, favorites []Song) *Agent {
+func langLine(lang string) string {
+	if lang == "ru" {
+		return "Language: write why, note, card questions and labels, and ask_later questions in Russian."
+	}
+	return "Language: write why, note, card questions and labels, and ask_later questions in English."
+}
+
+func NewAgent(c chatter, b backend, s *Session, m *memory.Store, ui UI, log *runLog, favorites []Song, lang string) *Agent {
 	return &Agent{
 		LLM:      c,
 		Backend:  b,
@@ -253,16 +262,18 @@ func NewAgent(c chatter, b backend, s *Session, m *memory.Store, ui UI, log *run
 		UI:       ui,
 		Log:      log,
 		MaxSteps: 15,
-		msgs:     []llm.Message{{Role: "system", Content: systemPrompt(m, favorites)}},
+		msgs:     []llm.Message{{Role: "system", Content: systemPrompt(m, favorites, lang)}},
 	}
 }
 
-func systemPrompt(m *memory.Store, favorites []Song) string {
+func systemPrompt(m *memory.Store, favorites []Song, lang string) string {
 	var b strings.Builder
 	b.WriteString(promptRules)
 	b.WriteString("\n\n")
+	b.WriteString(langLine(lang))
+	b.WriteString("\n\n")
 	b.WriteString(m.Section())
-	b.WriteString("\n\n## Любимые треки владельца (Favorites)\n")
+	b.WriteString("\n\n## Favorite tracks of the listener (Favorites)\n")
 	for _, s := range favorites {
 		fmt.Fprintf(&b, "- %s — %s (%s)\n", s.Artist, s.Title, s.Album)
 	}
@@ -275,8 +286,8 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 	a.Note = ""
 	a.Later = nil
 	if names := a.Session.TakeReserve(); len(names) > 0 {
-		user += "\n\nКандидаты прошлого хода, не вошедшие в порцию: " + strings.Join(names, "; ") + ". Бери их через submit_candidates, только если они подходят под свежие реакции."
-		a.logf("запас предложен: %s", strings.Join(names, "; "))
+		user += "\n\nCandidates from the previous turn that did not make it into the portion: " + strings.Join(names, "; ") + ". Take them through submit_candidates only if they fit the fresh reactions."
+		a.logf("reserve offered: %s", strings.Join(names, "; "))
 	}
 	a.msgs = append(a.msgs, llm.Message{Role: "user", Content: user})
 	hints := 0
@@ -286,7 +297,7 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		a.logf("### шаг %d (%d с, токены in %d, out %d, reasoning %d)", step, int(time.Since(start).Seconds()),
+		a.logf("### step %d (%d s, tokens in %d, out %d, reasoning %d)", step, int(time.Since(start).Seconds()),
 			resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.ReasoningTokens)
 		if resp.Message.Content != "" {
 			a.logf("%s", resp.Message.Content)
@@ -300,7 +311,7 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 				hints++
 				a.msgs = append(a.msgs, llm.Message{
 					Role:    "user",
-					Content: fmt.Sprintf("Порция не заполнена: нужно ещё %d треков. Предлагай через submit_candidates.", a.Session.Need()),
+					Content: fmt.Sprintf("Portion is not full: %d more tracks needed. Offer them through submit_candidates.", a.Session.Need()),
 				})
 				continue
 			}
@@ -328,13 +339,13 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Questions []askUserArg `json:"questions"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.askUser(ctx, args.Questions)
 	case "ask_later":
 		var args askLaterArg
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.askLater(args)
 	case "set_plan":
@@ -344,7 +355,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			FromFavorites bool          `json:"from_favorites"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.setPlan(args.Seeds, args.Exclusions, args.FromFavorites)
 	case "describe":
@@ -354,7 +365,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Name   string `json:"name"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.describe(ctx, args.Kind, args.Artist, args.Name)
 	case "similar_artists":
@@ -362,7 +373,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Artist string `json:"artist"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.similarArtists(ctx, args.Artist)
 	case "submit_candidates":
@@ -371,7 +382,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Note   string     `json:"note"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		if note := strings.TrimSpace(args.Note); note != "" {
 			a.Note = note
@@ -383,7 +394,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Evidence string `json:"evidence"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.memoryAdd(args.Text, args.Evidence)
 	case "memory_replace":
@@ -393,7 +404,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Evidence string `json:"evidence"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.memoryReplace(args.Old, args.Text, args.Evidence)
 	case "memory_remove":
@@ -402,7 +413,7 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Reason string `json:"reason"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.memoryRemove(args.Old, args.Reason)
 	case "memory_consolidate":
@@ -410,17 +421,17 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Entries []memoryEntryArg `json:"entries"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
-			return "ошибка: " + err.Error()
+			return "error: " + err.Error()
 		}
 		return a.memoryConsolidate(args.Entries)
 	default:
-		return fmt.Sprintf("ошибка: нет инструмента %s", call.Name)
+		return fmt.Sprintf("error: no such tool %s", call.Name)
 	}
 }
 
 func toolArgs(args string, v any) error {
 	if !json.Valid([]byte(args)) {
-		return errors.New("аргументы не JSON")
+		return errors.New("arguments are not JSON")
 	}
 	return json.Unmarshal([]byte(args), v)
 }
@@ -465,12 +476,12 @@ type laterOptionArg struct {
 }
 
 func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
-	a.progress("ask_user", fmt.Sprintf("вопросов %d", len(qs)))
+	a.progress("ask_user", fmt.Sprintf("questions %d", len(qs)))
 	if a.askedThisTurn {
-		return "ошибка: вопросы уже заданы в этом ходе"
+		return "error: questions were already asked in this turn"
 	}
 	if a.turns > 1 {
-		return "ошибка: ask_user — только в первом ходе сессии; развилку по скипам спроси через ask_later"
+		return "error: ask_user is allowed only in the first turn of the session; ask a fork in the skips through ask_later"
 	}
 	if len(qs) < 1 || len(qs) > 2 {
 		return askUserErr
@@ -529,7 +540,7 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 		}
 	}
 	if len(missing) > 0 {
-		return "ошибка: не нашлись в Apple Music: " + strings.Join(missing, "; ") + ". Замени эти варианты и вызови ask_user снова."
+		return "error: not found in Apple Music: " + strings.Join(missing, "; ") + ". Replace those options and call ask_user again."
 	}
 	questions := make([]Question, len(qs))
 	for qi, q := range qs {
@@ -576,7 +587,7 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 					Accepted: true,
 				})
 			}
-			a.logf("выбран: %s — %s", song.Artist, song.Title)
+			a.logf("picked: %s — %s", song.Artist, song.Title)
 		}
 		rows[i] = answerRow{Question: q.Question, Answer: resolveAnswer(q, raw)}
 	}
@@ -591,9 +602,9 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 		a.askMisses++
 		if a.askMisses == 1 {
 			a.askedThisTurn = false
-			next = "Владелец ответил «мимо»: ни один вариант не подошёл. Задай ask_user ещё раз: другие стороны звучания, без показанных треков и их артистов."
+			next = "The listener answered \"missed\": no option fit. Call ask_user again: other sides of the sound, without the shown tracks and their artists."
 		} else {
-			next = "Владелец снова ответил «мимо». Больше не спрашивай: собирай порцию сам и уходи от показанных направлений."
+			next = "The listener answered \"missed\" again. Do not ask any more: build the portion yourself and move away from the shown directions."
 		}
 	}
 	a.Warmup = append(a.Warmup, rows...)
@@ -612,7 +623,7 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return string(b)
 }
@@ -625,7 +636,7 @@ type answerRow struct {
 func resolveAnswer(q Question, raw string) string {
 	v := strings.TrimSpace(raw)
 	if v == "none" {
-		return "мимо: ни один вариант не подходит"
+		return "missed: no option fits"
 	}
 	if v == "" {
 		v = q.Default
@@ -638,9 +649,9 @@ func resolveAnswer(q Question, raw string) string {
 		for _, t := range q.Tracks {
 			parts = append(parts, t.Artist+" — "+t.Title)
 		}
-		return "всё вместе: " + strings.Join(parts, "; ")
+		return "all together: " + strings.Join(parts, "; ")
 	}
-	return "свой вариант: " + v
+	return "my own pick: " + v
 }
 
 func pickedOptions(q Question, raw string) []int {
@@ -664,31 +675,31 @@ func pickedOptions(q Question, raw string) []int {
 func (a *Agent) askLater(args askLaterArg) string {
 	a.progress("ask_later", args.Question)
 	if a.Later != nil {
-		return "ошибка: вопрос уже задан в этом ходе"
+		return "error: the question was already asked in this turn"
 	}
 	if strings.TrimSpace(args.Question) == "" || len(args.Options) < 2 || len(args.Options) > 3 || args.Default < 1 || args.Default > len(args.Options) {
-		return "ошибка: вопрос и 2–3 варианта {n, label}; n — номер трека из «Выдано»; default — номер варианта"
+		return askLaterErr
 	}
 	labels := make([]string, len(args.Options))
 	tracks := make([]Track, len(args.Options))
 	for i, o := range args.Options {
 		if o.N < 1 || o.N > len(a.History) || strings.TrimSpace(o.Label) == "" {
-			return "ошибка: вопрос и 2–3 варианта {n, label}; n — номер трека из «Выдано»; default — номер варианта"
+			return askLaterErr
 		}
 		labels[i] = o.Label
 		tracks[i] = a.History[o.N-1]
 	}
 	a.Later = &Question{Question: args.Question, Options: labels, Tracks: tracks, Default: strconv.Itoa(args.Default)}
-	return "ok: вопрос покажу владельцу, ответ придёт репликой"
+	return "ok: the question will be shown to the listener, the answer comes as a reply"
 }
 
 func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites bool) string {
-	a.progress("set_plan", fmt.Sprintf("ориентиров %d, исключений %d", len(seeds), len(exclusions)))
+	a.progress("set_plan", fmt.Sprintf("referents %d, exclusions %d", len(seeds), len(exclusions)))
 	for _, s := range seeds {
 		switch s.Mode {
 		case "not_it", "and_similar", "want_it":
 		default:
-			return "ошибка: mode " + s.Mode
+			return "error: unknown mode " + s.Mode
 		}
 	}
 	ss := make([]Seed, len(seeds))
@@ -697,9 +708,9 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites 
 	}
 	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites})
 	a.planSet = true
-	res := fmt.Sprintf("план принят: ориентиров %d, исключений %d", len(seeds), len(exclusions))
+	res := fmt.Sprintf("plan accepted: referents %d, exclusions %d", len(seeds), len(exclusions))
 	if fromFavorites {
-		res += ", режим любимого"
+		res += ", favorites mode"
 	}
 	return res
 }
@@ -708,16 +719,16 @@ func (a *Agent) describe(ctx context.Context, kind, artist, name string) string 
 	switch kind {
 	case "artist", "album", "track":
 	default:
-		return "ошибка: kind " + kind
+		return "error: unknown kind " + kind
 	}
 	if kind != "artist" && strings.TrimSpace(name) == "" {
-		return "ошибка: нужен name"
+		return "error: name is required"
 	}
 	if kind == "artist" && strings.TrimSpace(artist) == "" {
 		artist, name = name, ""
 	}
 	if kind == "artist" && strings.TrimSpace(artist) == "" {
-		return "ошибка: нужен artist"
+		return "error: artist is required"
 	}
 	short := kind + " " + artist
 	if name != "" {
@@ -726,11 +737,11 @@ func (a *Agent) describe(ctx context.Context, kind, artist, name string) string 
 	a.progress("describe", short)
 	res, err := a.Backend.describe(ctx, kind, artist, name)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	b, err := json.Marshal(res)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return string(b)
 }
@@ -739,7 +750,7 @@ func (a *Agent) similarArtists(ctx context.Context, artist string) string {
 	a.progress("similar_artists", artist)
 	sims, err := a.Backend.similarArtists(ctx, artist)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	if len(sims) > 20 {
 		sims = sims[:20]
@@ -750,7 +761,7 @@ func (a *Agent) similarArtists(ctx context.Context, artist string) string {
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return string(b)
 }
@@ -762,10 +773,10 @@ type similarOut struct {
 
 func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string {
 	if !a.planSet {
-		return "ошибка: сначала set_plan"
+		return "error: call set_plan first"
 	}
 	if len(tracks) < 1 || len(tracks) > 30 {
-		return "ошибка: 1–30 треков"
+		return "error: 1–30 tracks"
 	}
 	type found struct {
 		song Song
@@ -830,12 +841,12 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 		KnownLeft: a.Session.KnownLeft(),
 	}
 	if a.UI != nil {
-		a.UI.Progress(fmt.Sprintf("· submit %d → принято %d, отклонено %d (порция %s)",
+		a.UI.Progress(fmt.Sprintf("· submit %d → accepted %d, rejected %d (portion %s)",
 			len(tracks), len(accepted), len(rejected), out.Portion))
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return string(b)
 }
@@ -843,7 +854,7 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 func (a *Agent) memoryAdd(text, evidence string) string {
 	a.progress("memory_add", truncateRunes(text, 80))
 	if err := a.Memory.Add(text, evidence); err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return a.memoryOK()
 }
@@ -851,7 +862,7 @@ func (a *Agent) memoryAdd(text, evidence string) string {
 func (a *Agent) memoryReplace(old, text, evidence string) string {
 	a.progress("memory_replace", truncateRunes(old, 80))
 	if err := a.Memory.Replace(old, text, evidence); err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return a.memoryOK()
 }
@@ -859,25 +870,25 @@ func (a *Agent) memoryReplace(old, text, evidence string) string {
 func (a *Agent) memoryRemove(old, reason string) string {
 	a.progress("memory_remove", truncateRunes(old, 80))
 	if err := a.Memory.Remove(old, reason); err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return a.memoryOK()
 }
 
 func (a *Agent) memoryConsolidate(entries []memoryEntryArg) string {
-	a.progress("memory_consolidate", fmt.Sprintf("записей %d", len(entries)))
+	a.progress("memory_consolidate", fmt.Sprintf("entries %d", len(entries)))
 	es := make([]memory.Entry, len(entries))
 	for i, e := range entries {
 		es[i] = memory.Entry{Text: e.Text, Evidence: e.Evidence}
 	}
 	if err := a.Memory.Consolidate(es); err != nil {
-		return "ошибка: " + err.Error()
+		return "error: " + err.Error()
 	}
 	return a.memoryOK()
 }
 
 func (a *Agent) memoryOK() string {
-	return fmt.Sprintf("ok: память %d/%d", a.Memory.Size(), a.Memory.Limit)
+	return fmt.Sprintf("ok: memory %d/%d", a.Memory.Size(), a.Memory.Limit)
 }
 
 func (a *Agent) progress(name, short string) {

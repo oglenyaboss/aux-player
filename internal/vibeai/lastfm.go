@@ -34,7 +34,7 @@ type lfTag struct {
 func parseTopTags(body []byte) ([]tag, error) {
 	var env lfTopTagsEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("lastfm: ответ не JSON: %v", err)
+		return nil, fmt.Errorf("lastfm: response is not JSON: %v", err)
 	}
 	arr, err := decodeLastfmList[lfTag](env.Error, env.Message, env.Toptags.Tag, "toptags.tag")
 	if err != nil || arr == nil {
@@ -107,7 +107,7 @@ type lastfmClient struct {
 
 func (l *lastfmClient) call(ctx context.Context, method string, params url.Values) ([]byte, error) {
 	if l.key == "" {
-		return nil, errors.New("lastfm: нет ключа")
+		return nil, errors.New("lastfm: no key")
 	}
 	if !l.last.IsZero() {
 		if d := time.Since(l.last); d < 200*time.Millisecond {
@@ -133,7 +133,7 @@ func (l *lastfmClient) call(ctx context.Context, method string, params url.Value
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("lastfm %s: чтение ответа: %v", method, err)
+		return nil, fmt.Errorf("lastfm %s: reading the response: %v", method, err)
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("lastfm %s: HTTP %d", method, resp.StatusCode)

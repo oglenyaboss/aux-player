@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-var ErrUnauthorized = errors.New("llm: ключ не подошёл")
+var ErrUnauthorized = errors.New("llm: key rejected")
 
 type ModelInfo struct {
 	ID        string
@@ -92,7 +92,7 @@ func parseModels(b []byte) ([]ModelInfo, error) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(b, &wire); err != nil {
-		return nil, fmt.Errorf("llm: models: разбор ответа: %w", err)
+		return nil, fmt.Errorf("llm: models: parsing the response: %w", err)
 	}
 	mods := make([]ModelInfo, 0, len(wire.Data))
 	for _, m := range wire.Data {
@@ -116,7 +116,7 @@ func parseModels(b []byte) ([]ModelInfo, error) {
 func newSession() string {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return "vibelab-" + hex.EncodeToString(b)
+	return "aux-" + hex.EncodeToString(b)
 }
 
 func isOpenRouter(baseURL string) bool {

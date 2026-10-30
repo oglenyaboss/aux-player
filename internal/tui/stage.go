@@ -407,23 +407,23 @@ func thinkingPhrase(rest string) string {
 		if what == "" {
 			what = args
 		}
-		return "читаю про " + what
+		return stage.Tr("читаю про ", "reading about ") + what
 	case "set_plan":
-		return "наметил план"
+		return stage.Tr("наметил план", "sketched a plan")
 	case "similar_artists":
-		return "смотрю соседей " + args
+		return stage.Tr("смотрю соседей ", "checking neighbors of ") + args
 	case "submit":
-		return "проверяю в Apple Music…"
+		return stage.Tr("проверяю в Apple Music…", "checking Apple Music…")
 	case "ask_user":
-		return "спросил тебя"
+		return stage.Tr("спросил тебя", "asked you")
 	case "ask_later":
-		return "придумал вопрос"
+		return stage.Tr("придумал вопрос", "came up with a question")
 	case "memory_add", "memory_replace":
-		return "запомнил: " + args
+		return stage.Tr("запомнил: ", "remembered: ") + args
 	case "memory_remove":
-		return "забыл: " + args
+		return stage.Tr("забыл: ", "forgot: ") + args
 	case "memory_consolidate":
-		return "навожу порядок в памяти"
+		return stage.Tr("навожу порядок в памяти", "tidying up memory")
 	}
 	return rest
 }

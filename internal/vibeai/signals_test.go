@@ -135,7 +135,7 @@ func TestBlockedArtistSessionSkip(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Mercury: Retrograde"})
 	key := songArtists(Song{Artist: "Ghostemane", Title: "Mercury: Retrograde"})[0]
-	if got := sig.blockedArtist(key, "s2"); got != "скипнут в этой сессии" {
+	if got := sig.blockedArtist(key, "s2"); got != "skipped in this session" {
 		t.Errorf("ta же сессия: got %q, want \"скипнут в этой сессии\"", got)
 	}
 	if got := sig.blockedArtist(key, "s3"); got != "" {
@@ -149,7 +149,7 @@ func TestBlockedArtistGlobalTwoSessions(t *testing.T) {
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
 	)
-	if got := sig.blockedArtist("ghostemane", "s3"); got != "владелец скипает (2 сессий)" {
+	if got := sig.blockedArtist("ghostemane", "s3"); got != "the listener skips (2 sessions)" {
 		t.Errorf("got %q, want \"владелец скипает (2 сессий)\"", got)
 	}
 }
@@ -278,7 +278,7 @@ func TestEngineRecord(t *testing.T) {
 		t.Errorf("rec1 = %+v", sig.recs[1])
 	}
 	logText := e.log.b.String()
-	if !strings.Contains(logText, "сигнал: Ken Carson — Yale: played 30/120 с") {
+	if !strings.Contains(logText, "signal: Ken Carson — Yale: played 30/120 s") {
 		t.Errorf("нет строки сигнала в логе: %q", logText)
 	}
 	if strings.Contains(logText, "pause") {
