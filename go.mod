@@ -9,7 +9,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/godbus/dbus/v5 v5.2.2
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/mxschmitt/playwright-go v0.6100.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.43.0

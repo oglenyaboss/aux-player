@@ -1,12 +1,14 @@
 package auth
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,46 +17,133 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
-const fakeJWT = "aaa.bbb.ccc" //nolint:gosec // G101: test value, not a real credential
+const (
+	testBundlePath = "/assets/index~abc123.js"
+	testPage       = `<html><script type="module" crossorigin src="/assets/index~abc123.js"></script></html>`
+	cfgToken       = "eyJ.cfg.tok" //nolint:gosec // G101: test value, not a real credential
+)
 
-func brokerServer(t *testing.T, key, token string, exp time.Time, hits *atomic.Int32) *httptest.Server {
+// testJWT builds a token shaped like the ones the web player bundle carries:
+// a base64url header naming the kid, a payload carrying exp, and a signature.
+func testJWT(t *testing.T, kid string, exp time.Time) string {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		if r.Header.Get("X-Aux-Client") != key {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"token":"` + token + `","expires_at":` + itoa(exp.Unix()) + `}`))
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+	header := testSegment(t, map[string]any{"typ": "JWT", "alg": "ES256", "kid": kid})
+	payload := testSegment(t, map[string]any{
+		"iss":               "https://music.apple.com",
+		"iat":               exp.Add(-70 * 24 * time.Hour).Unix(),
+		"exp":               exp.Unix(),
+		"root_https_origin": []string{"music.apple.com"},
+	})
+	return header + "." + payload + "." + strings.Repeat("sig", 15)
 }
 
-func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+func testSegment(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	b, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("marshalling test JWT claims: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
+}
 
-func TestBrokerToken_FetchesAndCaches(t *testing.T) {
-	now := time.Now()
+// newWebPlayerServer serves the page and the bundle it names, counting every
+// request it receives.
+func newWebPlayerServer(t *testing.T, page, bundle string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
 	var hits atomic.Int32
-	srv := brokerServer(t, "k", fakeJWT, now.Add(7*24*time.Hour), &hits)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		switch r.URL.Path {
+		case webPlayerPage:
+			_, _ = w.Write([]byte(page))
+		case testBundlePath:
+			_, _ = w.Write([]byte(bundle))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+// isolateCache points the developer token cache at a fresh directory, so a test
+// neither reads nor leaves a cached token.
+func isolateCache(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+}
+
+// stubWebPlayer points the web player at a local server that serves a
+// WebPlayKid token, leaves the token cache empty and returns that token.
+func stubWebPlayer(t *testing.T, exp time.Time) string {
+	t.Helper()
+	isolateCache(t)
+	tok := testJWT(t, webPlayKid, exp)
+	srv, _ := newWebPlayerServer(t, testPage, bundleOf(tok))
+	orig := webPlayerURL
+	webPlayerURL = srv.URL
+	t.Cleanup(func() { webPlayerURL = orig })
+	return tok
+}
+
+// stubWebPlayerDown points the web player at a server that answers 404 and
+// leaves the token cache empty, so resolving a developer token fails.
+func stubWebPlayerDown(t *testing.T) {
+	t.Helper()
+	isolateCache(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	orig := webPlayerURL
+	webPlayerURL = srv.URL
+	t.Cleanup(func() { webPlayerURL = orig })
+}
+
+// bundleOf wraps tokens in JS so they appear where the real bundle keeps them.
+func bundleOf(tokens ...string) string {
+	quoted := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		quoted = append(quoted, `"`+tok+`"`)
+	}
+	return "var a=[" + strings.Join(quoted, ",") + "];"
+}
+
+func TestWebPlayerToken_FetchesWebPlayTokenAndCaches(t *testing.T) {
+	now := time.Now()
+	ltExp := now.Add(30 * 24 * time.Hour)
+	webExp := now.Add(70 * 24 * time.Hour)
+	lt := testJWT(t, "LT", ltExp)
+	web := testJWT(t, webPlayKid, webExp)
+
+	srv, hits := newWebPlayerServer(t, testPage, bundleOf(lt, web))
 	cache := filepath.Join(t.TempDir(), "sub", "devtoken.json")
 
-	got, err := brokerToken(srv.URL, "k", cache, now)
-	if err != nil || got != fakeJWT {
-		t.Fatalf("brokerToken = %q, %v", got, err)
+	got, err := webPlayerToken(srv.URL, cache, now)
+	if err != nil || got != web {
+		t.Fatalf("webPlayerToken = %q, %v; want the WebPlayKid token", got, err)
 	}
-	if hits.Load() != 1 {
-		t.Fatalf("hits = %d, want 1", hits.Load())
+	if hits.Load() != 2 {
+		t.Errorf("hits = %d, want 2 (page and bundle)", hits.Load())
 	}
 
-	// Second call is served from the cache.
-	got, err = brokerToken(srv.URL, "k", cache, now.Add(time.Hour))
-	if err != nil || got != fakeJWT {
-		t.Fatalf("cached brokerToken = %q, %v", got, err)
+	cached, err := readCache(cache)
+	if err != nil {
+		t.Fatalf("reading cache: %v", err)
 	}
-	if hits.Load() != 1 {
-		t.Errorf("cache miss: hits = %d, want 1", hits.Load())
+	if cached.Token != web {
+		t.Errorf("cached token is not the WebPlayKid token")
+	}
+	if cached.ExpiresAt != webExp.Unix() {
+		t.Errorf("cached expires_at = %d, want %d", cached.ExpiresAt, webExp.Unix())
+	}
+
+	for _, line := range TokenLogs() {
+		if strings.Contains(line, web) {
+			t.Errorf("log line leaks the token: %q", line)
+		}
 	}
 
 	if runtime.GOOS != "windows" {
@@ -68,247 +157,291 @@ func TestBrokerToken_FetchesAndCaches(t *testing.T) {
 	}
 }
 
-func TestBrokerToken_RefetchesNearExpiry(t *testing.T) {
+func TestWebPlayerToken_UsesFreshCacheWithoutNetwork(t *testing.T) {
 	now := time.Now()
-	var hits atomic.Int32
-	srv := brokerServer(t, "k", fakeJWT, now.Add(7*24*time.Hour), &hits)
+	exp := now.Add(10 * 24 * time.Hour)
+	web := testJWT(t, webPlayKid, exp)
+
 	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	if err := writeCache(cache, cachedToken{Token: "old.old.old", ExpiresAt: now.Add(refreshBefore / 2).Unix()}); err != nil {
+	if err := writeCache(cache, cachedToken{Token: web, ExpiresAt: exp.Unix()}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := brokerToken(srv.URL, "k", cache, now)
-	if err != nil || got != fakeJWT {
-		t.Fatalf("brokerToken = %q, %v; want a fresh token", got, err)
+	srv, hits := newWebPlayerServer(t, testPage, "")
+	got, err := webPlayerToken(srv.URL, cache, now)
+	if err != nil || got != web {
+		t.Fatalf("webPlayerToken = %q, %v; want the cached token", got, err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("hits = %d, want 0 for a cache with 10 days left", hits.Load())
+	}
+}
+
+func TestWebPlayerToken_FallsBackToUnexpiredCache(t *testing.T) {
+	now := time.Now()
+	exp := now.Add(24 * time.Hour)
+	web := testJWT(t, webPlayKid, exp)
+
+	cache := filepath.Join(t.TempDir(), "devtoken.json")
+	if err := writeCache(cache, cachedToken{Token: web, ExpiresAt: exp.Unix()}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	got, err := webPlayerToken(srv.URL, cache, now)
+	if err != nil || got != web {
+		t.Fatalf("webPlayerToken = %q, %v; want the cached token despite the 500", got, err)
+	}
+}
+
+func TestWebPlayerToken_RejectsPageWithoutBundle(t *testing.T) {
+	srv, _ := newWebPlayerServer(t, "<html><body>no script here</body></html>", "")
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), time.Now()); err == nil {
+		t.Error("webPlayerToken accepted a page without a script bundle")
+	}
+}
+
+func TestWebPlayerToken_RejectsBundleWithoutWebPlayKid(t *testing.T) {
+	now := time.Now()
+	srv, _ := newWebPlayerServer(t, testPage, bundleOf(testJWT(t, "LT", now.Add(30*24*time.Hour))))
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), now); err == nil {
+		t.Error("webPlayerToken accepted a bundle without a WebPlayKid token")
+	}
+}
+
+func TestWebPlayerToken_RejectsExpiredToken(t *testing.T) {
+	now := time.Now()
+	srv, _ := newWebPlayerServer(t, testPage, bundleOf(testJWT(t, webPlayKid, now.Add(-time.Hour))))
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), now); err == nil {
+		t.Error("webPlayerToken accepted an expired WebPlayKid token")
+	}
+}
+
+func TestWebPlayerToken_RefusesForeignBundle(t *testing.T) {
+	page := `<html><script type="module" crossorigin src="https://evil.example/assets/index~x.js"></script></html>`
+	srv, hits := newWebPlayerServer(t, page, "")
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), time.Now()); err == nil {
+		t.Error("webPlayerToken accepted a bundle hosted on another host")
 	}
 	if hits.Load() != 1 {
-		t.Errorf("hits = %d, want 1", hits.Load())
+		t.Errorf("hits = %d, want 1 (the page only)", hits.Load())
 	}
 }
 
-func TestBrokerToken_FallsBackToUnexpiredCacheWhenBrokerFails(t *testing.T) {
+func TestWebPlayerToken_FollowsSameHostRedirect(t *testing.T) {
 	now := time.Now()
+	web := testJWT(t, webPlayKid, now.Add(70*24*time.Hour))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case webPlayerPage:
+			http.Redirect(w, r, "/us/new2", http.StatusMovedPermanently)
+		case "/us/new2":
+			_, _ = w.Write([]byte(testPage))
+		case testBundlePath:
+			_, _ = w.Write([]byte(bundleOf(web)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	got, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), now)
+	if err != nil || got != web {
+		t.Fatalf("webPlayerToken = %q, %v; want the token behind the redirect", got, err)
+	}
+}
+
+func TestWebPlayerToken_RefusesForeignRedirect(t *testing.T) {
+	var leaked atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		leaked.Add(1)
+	}))
+	defer other.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+webPlayerPage, http.StatusMovedPermanently)
+	}))
+	defer srv.Close()
+
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), time.Now()); err == nil {
+		t.Error("webPlayerToken followed a redirect to another host")
+	}
+	if leaked.Load() != 0 {
+		t.Error("the request reached the redirect target")
+	}
+}
+
+func TestWebPlayerToken_RetriesTransientErrors(t *testing.T) {
+	origBackoff := retryBackoff
+	retryBackoff = time.Millisecond
+	t.Cleanup(func() { retryBackoff = origBackoff })
+
+	now := time.Now()
+	web := testJWT(t, webPlayKid, now.Add(70*24*time.Hour))
 	var hits atomic.Int32
-	srv := brokerServer(t, "right", fakeJWT, now.Add(time.Hour), &hits) // wrong key -> 401
-	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	if err := writeCache(cache, cachedToken{Token: "old.old.old", ExpiresAt: now.Add(refreshBefore / 2).Unix()}); err != nil {
-		t.Fatal(err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+			return
+		}
+		switch r.URL.Path {
+		case webPlayerPage:
+			_, _ = w.Write([]byte(testPage))
+		case testBundlePath:
+			_, _ = w.Write([]byte(bundleOf(web)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	tok, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), now)
+	if err != nil || tok != web {
+		t.Fatalf("webPlayerToken = %q, %v; want a token after the retry", tok, err)
+	}
+	if hits.Load() != 3 {
+		t.Errorf("hits = %d, want 3 (failed page, page, bundle)", hits.Load())
 	}
 
-	got, err := brokerToken(srv.URL, "wrong", cache, now)
-	if err != nil || got != "old.old.old" {
-		t.Fatalf("brokerToken = %q, %v; want the still-valid cached token", got, err)
+	logs := strings.Join(TokenLogs(), "\n")
+	if !strings.Contains(logs, "[devtoken] attempt 1/3 failed") || !strings.Contains(logs, "retrying in") {
+		t.Errorf("missing retry log messages in %q", logs)
 	}
 }
 
-func TestBrokerToken_FailsWithoutUsableCache(t *testing.T) {
-	now := time.Now()
-	var hits atomic.Int32
-	srv := brokerServer(t, "right", fakeJWT, now.Add(time.Hour), &hits)
-	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	if err := writeCache(cache, cachedToken{Token: "old.old.old", ExpiresAt: now.Add(-time.Minute).Unix()}); err != nil {
-		t.Fatal(err)
-	}
+func TestWebPlayerToken_DoesNotRetryClientErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
 
-	if got, err := brokerToken(srv.URL, "wrong", cache, now); err == nil {
-		t.Fatalf("brokerToken = %q, nil; want an error with only an expired cache", got)
+	if _, err := webPlayerToken(srv.URL, filepath.Join(t.TempDir(), "devtoken.json"), time.Now()); err == nil {
+		t.Error("webPlayerToken accepted a 404 page")
 	}
 }
 
-func TestFetchToken_RejectsBadResponses(t *testing.T) {
-	now := time.Now()
-	cases := map[string]string{
-		"malformed token": `{"token":"not-a-jwt","expires_at":` + itoa(now.Add(time.Hour).Unix()) + `}`,
-		"empty segment":   `{"token":"a..c","expires_at":` + itoa(now.Add(time.Hour).Unix()) + `}`,
-		"js injection":    `{"token":"a.b.';alert(1)//","expires_at":` + itoa(now.Add(time.Hour).Unix()) + `}`,
-		"expired token":   `{"token":"` + fakeJWT + `","expires_at":` + itoa(now.Add(-time.Hour).Unix()) + `}`,
-		"not json":        `<html>`,
-	}
-	for name, body := range cases {
-		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte(body))
-			}))
-			defer srv.Close()
-			if _, err := fetchToken(srv.URL, "k", now); err == nil {
-				t.Errorf("fetchToken accepted %s", name)
-			}
-		})
-	}
-}
-
-func TestFetchToken_RefusesPlainHTTPToRemoteHost(t *testing.T) {
-	if _, err := fetchToken("http://example.com/v1/token", "k", time.Now()); err == nil {
+func TestWebPlayerToken_RefusesPlainHTTPToRemoteHost(t *testing.T) {
+	if _, err := fetchToken("http://example.com", time.Now()); err == nil {
 		t.Error("fetchToken accepted http to a non-loopback host")
 	}
 }
 
-func TestFetchToken_DoesNotFollowRedirects(t *testing.T) {
-	var leaked atomic.Int32
-	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { leaked.Add(1) }))
-	defer other.Close()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, other.URL, http.StatusFound)
-	}))
-	defer srv.Close()
+func TestResolveDeveloperToken_UsesWebPlayerToken(t *testing.T) {
+	orig := webPlayerURL
+	t.Cleanup(func() { webPlayerURL = orig })
+	isolateCache(t)
 
-	if _, err := fetchToken(srv.URL, "secret", time.Now()); err == nil {
-		t.Error("fetchToken followed a redirect")
-	}
-	if leaked.Load() != 0 {
-		t.Error("the client key reached the redirect target")
-	}
-}
-
-func TestResolveDeveloperToken(t *testing.T) {
-	origDev, origURL, origKey := devToken, tokenURL, clientKey
-	t.Cleanup(func() { devToken, tokenURL, clientKey = origDev, origURL, origKey })
-
-	t.Run("embedded token wins and needs no network", func(t *testing.T) {
-		devToken, tokenURL, clientKey = "embedded.tok.en", "http://127.0.0.1:1/unused", "" //nolint:gosec // G101: test value, not a real credential
-		cfg := &config.Config{AppleDeveloperToken: "stale"}
-		if err := ResolveDeveloperToken(cfg); err != nil || cfg.AppleDeveloperToken != "embedded.tok.en" {
-			t.Errorf("got %q, %v", cfg.AppleDeveloperToken, err)
-		}
-	})
-
-	t.Run("neither configured leaves the config value", func(t *testing.T) {
-		devToken, tokenURL, clientKey = "", "", ""
-		cfg := &config.Config{AppleDeveloperToken: "mine"}
-		if err := ResolveDeveloperToken(cfg); err != nil || cfg.AppleDeveloperToken != "mine" {
-			t.Errorf("got %q, %v", cfg.AppleDeveloperToken, err)
-		}
-	})
-
-	t.Run("broker failure keeps the config token and reports the error", func(t *testing.T) {
-		t.Setenv("XDG_CACHE_HOME", t.TempDir())
-		t.Setenv("HOME", t.TempDir())
-		t.Setenv("LOCALAPPDATA", t.TempDir())
-		var hits atomic.Int32
-		srv := brokerServer(t, "right", fakeJWT, time.Now().Add(time.Hour), &hits)
-		devToken, tokenURL, clientKey = "", srv.URL, "wrong"
-		cfg := &config.Config{AppleDeveloperToken: "mine"}
-		if err := ResolveDeveloperToken(cfg); err == nil {
-			t.Error("want an error when the broker rejects the client")
-		}
-		if cfg.AppleDeveloperToken != "mine" {
-			t.Errorf("config token clobbered: %q", cfg.AppleDeveloperToken)
-		}
-	})
-}
-
-func TestBrokerToken_RetriesOnTransientErrors(t *testing.T) {
-	origBackoff := retryBackoff
-	retryBackoff = time.Millisecond
-	t.Cleanup(func() { retryBackoff = origBackoff })
-
-	var hits atomic.Int32
 	now := time.Now()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count := hits.Add(1)
-		if count == 1 {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"token":"` + fakeJWT + `","expires_at":` + itoa(now.Add(7*24*time.Hour).Unix()) + `}`))
-	}))
-	defer srv.Close()
+	web := testJWT(t, webPlayKid, now.Add(70*24*time.Hour))
+	srv, _ := newWebPlayerServer(t, testPage, bundleOf(web))
+	webPlayerURL = srv.URL
 
-	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	tok, err := brokerToken(srv.URL, "k", cache, now)
-	if err != nil {
-		t.Fatalf("brokerToken failed: %v", err)
+	cfg := &config.Config{AppleDeveloperToken: "stale.tok"}
+	if err := ResolveDeveloperToken(cfg); err != nil || cfg.AppleDeveloperToken != web {
+		t.Fatalf("ResolveDeveloperToken = %v, token %q; want the fetched token", err, cfg.AppleDeveloperToken)
 	}
-	if tok != fakeJWT {
-		t.Errorf("got token %q, want %q", tok, fakeJWT)
-	}
-	if hits.Load() != 2 {
-		t.Errorf("hits = %d, want 2", hits.Load())
-	}
-
-	logs := BrokerLogs()
-	foundAttempt1 := false
-	foundRetry := false
-	foundSuccess := false
-	for _, l := range logs {
-		if strings.Contains(l, "attempt 1/3 failed") {
-			foundAttempt1 = true
-		}
-		if strings.Contains(l, "retrying in") {
-			foundRetry = true
-		}
-		if strings.Contains(l, "fresh developer token received") {
-			foundSuccess = true
-		}
-	}
-	if !foundAttempt1 || !foundRetry || !foundSuccess {
-		t.Errorf("missing expected log messages in %v", logs)
+	if _, err := readCache(cachePath()); err != nil {
+		t.Errorf("cache not written to %s: %v", cachePath(), err)
 	}
 }
 
-func TestBrokerToken_DoesNotRetryPermanentErrors(t *testing.T) {
+func TestResolveDeveloperToken_KeepsConfigTokenOnFetchFailure(t *testing.T) {
+	orig := webPlayerURL
+	t.Cleanup(func() { webPlayerURL = orig })
 	origBackoff := retryBackoff
 	retryBackoff = time.Millisecond
 	t.Cleanup(func() { retryBackoff = origBackoff })
+	isolateCache(t)
 
-	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
+	webPlayerURL = srv.URL
 
-	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	_, err := brokerToken(srv.URL, "bad-key", cache, time.Now())
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	cfg := &config.Config{AppleDeveloperToken: cfgToken}
+	if err := ResolveDeveloperToken(cfg); err == nil {
+		t.Fatal("want an error when the web player is unreachable and nothing is cached")
 	}
-	if hits.Load() != 1 {
-		t.Errorf("hits = %d, want 1 (should not retry 401)", hits.Load())
+	if cfg.AppleDeveloperToken != cfgToken {
+		t.Errorf("config token clobbered: %q", cfg.AppleDeveloperToken)
 	}
 }
 
-func TestBrokerToken_SingleAttemptWhenFallingBackToValidCache(t *testing.T) {
-	origBackoff := retryBackoff
-	retryBackoff = time.Millisecond
-	t.Cleanup(func() { retryBackoff = origBackoff })
+func TestCheckTokensRefreshing_RefreshesRejectedDeveloperToken(t *testing.T) {
+	cfg := &config.Config{AppleDeveloperToken: "stale.tok", AppleUserToken: "user.tok"}
+	statuses := []TokenStatus{DeveloperTokenRejected, TokensValid}
+	var checks, refreshes int
 
-	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		http.Error(w, "bad gateway", http.StatusBadGateway)
-	}))
-	defer srv.Close()
+	check := func(string, string) (TokenStatus, string) {
+		status := statuses[checks]
+		checks++
+		return status, "us"
+	}
+	refresh := func() error {
+		refreshes++
+		cfg.AppleDeveloperToken = "fresh.tok"
+		return nil
+	}
 
-	const fallbackJWT = "fallback.jwt.val" //nolint:gosec // G101: test value
+	status, sf := checkTokensRefreshing(check, refresh, cfg)
+	if status != TokensValid || sf != "us" {
+		t.Errorf("checkTokensRefreshing = %v, %q; want TokensValid, us", status, sf)
+	}
+	if checks != 2 {
+		t.Errorf("checks = %d, want 2", checks)
+	}
+	if refreshes != 1 {
+		t.Errorf("refreshes = %d, want 1", refreshes)
+	}
+}
+
+func TestCheckTokensRefreshing_KeepsRejectionWhenRefreshFails(t *testing.T) {
+	cfg := &config.Config{AppleDeveloperToken: "stale.tok", AppleUserToken: "user.tok"}
+	checks := 0
+
+	check := func(string, string) (TokenStatus, string) {
+		checks++
+		return DeveloperTokenRejected, ""
+	}
+	refresh := func() error { return errors.New("offline") }
+
+	status, _ := checkTokensRefreshing(check, refresh, cfg)
+	if status != DeveloperTokenRejected {
+		t.Errorf("checkTokensRefreshing = %v, want DeveloperTokenRejected", status)
+	}
+	if checks != 1 {
+		t.Errorf("checks = %d, want 1 when the refresh fails", checks)
+	}
+}
+
+// TestLiveWebPlayerToken fetches the token from the real music.apple.com. It
+// is skipped unless AUX_LIVE=1, because it needs the network and Apple's
+// current bundle layout.
+func TestLiveWebPlayerToken(t *testing.T) {
+	if os.Getenv("AUX_LIVE") != "1" {
+		t.Skip("set AUX_LIVE=1 to run the live music.apple.com test")
+	}
+
 	now := time.Now()
-	cache := filepath.Join(t.TempDir(), "devtoken.json")
-	// Cache is expiring soon (within refreshBefore) but not yet expired
-	if err := writeCache(cache, cachedToken{Token: fallbackJWT, ExpiresAt: now.Add(30 * time.Minute).Unix()}); err != nil {
-		t.Fatal(err)
-	}
-
-	tok, err := brokerToken(srv.URL, "k", cache, now)
+	tok, err := webPlayerToken(webPlayerURL, filepath.Join(t.TempDir(), "devtoken.json"), now)
 	if err != nil {
-		t.Fatalf("expected fallback to cache, got err: %v", err)
+		t.Fatalf("webPlayerToken: %v", err)
 	}
-	if tok != fallbackJWT {
-		t.Errorf("got %q, want cached token", tok)
+	kid, ok := jwtKid(tok)
+	if !ok || kid != webPlayKid {
+		t.Fatalf("token kid = %q, want %q", kid, webPlayKid)
 	}
-	if hits.Load() != 1 {
-		t.Errorf("hits = %d, want 1 (should not multi-retry when a valid cache exists)", hits.Load())
+	exp, ok := jwtExp(tok)
+	if !ok {
+		t.Fatal("token has no exp claim")
 	}
-
-	logs := BrokerLogs()
-	foundFallback := false
-	for _, l := range logs {
-		if strings.Contains(l, "fetch failed, falling back to unexpired cached token") {
-			foundFallback = true
-			break
-		}
+	if !time.Unix(exp, 0).After(now.Add(24 * time.Hour)) {
+		t.Errorf("token expires in less than a day: %s", time.Unix(exp, 0))
 	}
-	if !foundFallback {
-		t.Errorf("missing fallback log in %v", logs)
-	}
+	t.Logf("web player token: %d bytes, %d days to expiry", len(tok), int(time.Until(time.Unix(exp, 0)).Hours()/24))
 }

@@ -1,7 +1,7 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
-.PHONY: build run test lint clean release build-with-token refresh-token install uninstall check-deps
+.PHONY: build run test lint clean install uninstall check-deps
 
 check-deps:
 ifeq ($(shell uname -s),Linux)
@@ -14,97 +14,31 @@ ifeq ($(shell uname -s),Linux)
 	@echo "All dependencies found."
 endif
 
+# build compiles aux. Last.fm API keys are embedded when LASTFM_API_KEY and
+# LASTFM_API_SECRET are set in the environment or a local .env (gitignored);
+# without them the user sets lastfm_api_key and lastfm_api_secret in the config.
 build: check-deps
-	go build -o aux .
-
-# build-with-token embeds the Apple developer token without obfuscation.
-# Use this for local testing of the embedded-token flow.
-# Requires: APPLE_KEY_ID, APPLE_TEAM_ID, APPLE_PRIVATE_KEY
-# Optional: LASTFM_API_KEY, LASTFM_API_SECRET (embed Last.fm keys for testing)
-build-with-token:
-	@test -n "$$APPLE_KEY_ID"      || { echo "APPLE_KEY_ID is not set";      exit 1; }
-	@test -n "$$APPLE_TEAM_ID"     || { echo "APPLE_TEAM_ID is not set";     exit 1; }
-	@test -n "$$APPLE_PRIVATE_KEY" || { echo "APPLE_PRIVATE_KEY is not set"; exit 1; }
 	@set -e; \
-	echo "Generating developer token..."; \
-	TOKEN=$$(GOFLAGS= go run ./scripts/gen-devtoken 2>/dev/null); \
-	test -n "$$TOKEN" || { echo "gen-devtoken produced no output — check credentials"; exit 1; }; \
-	LDFLAGS="-X 'github.com/oglenyaboss/aux-player/internal/auth.devToken=$$TOKEN'"; \
+	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	ldflags=""; \
 	if [ -n "$$LASTFM_API_KEY" ] && [ -n "$$LASTFM_API_SECRET" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY'"; \
-		LDFLAGS="$$LDFLAGS -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'"; \
 		echo "Embedding Last.fm API keys..."; \
+		ldflags="-X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY' -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'"; \
 	fi; \
-	echo "Building with embedded token..."; \
-	go build \
-		-ldflags "$$LDFLAGS" \
-		-o aux . && echo "Done. Run: aux auth login"
+	if [ -n "$$ldflags" ]; then \
+		go build -ldflags "$$ldflags" -o aux .; \
+	else \
+		go build -o aux .; \
+	fi
 
-# release builds a release binary wired to the token broker and Last.fm API keys.
-# Requires:
-#   AUX_TOKEN_URL, AUX_CLIENT_KEY
-#   LASTFM_API_KEY, LASTFM_API_SECRET (from https://www.last.fm/api/account/create)
-# Usage: make release AUX_TOKEN_URL=https://.../v1/token AUX_CLIENT_KEY=... \
-#                     LASTFM_API_KEY=... LASTFM_API_SECRET=...
-release: check-deps
-	@test -n "$$AUX_TOKEN_URL"   || { echo "AUX_TOKEN_URL is not set";   exit 1; }
-	@test -n "$$AUX_CLIENT_KEY"  || { echo "AUX_CLIENT_KEY is not set";  exit 1; }
-	@test -n "$$LASTFM_API_KEY"    || { echo "LASTFM_API_KEY is not set";    exit 1; }
-	@test -n "$$LASTFM_API_SECRET" || { echo "LASTFM_API_SECRET is not set"; exit 1; }
-	@set -e; \
-	echo "Building release binary..."; \
-	go build \
-		-ldflags "-s -w \
-		          -X 'github.com/oglenyaboss/aux-player/internal/auth.tokenURL=$$AUX_TOKEN_URL' \
-		          -X 'github.com/oglenyaboss/aux-player/internal/auth.clientKey=$$AUX_CLIENT_KEY' \
-		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiKey=$$LASTFM_API_KEY' \
-		          -X 'github.com/oglenyaboss/aux-player/internal/lastfm.apiSecret=$$LASTFM_API_SECRET'" \
-		-o aux . && echo "Done."
-
-# refresh-token generates a fresh Apple developer JWT and writes it into your
-# local aux config (apple_developer_token). Use it when the token expires
-# (~30 days) and you build without an embedded token (plain `make build`).
-#
-# Credentials are read from the environment or a local .env file (gitignored):
-#   APPLE_KEY_ID, APPLE_TEAM_ID
-#   APPLE_PRIVATE_KEY       - PEM contents of the .p8 key, OR
-#   APPLE_PRIVATE_KEY_FILE  - path to the .p8 key (~ is expanded)
-# After refreshing, run `aux auth login` if your user token is not set.
-refresh-token:
-	@set -e; \
-	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
-	if [ -z "$$APPLE_PRIVATE_KEY" ] && [ -n "$$APPLE_PRIVATE_KEY_FILE" ]; then \
-		APPLE_PRIVATE_KEY="$$(cat "$$(eval echo $$APPLE_PRIVATE_KEY_FILE)")"; \
-		export APPLE_PRIVATE_KEY; \
-	fi; \
-	test -n "$$APPLE_KEY_ID"      || { echo "APPLE_KEY_ID is not set (env or .env)";      exit 1; }; \
-	test -n "$$APPLE_TEAM_ID"     || { echo "APPLE_TEAM_ID is not set (env or .env)";     exit 1; }; \
-	test -n "$$APPLE_PRIVATE_KEY" || { echo "APPLE_PRIVATE_KEY or APPLE_PRIVATE_KEY_FILE is not set (env or .env)"; exit 1; }; \
-	export APPLE_KEY_ID APPLE_TEAM_ID APPLE_PRIVATE_KEY; \
-	GOFLAGS= go run ./scripts/gen-devtoken -write
-
-# install rebuilds with an embedded developer token and copies the binary onto
-# PATH, so the installed copy cannot silently go stale behind a newer ./aux in
-# the working tree. Credentials come from the environment or a local .env
-# (gitignored), which may point at the key with APPLE_PRIVATE_KEY_FILE instead
-# of inlining its contents as APPLE_PRIVATE_KEY — the same inputs refresh-token
-# accepts.
-#
-# Embedded tokens expire after 30 days, so re-run this when the catalog starts
-# returning 401s. Override the location with: make install PREFIX=/usr/local
-install:
-	@set -e; \
-	if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
-	if [ -z "$$APPLE_PRIVATE_KEY" ] && [ -n "$$APPLE_PRIVATE_KEY_FILE" ]; then \
-		key_file="$$(eval echo $$APPLE_PRIVATE_KEY_FILE)"; \
-		test -f "$$key_file" || { echo "APPLE_PRIVATE_KEY_FILE not found: $$key_file"; exit 1; }; \
-		APPLE_PRIVATE_KEY="$$(cat "$$key_file")"; \
-	fi; \
-	export APPLE_KEY_ID APPLE_TEAM_ID APPLE_PRIVATE_KEY LASTFM_API_KEY LASTFM_API_SECRET; \
-	$(MAKE) --no-print-directory build-with-token; \
-	install -d "$(BINDIR)"; \
-	install -m 755 aux "$(BINDIR)/aux"; \
-	echo "Installed aux to $(BINDIR)/aux"
+# install builds aux and copies the binary onto PATH, so the installed copy
+# cannot silently go stale behind a newer ./aux in the working tree. No Apple
+# credentials are needed: aux fetches its developer token from music.apple.com
+# at startup. Override the location with: make install PREFIX=/usr/local
+install: build
+	install -d "$(BINDIR)"
+	install -m 755 aux "$(BINDIR)/aux"
+	@echo "Installed aux to $(BINDIR)/aux"
 
 uninstall:
 	rm -f "$(BINDIR)/aux"

@@ -148,20 +148,16 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	tokenErr := auth.ResolveDeveloperToken(cfg)
 	lastfm.ApplyEmbedded(cfg)
 
-	brokerLogs := auth.BrokerLogs()
+	tokenLogs := auth.TokenLogs()
 	if debug {
-		for _, msg := range brokerLogs {
+		for _, msg := range tokenLogs {
 			fmt.Fprintf(os.Stderr, "debug: %s\n", msg)
 		}
 	}
-	opts.InitialLogs = brokerLogs
+	opts.InitialLogs = tokenLogs
 
 	if tokenErr != nil && cfg.AppleDeveloperToken == "" {
-		return tokenErr
-	}
-
-	if cfg.AppleDeveloperToken == "" {
-		return fmt.Errorf("apple developer token not set.\n\nSet apple_developer_token in %s\nor run: go run ./scripts/gen-devtoken", cfgPath)
+		return fmt.Errorf("could not get an Apple Music developer token from music.apple.com.\n\nCheck your internet connection, or set apple_developer_token in %s", cfgPath)
 	}
 
 	// Make sure the desktop can resolve the MPRIS DesktopEntry property to an

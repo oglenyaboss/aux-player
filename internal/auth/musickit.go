@@ -42,18 +42,9 @@ type callbackPayload struct {
 // waits for the user token, then saves it to config.
 func Login(cfg *config.Config) error {
 	if err := ResolveDeveloperToken(cfg); err != nil && cfg.AppleDeveloperToken == "" {
-		return err
-	}
+		return errors.New(`could not get an Apple Music developer token from music.apple.com.
 
-	if cfg.AppleDeveloperToken == "" {
-		return errors.New(`apple developer token is not set.
-
-To get one:
-  1. Go to https://developer.apple.com/account/resources/authkeys/list
-  2. Create a key with "MusicKit" capability
-  3. Download the .p8 key file
-  4. Run: go run ./scripts/gen-devtoken with the required env vars
-  5. Set apple_developer_token in the aux config file (see aux --help for its platform path)`)
+Check your internet connection, or set apple_developer_token in the aux config file (see aux --help for its platform path)`)
 	}
 
 	tokenCh := make(chan string, 1)
