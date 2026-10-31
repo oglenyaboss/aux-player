@@ -3,7 +3,7 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
-## [1.0.0] — YYYY-MM-DD
+## [1.0.0] — 2026-10-31
 
 First public release.
 
