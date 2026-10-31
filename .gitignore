@@ -11,7 +11,7 @@ coverage.html
 
 # Release
 release_notes.md
-dist-darwin/
+dist-arm64/
 
 # Config (personal credentials must not be committed)
 .env
