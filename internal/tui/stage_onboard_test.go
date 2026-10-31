@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,6 +29,16 @@ func isolatedHome(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("APPDATA", t.TempDir())
+}
+
+// savedConfigPath is where Save wrote the config under the isolated home.
+func savedConfigPath(t *testing.T) string {
+	t.Helper()
+	path, err := config.ConfigPath("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // setListModels replaces the model-list fetch for the test and restores it.
@@ -227,7 +236,7 @@ func TestStageSetupSaves(t *testing.T) {
 	if got := vibeAIConfig(m.cfg).LLM.Effort; got != "high" {
 		t.Fatalf("engine effort = %q, want high", got)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
+	data, err := os.ReadFile(savedConfigPath(t))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -267,7 +276,7 @@ func TestStageLastfmConnect(t *testing.T) {
 	if m.cfg.LastfmSessionKey != "sess" {
 		t.Fatalf("session key = %q, want sess", m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
+	data, err := os.ReadFile(savedConfigPath(t))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -398,7 +407,7 @@ func TestStageLastfmTypedKeys(t *testing.T) {
 		t.Fatalf("cfg = (%q,%q,%q), ждём (k,s,sess)",
 			m.cfg.LastfmAPIKey, m.cfg.LastfmAPISecret, m.cfg.LastfmSessionKey)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
+	data, err := os.ReadFile(savedConfigPath(t))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -428,7 +437,7 @@ func TestStageEggsSaves(t *testing.T) {
 	if m.cfg.VibeEggs == nil || *m.cfg.VibeEggs {
 		t.Fatalf("VibeEggs = %v, ждём false", m.cfg.VibeEggs)
 	}
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "aux", "config.json")) //nolint:gosec // G703: the test reads the config it just wrote under its own HOME
+	data, err := os.ReadFile(savedConfigPath(t))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
