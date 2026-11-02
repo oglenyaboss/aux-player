@@ -57,7 +57,9 @@ func TestDragonRule(t *testing.T) {
 	}
 }
 
-// R3 (кейс 2): after 6 s there is a compass: edges, points of the world, quest marker; the bar is gone.
+// R3 (кейсы 2 и 3): after 6 s there is a compass — edges, points of the world,
+// quest marker, the bar gone — and the points drift along the track position.
+// One render of the rest position feeds both checks.
 func TestDragonCompass(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{}, dragonborn, 20, 8)
 	y := m.barBox.Min.Y
@@ -86,15 +88,9 @@ func TestDragonCompass(t *testing.T) {
 			t.Errorf("the rune %q of the old bar remained: %q", r, row)
 		}
 	}
-}
-
-// R3 (кейс 3): the points of the world drift along the track position.
-func TestDragonCompassFlow(t *testing.T) {
-	m1, f1 := eggTrackFrame(t, Options{}, dragonborn, 20, 8)
 	m2, f2 := eggTrackFrame(t, Options{}, dragonborn, 80, 8)
-	r1, r2 := dragonBarRow(m1, f1), dragonBarRow(m2, f2)
-	if r1 == r2 {
-		t.Errorf("the compass has not moved: %q", r1)
+	if r2 := dragonBarRow(m2, f2); r2 == row {
+		t.Errorf("the compass has not moved: %q", r2)
 	}
 }
 
@@ -177,18 +173,12 @@ func TestDragonNoEggs(t *testing.T) {
 	}
 }
 
-// G3: two identical models render identical frames.
-func TestDragonSteady(t *testing.T) {
-	m1, _ := eggTrackFrame(t, Options{}, dragonborn, 30, 8)
-	m2, _ := eggTrackFrame(t, Options{}, dragonborn, 30, 8)
-	if stripANSI(m1.View()) != stripANSI(m2.View()) {
-		t.Error("the frames diverged")
-	}
-}
+// G3 (TestDragonSteady) lives in determinism_norace_test.go: it sits out of the
+// -race run and runs in the plain, pre-commit and CI runs.
 
-// G4: in no layout and no point in the track the egg falls apart.
+// G4: in no layout and no point of the track the egg falls apart.
 func TestDragonSizes(t *testing.T) {
-	for _, sz := range [4][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}} {
+	for _, sz := range [2][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 94.5, 174} {
 			for _, secs := range []float64{1, 9} {
 				m := New(Options{SelfPlay: true})

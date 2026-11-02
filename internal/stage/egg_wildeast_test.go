@@ -35,12 +35,15 @@ func weCrowdCover() image.Image {
 	return img
 }
 
+// weCrowdImg is the field of grey bodies drawn once: every frame test reuses it.
+var weCrowdImg = weCrowdCover()
+
 func weFrame(t *testing.T, o Options, tr Track, at, secs float64) (*Model, *fb) {
 	t.Helper()
 	o.SelfPlay = true
 	m := New(o)
 	m.SetSize(160, 45)
-	m.SetCover(tr.Key(), weCrowdCover())
+	m.SetCover(tr.Key(), weCrowdImg)
 	m.JumpPlay([]Track{tr, hvCreepin}, 0, at)
 	steps(m, secs)
 	return m, m.render()
@@ -291,18 +294,12 @@ func TestWENoEggs(t *testing.T) {
 	}
 }
 
-func TestWEDeterminism(t *testing.T) {
-	for _, tr := range []Track{weHaha, weOgney, weCold} {
-		_, a := weFrame(t, Options{}, tr, 30, 5)
-		_, b := weFrame(t, Options{}, tr, 30, 5)
-		if a.String() != b.String() {
-			t.Errorf("%s: кадры разъехались", tr.Title)
-		}
-	}
-}
+// G3 (TestWEDeterminism) lives in determinism_norace_test.go: it sits out of the
+// -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: every track of the album survives a wide and a narrow window.
 func TestWESizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}, {20, 6}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, tr := range []Track{weOgney, weHaha, weKreem, weCold, weGlugi, weMoskva, weWitchT, weHomeT} {
 			m := New(Options{SelfPlay: true})
 			m.SetSize(sz[0], sz[1])

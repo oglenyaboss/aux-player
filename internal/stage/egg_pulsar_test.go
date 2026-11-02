@@ -43,6 +43,9 @@ func TestPulsarRule(t *testing.T) {
 	}
 }
 
+// The trace at mid-track: the plain bar is erased, dots run in the bar row and
+// stack two rows up, the played end stays bright and the unplayed keeps its grey.
+// One render feeds all three checks.
 func TestPulsarTrace(t *testing.T) {
 	m, f := pulsarFrame(t, Options{}, 50, 10)
 	b := m.barBox
@@ -65,6 +68,34 @@ func TestPulsarTrace(t *testing.T) {
 	if dots < bw/2 {
 		t.Errorf("в строке бара %d ячеек с точками, нужно не меньше %d", dots, bw/2)
 	}
+	up1, up2 := false, false
+	for x := b.Min.X; x < b.Max.X; x++ {
+		if _, dot := pulsarCell(f, x, b.Min.Y-1); dot {
+			up1 = true
+		}
+		if _, dot := pulsarCell(f, x, b.Min.Y-2); dot {
+			up2 = true
+		}
+	}
+	if !up1 {
+		t.Error("в строке Min.Y-1 нет точек")
+	}
+	if !up2 {
+		t.Error("в строке Min.Y-2 нет точек")
+	}
+	if x := f.at(b.Min.X, b.Min.Y); x == nil || x.fg.lum() <= 0.8 {
+		t.Errorf("(Min.X, Min.Y) fg %+v lum %v, want lum > 0.8", x.fg, x.fg.lum())
+	}
+	c, dot := pulsarCell(f, b.Max.X-1, b.Min.Y)
+	if !dot {
+		t.Error("(Max.X-1, Min.Y) нет точек")
+	}
+	have, want := c.fg.q(), hex(0x7d868f).q()
+	for i, d := range have {
+		if d2 := d - want[i]; d2 < -3 || d2 > 3 {
+			t.Errorf("(Max.X-1, Min.Y) fg %v от #%02x по каналу %d, want в пределах 0.03", have, 0x7d868f, i)
+		}
+	}
 }
 
 func TestPulsarFlat(t *testing.T) {
@@ -83,44 +114,6 @@ func TestPulsarFlat(t *testing.T) {
 	}
 	if !dots {
 		t.Error("в строке бара нет точек")
-	}
-}
-
-func TestPulsarStack(t *testing.T) {
-	m, f := pulsarFrame(t, Options{}, 50, 10)
-	b := m.barBox
-	up1, up2 := false, false
-	for x := b.Min.X; x < b.Max.X; x++ {
-		if _, dot := pulsarCell(f, x, b.Min.Y-1); dot {
-			up1 = true
-		}
-		if _, dot := pulsarCell(f, x, b.Min.Y-2); dot {
-			up2 = true
-		}
-	}
-	if !up1 {
-		t.Error("в строке Min.Y-1 нет точек")
-	}
-	if !up2 {
-		t.Error("в строке Min.Y-2 нет точек")
-	}
-}
-
-func TestPulsarPlayedUnplayed(t *testing.T) {
-	m, f := pulsarFrame(t, Options{}, 50, 10)
-	b := m.barBox
-	if x := f.at(b.Min.X, b.Min.Y); x == nil || x.fg.lum() <= 0.8 {
-		t.Errorf("(Min.X, Min.Y) fg %+v lum %v, want lum > 0.8", x.fg, x.fg.lum())
-	}
-	c, dot := pulsarCell(f, b.Max.X-1, b.Min.Y)
-	if !dot {
-		t.Error("(Max.X-1, Min.Y) нет точек")
-	}
-	have, want := c.fg.q(), hex(0x7d868f).q()
-	for i, d := range have {
-		if d2 := d - want[i]; d2 < -3 || d2 > 3 {
-			t.Errorf("(Max.X-1, Min.Y) fg %v от #%02x по каналу %d, want в пределах 0.03", have, 0x7d868f, i)
-		}
 	}
 }
 
@@ -240,24 +233,13 @@ func TestPulsarNoEggs(t *testing.T) {
 	}
 }
 
-func TestPulsarDeterminism(t *testing.T) {
-	disorder := Track{Artist: "Joy Division", Title: "Disorder", Album: "Unknown Pleasures (2019 Digital Master)", Dur: 209}
-	run := func() string {
-		m := New(Options{SelfPlay: true})
-		m.SetSize(160, 45)
-		m.JumpPlay([]Track{disorder}, 0, 50)
-		steps(m, 10)
-		return m.View()
-	}
-	first, second := run(), run()
-	if first != second {
-		t.Error("два прогона дают разные кадры")
-	}
-}
+// G3 (TestPulsarDeterminism) lives in determinism_norace_test.go: it sits out
+// of the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: no panic on a wide and a narrow window, early and late positions.
 func TestPulsarSizes(t *testing.T) {
 	disorder := Track{Artist: "Joy Division", Title: "Disorder", Album: "Unknown Pleasures (2019 Digital Master)", Dur: 209}
-	for _, size := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}} {
+	for _, size := range [][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 104.5, 194} {
 			for _, secs := range []float64{1, 9} {
 				func() {

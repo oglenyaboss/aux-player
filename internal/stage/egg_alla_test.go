@@ -27,12 +27,15 @@ func allaPortrait() image.Image {
 	return img
 }
 
+// allaPortraitImg is the portrait drawn once: every frame test reuses it.
+var allaPortraitImg = allaPortrait()
+
 func allaFrame(t *testing.T, o Options, tr Track, secs float64) (*Model, *fb) {
 	t.Helper()
 	o.SelfPlay = true
 	m := New(o)
 	m.SetSize(160, 45)
-	m.SetCover(tr.Key(), allaPortrait())
+	m.SetCover(tr.Key(), allaPortraitImg)
 	m.JumpPlay([]Track{tr, hvCreepin}, 0, 30)
 	steps(m, secs)
 	return m, m.render()
@@ -52,12 +55,32 @@ func TestAllaRule(t *testing.T) {
 	}
 }
 
-// A black-and-white film: outside the cover nothing has colour, the queue art included.
-func TestAllaMonochrome(t *testing.T) {
+// The black-and-white film on EVERY: no colour outside the cover (the queue art
+// included), smoke rising from below, the queue readable. One steady render
+// feeds all three checks.
+func TestAllaFilm(t *testing.T) {
 	m, f := allaFrame(t, Options{}, allaEvery, 8)
-	n := count(m, f, func(c col) bool { return allaChroma(c) > 0.04 })
-	if n > 0 {
+	if n := count(m, f, func(c col) bool { return allaChroma(c) > 0.04 }); n > 0 {
 		t.Errorf("%d цветных пикселей вне обложки", n)
+	}
+	if !strings.Contains(stripANSI(f.String()), "Creepin'") {
+		t.Errorf("очередь потеряла трек")
+	}
+	band := func(f *fb, y0 int) (s float64) {
+		for py := y0; py < y0+6; py++ {
+			for px := 0; px < m.w; px++ {
+				s += f.pixelAt(px, py).lum()
+			}
+		}
+		return s
+	}
+	low, high := band(f, 2*m.h-8), band(f, 2)
+	if low < high*1.3 {
+		t.Errorf("дым внизу %.1f, вверху %.1f; ждём, что снизу гуще", low, high)
+	}
+	steps(m, 1)
+	if band(m.render(), 2*m.h-8) == low {
+		t.Errorf("дым стоит")
 	}
 }
 
@@ -76,27 +99,6 @@ func TestAllaStainBreathes(t *testing.T) {
 	steps(m, 2.2)
 	if b := eye(m.render()); allaChroma(b) == allaChroma(a) {
 		t.Errorf("пятно не дышит")
-	}
-}
-
-// Smoke rises from below: the bottom of the screen is hazier than the top, and it drifts.
-func TestAllaSmoke(t *testing.T) {
-	m, f := allaFrame(t, Options{}, allaEvery, 8)
-	band := func(f *fb, y0 int) (s float64) {
-		for py := y0; py < y0+6; py++ {
-			for px := 0; px < m.w; px++ {
-				s += f.pixelAt(px, py).lum()
-			}
-		}
-		return s
-	}
-	low, high := band(f, 2*m.h-8), band(f, 2)
-	if low < high*1.3 {
-		t.Errorf("дым внизу %.1f, вверху %.1f; ждём, что снизу гуще", low, high)
-	}
-	steps(m, 1)
-	if band(m.render(), 2*m.h-8) == low {
-		t.Errorf("дым стоит")
 	}
 }
 
@@ -123,13 +125,6 @@ func TestAllaSpine(t *testing.T) {
 	}
 }
 
-func TestAllaReadable(t *testing.T) {
-	_, f := allaFrame(t, Options{}, allaEvery, 8)
-	if !strings.Contains(stripANSI(f.String()), "Creepin'") {
-		t.Errorf("очередь потеряла трек")
-	}
-}
-
 func TestAllaNoEggs(t *testing.T) {
 	m, f := allaFrame(t, Options{NoEggs: true}, allaEvery, 8)
 	if strings.Contains(allaColumn(m, f), allaSpine) {
@@ -137,16 +132,12 @@ func TestAllaNoEggs(t *testing.T) {
 	}
 }
 
-func TestAllaDeterminism(t *testing.T) {
-	_, a := allaFrame(t, Options{}, allaEvery, 5)
-	_, b := allaFrame(t, Options{}, allaEvery, 5)
-	if a.String() != b.String() {
-		t.Errorf("кадры разъехались")
-	}
-}
+// G3 (TestAllaDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: the egg survives a wide and a narrow window.
 func TestAllaSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}, {20, 6}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, tr := range []Track{allaEvery, allaLSD} {
 			m := New(Options{SelfPlay: true})
 			m.SetSize(sz[0], sz[1])

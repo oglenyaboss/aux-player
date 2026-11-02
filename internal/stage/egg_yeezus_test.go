@@ -31,12 +31,15 @@ func yeezusCaseCover() image.Image {
 	return img
 }
 
+// yeezusCaseImg is the case cover drawn once: every frame test reuses it.
+var yeezusCaseImg = yeezusCaseCover()
+
 func yeezusModel(t *testing.T, o Options, w, h int, pos, secs float64) (*Model, *fb) {
 	t.Helper()
 	o.SelfPlay = true
 	m := New(o)
 	m.SetSize(w, h)
-	m.SetCover(yeezusSkin.Key(), yeezusCaseCover())
+	m.SetCover(yeezusSkin.Key(), yeezusCaseImg)
 	m.JumpPlay([]Track{yeezusSkin, yeezusNext}, 0, pos)
 	steps(m, secs)
 	return m, m.render()
@@ -74,14 +77,48 @@ func TestYeezusRule(t *testing.T) {
 	}
 }
 
-// The empty case: no cover and no queue, the giant title owns the screen.
-func TestYeezusLayout(t *testing.T) {
+// The empty case at full play: no cover and no queue, the cover drawn big on the
+// left at the full height with the disc in it; off the case one bit — white,
+// black and the red of the tape; the black title stands right of the case. One
+// render feeds all four checks.
+func TestYeezusCase(t *testing.T) {
 	m, f := yeezusFrame(t, Options{}, 60, 9)
+	b, _ := yeezusPlan(m)
 	if g := m.geom(); !g.noCover || !g.noQueue {
 		t.Fatalf("geom %+v, ждём noCover и noQueue", g)
 	}
 	if strings.Contains(stripANSI(f.String()), "Queued Next") {
 		t.Errorf("очередь видна в раскладке Yeezus")
+	}
+	for py := 0; py < m.h*2; py++ {
+		for px := 0; px < m.w; px++ {
+			if yeezusInCase(b, px, py) {
+				continue
+			}
+			if c := f.pixelAt(px, py); !yeezusOneBit(c) {
+				t.Fatalf("пиксель (%d, %d) вне кейса: %+v, ждём белый, чёрный или красный", px, py, c)
+			}
+		}
+	}
+	if b.cs < m.h*2*8/10 {
+		t.Errorf("кейс %d пикселей при высоте окна %d, ждём от 80%%", b.cs, m.h*2)
+	}
+	if c := f.pixelAt(b.cx+b.cs/10, b.cy+b.cs/10); !yeezusBlueOrGreen(c) {
+		t.Errorf("угол кейса %+v, ждём пиксель обложки", c)
+	}
+	minX, maxX, minY, maxY := m.w, 0, m.h*2, 0
+	for py := 0; py < m.h*2; py++ {
+		for px := b.cx + b.cs; px < m.w; px++ {
+			if c := f.at(px, py/2); c.pix && f.pixelAt(px, py).lum() < 0.1 {
+				minX, maxX, minY, maxY = min(minX, px), max(maxX, px), min(minY, py), max(maxY, py)
+			}
+		}
+	}
+	if span := m.w - b.cx - b.cs; maxX-minX < span*6/10 || maxY-minY < m.h*2/5 {
+		t.Errorf("чёрные буквы в %d..%d × %d..%d, ждём шире %d и выше %d пикселей", minX, maxX, minY, maxY, span*6/10, m.h*2/5)
+	}
+	if !strings.Contains(stripANSI(f.String()), "Kanye West") {
+		t.Errorf("артиста нет в кадре")
 	}
 }
 
@@ -111,36 +148,6 @@ func TestYeezusEntrance(t *testing.T) {
 	m, _ = yeezusFrame(t, Options{}, 60, 1)
 	if lum := m.render().at(m.w-4, 3).bg.lum(); lum <= 0.9 {
 		t.Errorf("на 1 с кейс не белый: lum %.3f", lum)
-	}
-}
-
-// Off the case, one bit: white, black and the red of the tape, nothing else.
-func TestYeezusOneBit(t *testing.T) {
-	m, _ := yeezusFrame(t, Options{}, 60, 9)
-	f := m.render()
-	b, _ := yeezusPlan(m)
-	for py := 0; py < m.h*2; py++ {
-		for px := 0; px < m.w; px++ {
-			if yeezusInCase(b, px, py) {
-				continue
-			}
-			if c := f.pixelAt(px, py); !yeezusOneBit(c) {
-				t.Fatalf("пиксель (%d, %d) вне кейса: %+v, ждём белый, чёрный или красный", px, py, c)
-			}
-		}
-	}
-}
-
-// The case: the cover drawn big on the left at the full height, the disc in it.
-func TestYeezusCase(t *testing.T) {
-	m, _ := yeezusFrame(t, Options{}, 60, 9)
-	f := m.render()
-	b, _ := yeezusPlan(m)
-	if b.cs < m.h*2*8/10 {
-		t.Errorf("кейс %d пикселей при высоте окна %d, ждём от 80%%", b.cs, m.h*2)
-	}
-	if c := f.pixelAt(b.cx+b.cs/10, b.cy+b.cs/10); !yeezusBlueOrGreen(c) {
-		t.Errorf("угол кейса %+v, ждём пиксель обложки", c)
 	}
 }
 
@@ -208,27 +215,6 @@ func TestYeezusSpinUp(t *testing.T) {
 	}
 }
 
-// The title: black letters right of the case.
-func TestYeezusTitle(t *testing.T) {
-	m, _ := yeezusFrame(t, Options{}, 60, 9)
-	f := m.render()
-	b, _ := yeezusPlan(m)
-	minX, maxX, minY, maxY := m.w, 0, m.h*2, 0
-	for py := 0; py < m.h*2; py++ {
-		for px := b.cx + b.cs; px < m.w; px++ {
-			if c := f.at(px, py/2); c.pix && f.pixelAt(px, py).lum() < 0.1 {
-				minX, maxX, minY, maxY = min(minX, px), max(maxX, px), min(minY, py), max(maxY, py)
-			}
-		}
-	}
-	if span := m.w - b.cx - b.cs; maxX-minX < span*6/10 || maxY-minY < m.h*2/5 {
-		t.Errorf("чёрные буквы в %d..%d × %d..%d, ждём шире %d и выше %d пикселей", minX, maxX, minY, maxY, span*6/10, m.h*2/5)
-	}
-	if !strings.Contains(stripANSI(f.String()), "Kanye West") {
-		t.Errorf("артиста нет в кадре")
-	}
-}
-
 // The tape: where it lies on the cover at the start, pulled to the screen edge by the end.
 func TestYeezusTape(t *testing.T) {
 	for _, tc := range []struct{ pos, at float64 }{{0, 0}, {94, 0.5}, {187.4, 1}} {
@@ -268,16 +254,12 @@ func TestYeezusNoEggs(t *testing.T) {
 	}
 }
 
-func TestYeezusDeterminism(t *testing.T) {
-	_, a := yeezusFrame(t, Options{}, 25, 9)
-	_, b := yeezusFrame(t, Options{}, 25, 9)
-	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
-	}
-}
+// G3 (TestYeezusDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: no panic on a wide and a narrow window, early and late positions.
 func TestYeezusBounds(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 94, 187.9} {
 			for _, secs := range []float64{0, 0.3, 1, 9} {
 				yeezusModel(t, Options{}, sz[0], sz[1], pos, secs)

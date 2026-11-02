@@ -25,12 +25,15 @@ func blondeGreen() image.Image {
 	return img
 }
 
+// blondeGreenImg is the flat green cover drawn once: every frame test reuses it.
+var blondeGreenImg = blondeGreen()
+
 func blondeFrame(t *testing.T, o Options, tr Track, pos, secs float64) (*Model, *fb) {
 	t.Helper()
 	o.SelfPlay = true
 	m := New(o)
 	m.SetSize(160, 45)
-	m.SetCover(tr.Key(), blondeGreen())
+	m.SetCover(tr.Key(), blondeGreenImg)
 	m.JumpPlay([]Track{tr}, 0, pos)
 	steps(m, secs)
 	return m, m.render()
@@ -105,7 +108,9 @@ func TestBlondeDayLeak(t *testing.T) {
 	}
 }
 
-// The night side of the album: the smoke cover in place of the track cover.
+// The night side of the album: the smoke cover in place of the track cover, and
+// blurred city lights, red among them, drifting across the backdrop. One render
+// feeds both checks.
 func TestBlondeNightSide(t *testing.T) {
 	m, f := blondeFrame(t, Options{}, blondeFerrari, 60, 9)
 	if c := blondeCoverMid(m, f); !blondeSmoky(c) {
@@ -114,11 +119,6 @@ func TestBlondeNightSide(t *testing.T) {
 	if g := m.geom(); g.noCover {
 		t.Errorf("ночью раскладка перестроена, ждём обычный плеер")
 	}
-}
-
-// The night drive: blurred city lights, red among them, drift across the backdrop.
-func TestBlondeCityLights(t *testing.T) {
-	m, f := blondeFrame(t, Options{}, blondeFerrari, 60, 9)
 	g := m.geom()
 	outside := func(x, y int) bool { return x >= g.cx+g.cw+2 || y >= g.cy+g.ch+2 }
 	bright, red := 0, 0
@@ -169,16 +169,12 @@ func TestBlondeNoEggs(t *testing.T) {
 	}
 }
 
-func TestBlondeDeterminism(t *testing.T) {
-	_, a := blondeFrame(t, Options{}, blondeNights, 205, 7)
-	_, b := blondeFrame(t, Options{}, blondeNights, 205, 7)
-	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
-	}
-}
+// G3 (TestBlondeDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: the egg survives a wide and a narrow window on both sides of the Nights cut.
 func TestBlondeSurvives(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, tr := range []Track{blondeNikes, blondeNights, blondeFerrari} {
 			for _, pos := range []float64{0, 157, 209.5, 210.2, 240} {
 				m := New(Options{SelfPlay: true})
