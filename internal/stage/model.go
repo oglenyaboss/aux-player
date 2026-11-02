@@ -625,7 +625,9 @@ func (m *Model) JumpPlay(tracks []Track, i int, pos float64) {
 		m.slots[n].tr, m.slots[n].fillAt = tracks[n], 0
 		n++
 	}
-	m.toPlay()
+	if !m.toPlay() {
+		return
+	}
 	m.snap = nil
 	m.startTrack(i)
 	m.prev = m.cur
@@ -982,7 +984,7 @@ func (m *Model) scanStep(dt float64) {
 
 // ---------- play ----------
 
-func (m *Model) toPlay() {
+func (m *Model) toPlay() bool {
 	m.snap = m.lastShot
 	m.transT = 0
 	if m.portion != nil {
@@ -993,6 +995,10 @@ func (m *Model) toPlay() {
 				m.queue = append(m.queue, s.tr)
 			}
 		}
+	}
+	if len(m.queue) == 0 {
+		m.Fail(tr("ничего не нашлось — попробуй сказать иначе", "found nothing — try saying it another way"))
+		return false
 	}
 	start, found := 0, false
 	for i, tk := range m.queue {
@@ -1006,6 +1012,7 @@ func (m *Model) toPlay() {
 	if found {
 		m.pos = m.nowPos
 	}
+	return true
 }
 
 func (m *Model) curTrack() *Track { return &m.queue[m.cur] }
