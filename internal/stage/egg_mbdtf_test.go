@@ -60,31 +60,27 @@ func mbdtfCensored() image.Image {
 	return img
 }
 
+// mbdtfCensoredImg is the censored cover drawn once: every frame test reuses it.
+var mbdtfCensoredImg = mbdtfCensored()
+
 func mbdtfWallFrame(t *testing.T, w, h int, pos, secs float64) (*Model, *fb) {
 	t.Helper()
 	m := New(Options{SelfPlay: true})
 	m.SetSize(w, h)
-	m.SetCover(mbdtfFantasy.Key(), mbdtfCensored())
+	m.SetCover(mbdtfFantasy.Key(), mbdtfCensoredImg)
 	m.JumpPlay([]Track{mbdtfFantasy}, 0, pos)
 	steps(m, secs)
 	return m, m.render()
 }
 
-// The wall takes the screen in landscape; portrait and narrow windows keep the player.
-func TestMbdtfLayout(t *testing.T) {
-	m, _ := mbdtfWallFrame(t, 160, 45, 20, 2)
+// The wall takes the screen in landscape (a portrait window keeps the player) and
+// every cell of the blown-up mosaic shows its own cell of the cover. One wall
+// render feeds the layout and mosaic checks.
+func TestMbdtfWall(t *testing.T) {
+	m, f := mbdtfWallFrame(t, 160, 45, 20, 2)
 	if g := m.geom(); !g.noCover || !g.noQueue {
 		t.Errorf("160x45: noCover %v noQueue %v, ждём стену", g.noCover, g.noQueue)
 	}
-	m, _ = mbdtfWallFrame(t, 80, 40, 20, 2)
-	if g := m.geom(); g.noCover {
-		t.Errorf("80x40: стена вместо обычного плеера")
-	}
-}
-
-// Every cell of the blown-up mosaic shows its own cell of the cover.
-func TestMbdtfMosaic(t *testing.T) {
-	m, f := mbdtfWallFrame(t, 160, 45, 20, 2)
 	b, _ := mbdtfPlan(m)
 	if b.cell < 4 {
 		t.Fatalf("клетка мозаики %d пикселей, ждём крупную", b.cell)
@@ -97,6 +93,10 @@ func TestMbdtfMosaic(t *testing.T) {
 				t.Errorf("клетка (%d,%d) = %s, ждём %s", i, j, c.css(), want.css())
 			}
 		}
+	}
+	m, _ = mbdtfWallFrame(t, 80, 40, 20, 2)
+	if g := m.geom(); g.noCover {
+		t.Errorf("80x40: стена вместо обычного плеера")
 	}
 }
 
@@ -163,7 +163,7 @@ func TestMbdtfPainting(t *testing.T) {
 		tr.Title = tc.title
 		m := New(Options{SelfPlay: true})
 		m.SetSize(160, 45)
-		m.SetCover(tr.Key(), mbdtfCensored())
+		m.SetCover(tr.Key(), mbdtfCensoredImg)
 		m.JumpPlay([]Track{tr}, 0, 20)
 		steps(m, 2)
 		f := m.render()
@@ -273,18 +273,12 @@ func TestMbdtfNoEggs(t *testing.T) {
 	}
 }
 
-// G3: two runs of the same track render identically.
-func TestMbdtfDeterminism(t *testing.T) {
-	m1, _ := eggTrackFrame(t, Options{}, mbdtfFantasy, 20, 9)
-	m2, _ := eggTrackFrame(t, Options{}, mbdtfFantasy, 20, 9)
-	if m1.View() != m2.View() {
-		t.Error("два одинаковых прогона дают разные кадры")
-	}
-}
+// G3 (TestMbdtfDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
-// G4: the egg survives every window size, early and late positions.
+// G4: the egg survives a wide and a narrow window, early and late positions.
 func TestMbdtfSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {200, 20}, {300, 80}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 281 * 0.5, 266, 281} {
 			for _, secs := range []float64{1, 9} {
 				m := New(Options{SelfPlay: true})

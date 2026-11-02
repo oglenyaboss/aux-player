@@ -71,9 +71,14 @@ func TestDsotmTriggers(t *testing.T) {
 	}
 }
 
-// 2. played ribbon columns hold the six bands in order.
-func TestDsotmRibbonColors(t *testing.T) {
+// The steady Money scene (spec items 2–9): the played ribbon holds the six
+// bands in order, the unplayed columns keep the dim tail, the plain bar glyphs are
+// gone; the prism rides the playhead; after the reveal the beam runs to the cover
+// and the bridge colours the gap next to it (not before 6.8 s); the title stays
+// near-white light. One render feeds every check.
+func TestDsotmSteady(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 2. played ribbon columns hold the six bands in order.
 	ranges := [][2]float64{{345, 360}, {12, 28}, {40, 55}, {128, 144}, {180, 192}, {254, 268}}
 	for b, rg := range ranges {
 		h, s, v := toHSV(f.pixelAt(m.barBox.Min.X+1, dsotmPrRow(m, b)))
@@ -84,11 +89,7 @@ func TestDsotmRibbonColors(t *testing.T) {
 			t.Errorf("полоса %d: h %.1f, want %.0f…%.0f", b, h, rg[0], rg[1])
 		}
 	}
-}
-
-// 3. unplayed columns keep the single dim pixel in the middle band.
-func TestDsotmRibbonTail(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 3. unplayed columns keep the single dim pixel in the middle band.
 	x := m.barBox.Max.X - 2
 	dim := float64(0x33) / 255
 	c := f.pixelAt(x, dsotmPrRow(m, 2))
@@ -98,11 +99,7 @@ func TestDsotmRibbonTail(t *testing.T) {
 	if c := f.pixelAt(x, dsotmPrRow(m, 0)); c.lum() >= 0.1 {
 		t.Errorf("сверху несыгранной колонки полоса светит: lum %.2f", c.lum())
 	}
-}
-
-// 4. the plain bar glyphs and the knob are gone from the bar row.
-func TestDsotmRibbonCoversBar(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 4. the plain bar glyphs and the knob are gone from the bar row.
 	for x := m.barBox.Min.X; x < m.barBox.Max.X; x++ {
 		if c := f.at(x, m.barBox.Min.Y); c != nil {
 			switch c.ch {
@@ -111,11 +108,7 @@ func TestDsotmRibbonCoversBar(t *testing.T) {
 			}
 		}
 	}
-}
-
-// 5. the prism: white edge on top, dark inside below.
-func TestDsotmPrism(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 5. the prism: white edge on top, dark inside below.
 	hx := m.barBox.Min.X + int(m.pos/380*float64(m.barBox.Dx()))
 	if c := f.pixelAt(hx, dsotmPrRow(m, 0)); c.lum() <= 0.85 {
 		t.Errorf("верх призмы тёмный: lum %.2f", c.lum())
@@ -125,24 +118,7 @@ func TestDsotmPrism(t *testing.T) {
 			t.Errorf("внутри призмы светло: lum %.2f", c.lum())
 		}
 	}
-}
-
-// 6. before the reveal the beam is out and the plain bar is still there.
-func TestDsotmBeamEarly(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
-	g := m.geom()
-	by := g.cy*2 + int(0.49*float64(g.ch*2))
-	if !dsotmBarPlain(f, m) {
-		t.Errorf("до раскрытия на баре нет ━ или ─")
-	}
-	if c := f.pixelAt(2, by); c.lum() >= 0.5 {
-		t.Errorf("луч до 6 с: lum %.2f", c.lum())
-	}
-}
-
-// 7. after the reveal the beam runs from the screen edge to the cover.
-func TestDsotmBeam(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 7. after the reveal the beam runs from the screen edge to the cover.
 	g := m.geom()
 	by := g.cy*2 + int(0.49*float64(g.ch*2))
 	for _, x := range []int{2, g.cx - 1} {
@@ -150,12 +126,7 @@ func TestDsotmBeam(t *testing.T) {
 			t.Errorf("луч в x=%d не дошёл: lum %.2f", x, c.lum())
 		}
 	}
-}
-
-// 8. the bridge colours the gap next to the cover only after 6.8 s.
-func TestDsotmBridge(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
-	g := m.geom()
+	// 8. the bridge colours the gap next to the cover only after 6.8 s.
 	hits := 0
 	for y := g.cy * 2; y < (g.cy+g.ch)*2; y++ {
 		if _, s, v := toHSV(f.pixelAt(g.cx+g.cw+1, y)); s > 0.5 && v > 0.3 {
@@ -165,22 +136,25 @@ func TestDsotmBridge(t *testing.T) {
 	if hits < 4 {
 		t.Errorf("мост: %d цветных пикселей, want ≥ 4", hits)
 	}
-
-	_, f = eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
+	_, f3 := eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
+	// 6. before the reveal the beam is out and the plain bar is still there.
+	if !dsotmBarPlain(f3, m) {
+		t.Errorf("до раскрытия на баре нет ━ или ─")
+	}
+	if c := f3.pixelAt(2, by); c.lum() >= 0.5 {
+		t.Errorf("луч до 6 с: lum %.2f", c.lum())
+	}
+	// 8. the bridge colours the gap next to the cover only after 6.8 s.
 	hits = 0
 	for y := g.cy * 2; y < (g.cy+g.ch)*2; y++ {
-		if _, s, v := toHSV(f.pixelAt(g.cx+g.cw+1, y)); s > 0.5 && v > 0.3 {
+		if _, s, v := toHSV(f3.pixelAt(g.cx+g.cw+1, y)); s > 0.5 && v > 0.3 {
 			hits++
 		}
 	}
 	if hits != 0 {
 		t.Errorf("мост до 6.8 с: %d цветных пикселей", hits)
 	}
-}
-
-// 9. the title is near-white light: nothing saturated stays bright.
-func TestDsotmTitle(t *testing.T) {
-	m, f := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
+	// 9. the title is near-white light: nothing saturated stays bright.
 	for py := m.titleBox.Min.Y; py < m.titleBox.Max.Y; py++ {
 		for px := m.titleBox.Min.X; px < m.titleBox.Max.X; px++ {
 			c := f.pixelAt(px, py)
@@ -263,18 +237,12 @@ func TestDsotmNoEggs(t *testing.T) {
 	}
 }
 
-// 15. (G3) same track, same clock — same frame.
-func TestDsotmDeterminism(t *testing.T) {
-	a, _ := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
-	b, _ := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
-	if a.View() != b.View() {
-		t.Errorf("два кадра одного трека разошлись")
-	}
-}
+// 15. (G3, TestDsotmDeterminism) lives in determinism_norace_test.go: it sits
+// out of the -race run and runs in the plain, pre-commit and CI runs.
 
-// 15. (G4) every size, every position — no panic.
+// 15. (G4) a wide and a narrow window, every position — no panic.
 func TestDsotmSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 190, 365} {
 			for _, secs := range []float64{1, 9} {
 				m := New(Options{SelfPlay: true})

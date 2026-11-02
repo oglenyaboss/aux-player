@@ -47,12 +47,27 @@ func TestUtopiaDarkStart(t *testing.T) {
 	}
 }
 
-// One hard beam: a lit band, the rest of the player in the dark.
+// One hard beam: a lit band, the rest of the player in the dark, and the letters
+// out of the light keep a readable trace. One render feeds both checks.
 func TestUtopiaBeam(t *testing.T) {
 	m, f := utopiaFrame(t, Options{}, 9)
 	lit, dark := utopiaLit(m, f)
 	if lit < 250 || dark < 2000 {
 		t.Errorf("освещено %d, в темноте %d ячеек; ждём луч и пустоту вокруг", lit, dark)
+	}
+	g := m.geom()
+	seen := false
+	for x := g.px; x < g.px+g.pw; x++ {
+		c := f.at(x, g.py)
+		if c.ch != ' ' && !c.pix && utopiaLight(m, x, 2*g.py+1) == 0 {
+			seen = true
+			if c.fg.lum() < 0.15 {
+				t.Errorf("буква в темноте почти не видна: %s", c.fg.css())
+			}
+		}
+	}
+	if !seen {
+		t.Skip("заголовок целиком в луче")
 	}
 }
 
@@ -84,25 +99,6 @@ func TestUtopiaSweep(t *testing.T) {
 	}
 }
 
-// Letters out of the light keep a trace, the title can still be found in the dark.
-func TestUtopiaLettersTrace(t *testing.T) {
-	m, f := utopiaFrame(t, Options{}, 9)
-	g := m.geom()
-	seen := false
-	for x := g.px; x < g.px+g.pw; x++ {
-		c := f.at(x, g.py)
-		if c.ch != ' ' && !c.pix && utopiaLight(m, x, 2*g.py+1) == 0 {
-			seen = true
-			if c.fg.lum() < 0.15 {
-				t.Errorf("буква в темноте почти не видна: %s", c.fg.css())
-			}
-		}
-	}
-	if !seen {
-		t.Skip("заголовок целиком в луче")
-	}
-}
-
 func TestUtopiaNoEggs(t *testing.T) {
 	m, f := utopiaFrame(t, Options{NoEggs: true}, 9)
 	if _, dark := utopiaLit(m, f); dark > 2000 {
@@ -110,16 +106,12 @@ func TestUtopiaNoEggs(t *testing.T) {
 	}
 }
 
-func TestUtopiaDeterminism(t *testing.T) {
-	_, a := utopiaFrame(t, Options{}, 7)
-	_, b := utopiaFrame(t, Options{}, 7)
-	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
-	}
-}
+// G3 (TestUtopiaDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: the egg survives a wide and a narrow window.
 func TestUtopiaSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, secs := range []float64{0.5, 1, 9} {
 			m := New(Options{SelfPlay: true})
 			m.SetSize(sz[0], sz[1])

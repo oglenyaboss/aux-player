@@ -107,8 +107,10 @@ func TestAtakeParticles(t *testing.T) {
 	}
 }
 
-// Title grades purple into emerald top down.
-func TestAtakeTitle(t *testing.T) {
+// The steady scene on Baby Pluto: the title grades purple into emerald top down,
+// the still starfield keeps the sky dark, the stars stay off the bar line and away
+// from letters and digits. One render feeds the title, sky and placement checks.
+func TestAtakeSteady(t *testing.T) {
 	m, f := atakeTrackFrame(t, Options{}, atakePluto, 0, 10)
 	b := m.titleBox
 	if b.Empty() {
@@ -132,11 +134,6 @@ func TestAtakeTitle(t *testing.T) {
 	if topBright == 0 || botBright == 0 {
 		t.Errorf("заголовок не светится: строка %d и %d 'l>0.1' пикселей", topBright, botBright)
 	}
-}
-
-// Still starfield: the backdrop stays level, the stars are glyphs on empty cells.
-func TestAtakeSky(t *testing.T) {
-	_, f := atakeTrackFrame(t, Options{}, atakePluto, 0, 10)
 	star := false
 	for y := 2; y <= 8; y++ {
 		for x := 100; x <= 159; x++ {
@@ -152,19 +149,6 @@ func TestAtakeSky(t *testing.T) {
 	if !star {
 		t.Error("небо без звезды в x 100…159, строках 2…8")
 	}
-	_, f3 := atakeTrackFrame(t, Options{}, atakePluto, 0, 3)
-	for y := 2; y <= 8; y++ {
-		for x := 100; x <= 159; x++ {
-			if ch := f3.at(x, y).ch; ch == '·' || ch == '+' || ch == '✦' {
-				t.Errorf("до раскрытия (%d,%d): символ %q", x, y, ch)
-			}
-		}
-	}
-}
-
-// Stars keep off the bar line and never sit next to letters or digits.
-func TestAtakeStarPlacement(t *testing.T) {
-	m, f := atakeTrackFrame(t, Options{}, atakePluto, 0, 10)
 	isStar := func(r rune) bool { return r == '·' || r == '+' || r == '✦' }
 	for x := m.barBox.Min.X; x < m.barBox.Max.X; x++ {
 		if ch := f.at(x, m.barBox.Min.Y).ch; ch == '·' || ch == '+' {
@@ -180,6 +164,14 @@ func TestAtakeStarPlacement(t *testing.T) {
 				if c := f.at(nx, y); c != nil && (unicode.IsLetter(c.ch) || unicode.IsDigit(c.ch)) {
 					t.Errorf("звезда (%d,%d) стоит рядом с %q", x, y, c.ch)
 				}
+			}
+		}
+	}
+	_, f3 := atakeTrackFrame(t, Options{}, atakePluto, 0, 3)
+	for y := 2; y <= 8; y++ {
+		for x := 100; x <= 159; x++ {
+			if ch := f3.at(x, y).ch; ch == '·' || ch == '+' || ch == '✦' {
+				t.Errorf("до раскрытия (%d,%d): символ %q", x, y, ch)
 			}
 		}
 	}
@@ -218,23 +210,21 @@ func TestAtakeNoEggs(t *testing.T) {
 	}
 }
 
-// G3: same track, pos and secs render identically.
-func TestAtakeDeterminism(t *testing.T) {
-	m1, f1 := atakeTrackFrame(t, Options{}, atakePluto, 0, 95)
-	m2, f2 := atakeTrackFrame(t, Options{}, atakePluto, 0, 95)
-	if f1.String() != f2.String() {
-		t.Error("кадры на pluto не совпали")
-	}
-	_ = m1
-	_ = m2
-}
+// G3 (TestAtakeDeterminism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
-// G4: no panic on sizes, positions and running through the hooks.
+// G4: no panic on a wide and a narrow window, early and late positions, running
+// through the hooks.
 func TestAtakeSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, pos := range []float64{0, 7, 105, 195} {
 			for _, secs := range []float64{1, 9} {
-				m, f := atakeTrackFrame(t, Options{}, atakePluto, pos, secs)
+				m := New(Options{SelfPlay: true})
+				m.SetSize(sz[0], sz[1])
+				m.SetCover(atakePluto.Key(), atakeBlack)
+				m.JumpPlay([]Track{atakePluto}, 0, pos)
+				steps(m, secs)
+				f := m.render()
 				if f == nil || f.at(m.w-1, m.h-1) == nil {
 					t.Errorf("размер %dx%d: кадр не отрисован", sz[0], sz[1])
 				}

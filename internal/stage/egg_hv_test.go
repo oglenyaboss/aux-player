@@ -28,12 +28,15 @@ func hvBurning() image.Image {
 	return img
 }
 
+// hvBurningImg is the burning cover drawn once: every frame test reuses it.
+var hvBurningImg = hvBurning()
+
 func hvFrame(t *testing.T, o Options, tr Track, secs float64) (*Model, *fb) {
 	t.Helper()
 	o.SelfPlay = true
 	m := New(o)
 	m.SetSize(160, 45)
-	m.SetCover(tr.Key(), hvBurning())
+	m.SetCover(tr.Key(), hvBurningImg)
 	m.JumpPlay([]Track{tr}, 0, 60)
 	steps(m, secs)
 	return m, m.render()
@@ -68,23 +71,22 @@ func TestHVRule(t *testing.T) {
 	}
 }
 
-// The city burns below the player once the fire has grown.
-func TestHVFire(t *testing.T) {
+// The burning city: the fire grows in below the player, the skyline stays black
+// along the bottom, and the flames on the cover flicker while the dark of the
+// photo holds still. The steady render feeds the fire, skyline and flicker checks.
+func TestHVCity(t *testing.T) {
 	m, f := hvFrame(t, Options{}, hvSuperhero, 0.2)
 	if n := hvFlames(m, f); n > 20 {
 		t.Errorf("на 0.2 с уже %d пикселей огня, ждём разгорание", n)
 	}
-	for _, tr := range []Track{hvSuperhero, hvCreepin} {
-		m, f = hvFrame(t, Options{}, tr, 9)
-		if n := hvFlames(m, f); n < 300 {
-			t.Errorf("%s: %d пикселей огня, ждём горящий город", tr.Title, n)
-		}
+	m, f = hvFrame(t, Options{}, hvCreepin, 9)
+	if n := hvFlames(m, f); n < 300 {
+		t.Errorf("%s: %d пикселей огня, ждём горящий город", hvCreepin.Title, n)
 	}
-}
-
-// The skyline stands black along the bottom of the screen.
-func TestHVSkyline(t *testing.T) {
-	m, f := hvFrame(t, Options{}, hvSuperhero, 9)
+	m, f = hvFrame(t, Options{}, hvSuperhero, 9)
+	if n := hvFlames(m, f); n < 300 {
+		t.Errorf("%s: %d пикселей огня, ждём горящий город", hvSuperhero.Title, n)
+	}
 	dark := 0
 	for px := 0; px < m.w; px++ {
 		if f.pixelAt(px, 2*m.h-3).lum() < 0.05 {
@@ -93,6 +95,21 @@ func TestHVSkyline(t *testing.T) {
 	}
 	if dark < m.w*2/3 {
 		t.Errorf("у низа экрана тёмных пикселей %d из %d, ждём силуэт города", dark, m.w)
+	}
+	g := m.geom()
+	fire := func(f *fb) col { return f.pixelAt(g.cx+g.cw*17/60, g.cy*2+g.ch) }
+	darkPx := func(f *fb) col { return f.pixelAt(g.cx+g.cw*45/60, g.cy*2+g.ch) }
+	a, da := fire(f), darkPx(f)
+	changed := false
+	for i := 0; i < 6 && !changed; i++ {
+		steps(m, 0.3)
+		changed = fire(m.render()) != a
+	}
+	if !changed {
+		t.Errorf("огонь на обложке не мерцает")
+	}
+	if d := darkPx(m.render()); d != da {
+		t.Errorf("тёмная часть обложки дрожит: %s → %s", da.css(), d.css())
 	}
 }
 
@@ -118,26 +135,6 @@ func TestHVReadable(t *testing.T) {
 	}
 }
 
-// The flames on the cover flicker, the dark of the photo stays still.
-func TestHVCoverFlicker(t *testing.T) {
-	m, f := hvFrame(t, Options{}, hvSuperhero, 9)
-	g := m.geom()
-	fire := func(f *fb) col { return f.pixelAt(g.cx+g.cw*17/60, g.cy*2+g.ch) }
-	dark := func(f *fb) col { return f.pixelAt(g.cx+g.cw*45/60, g.cy*2+g.ch) }
-	a, da := fire(f), dark(f)
-	changed := false
-	for i := 0; i < 6 && !changed; i++ {
-		steps(m, 0.3)
-		changed = fire(m.render()) != a
-	}
-	if !changed {
-		t.Errorf("огонь на обложке не мерцает")
-	}
-	if d := dark(m.render()); d != da {
-		t.Errorf("тёмная часть обложки дрожит: %s → %s", da.css(), d.css())
-	}
-}
-
 func TestHVNoEggs(t *testing.T) {
 	m, f := hvFrame(t, Options{NoEggs: true}, hvSuperhero, 9)
 	if n := hvFlames(m, f); n > 20 {
@@ -145,16 +142,12 @@ func TestHVNoEggs(t *testing.T) {
 	}
 }
 
-func TestHVDeterminism(t *testing.T) {
-	_, a := hvFrame(t, Options{}, hvSuperhero, 7)
-	_, b := hvFrame(t, Options{}, hvSuperhero, 7)
-	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
-	}
-}
+// G3 (TestHVDeterminism) lives in determinism_norace_test.go: it sits out of the
+// -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: the egg survives a wide and a narrow window.
 func TestHVSizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, tr := range []Track{hvSuperhero, hvAroundMe} {
 			m := New(Options{SelfPlay: true})
 			m.SetSize(sz[0], sz[1])

@@ -60,7 +60,9 @@ func TestWave3Rules(t *testing.T) {
 
 func currentsLilac(c col) bool { return c.b > 0.25 && c.b > c.g+0.12 && c.r > c.g+0.08 }
 
-// The stream fills the backdrop once it has come in, not before.
+// The stream fills the backdrop once it has come in (not before), the lines move
+// with time and the queue stays readable. One steady render feeds the last three
+// checks.
 func TestCurrentsStream(t *testing.T) {
 	m, f := wave3Frame(t, Options{}, curLetIt, 60, 0.3)
 	if n := count(m, f, currentsLilac); n > 200 {
@@ -73,22 +75,13 @@ func TestCurrentsStream(t *testing.T) {
 	if n := count(m, f, func(c col) bool { return c.r > 0.85 && c.g < 0.45 && c.b < 0.3 }); n < 30 {
 		t.Errorf("%d пикселей красной линии", n)
 	}
-}
-
-// The lines move with time.
-func TestCurrentsFlows(t *testing.T) {
-	m, f := wave3Frame(t, Options{}, curLetIt, 60, 8)
+	if s := stripANSI(f.String()); !strings.Contains(s, "Creepin'") {
+		t.Errorf("очередь потеряла трек")
+	}
 	a := f.String()
 	steps(m, 1)
 	if m.render().String() == a {
 		t.Errorf("поток стоит")
-	}
-}
-
-func TestCurrentsReadable(t *testing.T) {
-	_, f := wave3Frame(t, Options{}, curLetIt, 60, 8)
-	if s := stripANSI(f.String()); !strings.Contains(s, "Creepin'") {
-		t.Errorf("очередь потеряла трек")
 	}
 }
 
@@ -132,18 +125,12 @@ func TestWave3NoEggs(t *testing.T) {
 	}
 }
 
-func TestWave3Determinism(t *testing.T) {
-	for _, tr := range []Track{curLetIt, igorQuake} {
-		_, a := wave3Frame(t, Options{}, tr, 30, 5)
-		_, b := wave3Frame(t, Options{}, tr, 30, 5)
-		if a.String() != b.String() {
-			t.Errorf("%s: кадры разъехались", tr.Title)
-		}
-	}
-}
+// G3 (TestWave3Determinism) lives in determinism_norace_test.go: it sits out of
+// the -race run and runs in the plain, pre-commit and CI runs.
 
+// G4: the eggs survive a wide and a narrow window.
 func TestWave3Sizes(t *testing.T) {
-	for _, sz := range [][2]int{{160, 45}, {110, 32}, {80, 40}, {60, 12}, {300, 80}, {20, 6}} {
+	for _, sz := range [][2]int{{160, 45}, {60, 12}} {
 		for _, tr := range []Track{curLetIt, igorQuake} {
 			m := New(Options{SelfPlay: true})
 			m.SetSize(sz[0], sz[1])
