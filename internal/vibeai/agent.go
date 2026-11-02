@@ -499,43 +499,21 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 	if a.UI == nil {
 		return "error: no listener display attached; build the portion without asking"
 	}
-	songs := make([][]Song, len(qs))
-	total := 0
+	sugs := make([]Suggestion, 0, len(qs)*4)
 	for _, q := range qs {
-		total += len(q.Options)
+		for _, o := range q.Options {
+			sugs = append(sugs, Suggestion{Artist: o.Artist, Title: o.Title, Why: o.Label})
+		}
 	}
-	type found struct {
-		song Song
-		ok   bool
-	}
-	results := make([]found, total)
-	sem := make(chan struct{}, 6)
-	var wg sync.WaitGroup
+	hits := a.findSongs(ctx, sugs)
+	songs := make([][]Song, len(qs))
+	missing := make([]string, 0)
 	idx := 0
 	for qi, q := range qs {
 		songs[qi] = make([]Song, len(q.Options))
-		for _, o := range q.Options {
-			wg.Add(1)
-			go func(i int, o askOptionArg) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				song, ok, err := a.Backend.findSong(ctx, Suggestion{Artist: o.Artist, Title: o.Title, Why: o.Label})
-				if err != nil {
-					ok = false
-				}
-				results[i] = found{song: song, ok: ok}
-			}(idx, o)
-			idx++
-		}
-	}
-	wg.Wait()
-	missing := make([]string, 0)
-	idx = 0
-	for qi, q := range qs {
 		for oi, o := range q.Options {
-			if results[idx].ok {
-				songs[qi][oi] = results[idx].song
+			if hits[idx].found {
+				songs[qi][oi] = hits[idx].song
 			} else {
 				missing = append(missing, o.Artist+" — "+o.Title)
 			}
@@ -774,6 +752,30 @@ type similarOut struct {
 	Match int    `json:"match"`
 }
 
+type songHit struct {
+	song  Song
+	found bool
+}
+
+func (a *Agent) findSongs(ctx context.Context, sugs []Suggestion) []songHit {
+	hits := make([]songHit, len(sugs))
+	sem := make(chan struct{}, 6)
+	var wg sync.WaitGroup
+	for i, sug := range sugs {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			song, ok, err := a.Backend.findSong(ctx, sug)
+			if err != nil {
+				ok = false
+			}
+			hits[i] = songHit{song: song, found: ok}
+		})
+	}
+	wg.Wait()
+	return hits
+}
+
 func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string {
 	if !a.planSet {
 		return "error: call set_plan first"
@@ -781,25 +783,11 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	if len(tracks) < 1 || len(tracks) > 30 {
 		return "error: 1–30 tracks"
 	}
-	type found struct {
-		song Song
-		ok   bool
-	}
-	results := make([]found, len(tracks))
-	sem := make(chan struct{}, 6)
-	var wg sync.WaitGroup
+	sugs := make([]Suggestion, len(tracks))
 	for i, t := range tracks {
-		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			song, ok, err := a.Backend.findSong(ctx, Suggestion(t))
-			if err != nil {
-				ok = false
-			}
-			results[i] = found{song: song, ok: ok}
-		})
+		sugs[i] = Suggestion(t)
 	}
-	wg.Wait()
+	hits := a.findSongs(ctx, sugs)
 
 	accepted := make([]string, 0)
 	type rejectedRow struct {
@@ -809,7 +797,7 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	rejected := make([]rejectedRow, 0)
 	for i, t := range tracks {
 		sug := Suggestion(t)
-		v := a.Session.Offer(sug, results[i].song, results[i].ok)
+		v := a.Session.Offer(sug, hits[i].song, hits[i].found)
 		if a.UI != nil {
 			if v.Accepted {
 				portion := a.Session.Portion()

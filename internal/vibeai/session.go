@@ -199,31 +199,12 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 			return v
 		}
 	}
-	isKnown := false
-	knownCounted := false
-	for _, a := range arts {
-		if !s.known[a] {
-			continue
-		}
-		isKnown = true
-		if _, isSeed := s.seeds[a]; !isSeed {
-			knownCounted = true
-		}
-	}
-	if !s.plan.FromFavorites && knownCounted && s.knownCount+windowKnown >= s.maxKnown() {
+	_, counted := s.knownFlags(arts)
+	if !s.plan.FromFavorites && counted && s.knownCount+windowKnown >= s.maxKnown() {
 		v.Reason = "known limit"
 		return v
 	}
-	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
-	s.inPortion[k] = true
-	for _, a := range arts {
-		s.portionArts[a]++
-	}
-	if knownCounted {
-		s.knownCount++
-	}
-	v.Accepted = true
-	return v
+	return s.accept(sug, song)
 }
 
 func (s *Session) Take(sug Suggestion, song Song) Verdict {
@@ -237,9 +218,10 @@ func (s *Session) Take(sug Suggestion, song Song) Verdict {
 		v.Reason = "portion is full"
 		return v
 	}
-	arts := songArtists(song)
-	isKnown := false
-	knownCounted := false
+	return s.accept(sug, song)
+}
+
+func (s *Session) knownFlags(arts []string) (isKnown, knownCounted bool) {
 	for _, a := range arts {
 		if !s.known[a] {
 			continue
@@ -249,16 +231,21 @@ func (s *Session) Take(sug Suggestion, song Song) Verdict {
 			knownCounted = true
 		}
 	}
+	return isKnown, knownCounted
+}
+
+func (s *Session) accept(sug Suggestion, song Song) Verdict {
+	arts := songArtists(song)
+	isKnown, knownCounted := s.knownFlags(arts)
 	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
-	s.inPortion[k] = true
+	s.inPortion[songKey(song)] = true
 	for _, a := range arts {
 		s.portionArts[a]++
 	}
 	if knownCounted {
 		s.knownCount++
 	}
-	v.Accepted = true
-	return v
+	return Verdict{Suggestion: sug, Song: song, Accepted: true}
 }
 
 func (s *Session) addReserve(sug Suggestion, song Song) {
