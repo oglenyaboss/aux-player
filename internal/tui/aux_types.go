@@ -32,22 +32,6 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", mins, secs)
 }
 
-type VibeAIQuestion struct {
-	Question string
-	Options  []string
-	Tracks   []VibeAITrack
-	Default  string
-}
-
-type VibeAITrack struct {
-	ID                              string
-	Artist, Title, Album, Year, Why string
-	Released                        string
-	Favorite                        bool
-	ArtworkURL                      string
-	Dur                             time.Duration
-}
-
 // VibeAISubmitMsg asks the model to run an agent turn. Fresh starts a new
 // session (a new request); otherwise Text is a reaction within the session.
 type VibeAISubmitMsg struct {

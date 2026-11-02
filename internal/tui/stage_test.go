@@ -59,7 +59,7 @@ func stageIntoPlayer(m *Model) {
 	ts := vibeTracks()
 	tracks := make([]stage.Track, len(ts))
 	for i, t := range ts {
-		tracks[i] = stageTrack(vibeAIViewTrack(t), t.Artist+" — "+t.Title)
+		tracks[i] = stageTrack(t, t.Artist+" — "+t.Title)
 	}
 	m.vibeAIP.m.st.JumpPlay(tracks, 0, 0)
 }
@@ -79,9 +79,12 @@ func TestStageFullScreen(t *testing.T) {
 }
 
 func TestStageTrackAlbumReleased(t *testing.T) {
-	tr := stageTrack(VibeAITrack{ID: "1", Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Released: "2020-12-25"}, "")
+	tr := stageTrack(vibeai.Track{ID: "1", Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Released: "2020-12-25", DurationMs: 61000}, "")
 	if tr.Album != "Whole Lotta Red" || tr.Released != "2020-12-25" {
 		t.Errorf("Album/Released = %q %q, ждём Whole Lotta Red / 2020-12-25", tr.Album, tr.Released)
+	}
+	if tr.Dur != 61 {
+		t.Errorf("Dur = %v, want 61 seconds", tr.Dur)
 	}
 }
 
@@ -160,7 +163,7 @@ func TestThinkingPhraseLang(t *testing.T) {
 
 func TestStageCoverOnce(t *testing.T) {
 	m := newModel(nil)
-	tr := vibeAIViewTrack(vibeai.Track{ID: "1", Artist: "A", Title: "One", ArtworkURL: "https://x/{w}x{h}.jpg"})
+	tr := vibeai.Track{ID: "1", Artist: "A", Title: "One", ArtworkURL: "https://x/{w}x{h}.jpg"}
 	m.vibeAIP.m.AddPick(tr, "A — One", true, "")
 	m.vibeAIP.m.AddPick(tr, "A — One", true, "")
 	if len(m.vibeAIP.m.want) != 1 {
