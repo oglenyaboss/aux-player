@@ -1,6 +1,7 @@
 # Binaries
 /aux
 /aux.exe
+/scene
 dist/
 
 # Test artifacts
