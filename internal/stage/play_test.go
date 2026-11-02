@@ -110,6 +110,55 @@ func TestPosClampUnknownTrack(t *testing.T) {
 	}
 }
 
+// #8: a jump to the player with no tracks lands the «found nothing» failure, not a
+// division by zero over an empty queue.
+func TestJumpPlayNoTracks(t *testing.T) {
+	t.Cleanup(func() { SetLang("ru") })
+	SetLang("ru")
+	m := New(Options{})
+	m.SetSize(110, 32)
+	m.JumpPlay(nil, 0, 0)
+	if m.Phase() != PhIntro {
+		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+	}
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "ничего не нашлось") {
+		t.Errorf("кадр без ошибки:\n%s", frame)
+	}
+}
+
+// #8: an empty portion after accepted picks keeps the picks playing; the empty
+// queue never reaches the play transition.
+func TestEmptyPortionAfterPicks(t *testing.T) {
+	m := New(Options{})
+	m.SetSize(110, 32)
+	toScan(t, m)
+	for _, tk := range threeTracks() {
+		m.Candidate(tk, true, "")
+	}
+	m.PortionDone(nil, "")
+	if !runTo(m, PhDone, 300) {
+		t.Fatalf("фаза %v, ждём PhDone", m.Phase())
+	}
+	steps(m, 10)
+	if m.Phase() != PhPlay {
+		t.Fatalf("фаза %v, ждём PhPlay с принятыми треками", m.Phase())
+	}
+}
+
+// #8: seek-forward with an unknown duration keeps the position at zero instead of
+// a negative timecode.
+func TestSelfPlaySeekForwardUnknownDur(t *testing.T) {
+	m := New(Options{SelfPlay: true})
+	m.SetSize(110, 32)
+	m.JumpPlay([]Track{{Artist: "A", Title: "Zero", Dur: 0}}, 0, 0)
+	if !m.Key("]", "") {
+		t.Fatal("] в self-play должен принадлежать экрану")
+	}
+	if m.pos < 0 {
+		t.Fatalf("pos=%v, ждём ≥ 0", m.pos)
+	}
+}
+
 // R5: a track with no duration neither panics nor advances on its own.
 func TestZeroDur(t *testing.T) {
 	m := New(Options{SelfPlay: true})

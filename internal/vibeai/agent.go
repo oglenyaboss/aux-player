@@ -496,6 +496,9 @@ func (a *Agent) askUser(ctx context.Context, qs []askUserArg) string {
 			}
 		}
 	}
+	if a.UI == nil {
+		return "error: no listener display attached; build the portion without asking"
+	}
 	songs := make([][]Song, len(qs))
 	total := 0
 	for _, q := range qs {

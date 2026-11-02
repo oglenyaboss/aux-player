@@ -140,6 +140,29 @@ func TestTogglePlayPause_PlayerError(t *testing.T) {
 	}
 }
 
+// #8: the toggle command must not read the player state that Update writes concurrently.
+func TestTogglePlayPause_NoRaceWithPlayerState(t *testing.T) {
+	mp := newMockPlayer()
+	m := newModel(mp)
+	track := &provider.Track{ID: "1", Title: "One"}
+	cmds := make(chan tea.Cmd)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 100 {
+			cmd := <-cmds
+			cmd()
+		}
+	}()
+	for range 100 {
+		cmds <- m.togglePlayPause()
+		m.Update(playerStateMsg(player.State{Playing: true, Track: track}))
+		m.Update(playerStateMsg(player.State{Playing: false, Track: track}))
+	}
+	close(cmds)
+	<-done
+}
+
 // --- playerCmd ---
 
 func TestPlayerCmd_NilPlayer(t *testing.T) {
