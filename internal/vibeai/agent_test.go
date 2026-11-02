@@ -628,6 +628,19 @@ func TestSubmitOverLimitAndBadMode(t *testing.T) {
 	}
 }
 
+// #8: a headless agent with no UI must get a tool error, not a panic.
+func TestAskUserNilUI(t *testing.T) {
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, nil)
+	args := `{"questions":[{"question":"q","options":[
+		{"artist":"A","title":"T1","label":"o1"},
+		{"artist":"B","title":"T2","label":"o2"}
+	],"default":1}]}`
+	res := a.dispatch(context.Background(), call("q", "ask_user", args))
+	if !strings.HasPrefix(res, "error:") {
+		t.Fatalf("ask_user с nil UI: got %q, want error", res)
+	}
+}
+
 func TestAskUserTracksPick(t *testing.T) {
 	ui := &fakeUI{answers: []string{"2"}}
 	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, ui)
