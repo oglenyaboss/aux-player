@@ -140,8 +140,8 @@ func TestVibeAI_AutoplayFromFirstPick(t *testing.T) {
 	if want := []string{"1", "2", "3"}; len(m.queueIDs) != len(want) || !vibeAIEqual(want, m.queueIDs) {
 		t.Errorf("queue = %v, want %v", m.queueIDs, want)
 	}
-	if len(m.vibeAI.feed) != 3 {
-		t.Errorf("feed = %d tracks, want 3", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 3 {
+		t.Errorf("feed = %d tracks, want 3", len(m.vibeAI.feed.tracks))
 	}
 	if m.vibeAI.autoplay {
 		t.Error("autoplay must be consumed by the first portion")
@@ -171,8 +171,8 @@ func TestVibeAI_StalePickIgnored(t *testing.T) {
 	}}); cmd == nil {
 		t.Error("a stale pick must keep reading events, so waitVibeAI is expected")
 	}
-	if len(m.vibeAI.feed) != 0 {
-		t.Errorf("feed = %d tracks, want 0: stale pick must not land", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 0 {
+		t.Errorf("feed = %d tracks, want 0: stale pick must not land", len(m.vibeAI.feed.tracks))
 	}
 	if len(m.queueIDs) != 0 {
 		t.Errorf("queue = %v, want empty", m.queueIDs)
@@ -183,8 +183,8 @@ func TestVibeAI_RejectedPick(t *testing.T) {
 	m := newModel(nil)
 	m.vibeAITurnCmd("что-нибудь", true, false)
 	m.handleVibeAIMsg(vibeAIPickMsg{gen: m.vibeAI.gen, pick: vibeai.Pick{Name: "X — Y", Reason: "не нашлось в Apple Music"}})
-	if len(m.vibeAI.feed) != 0 {
-		t.Errorf("feed = %d tracks, want 0 after a rejected pick", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 0 {
+		t.Errorf("feed = %d tracks, want 0 after a rejected pick", len(m.vibeAI.feed.tracks))
 	}
 }
 
@@ -201,14 +201,14 @@ func TestVibeAILatePickAfterDoneIgnored(t *testing.T) {
 	}}); cmd == nil {
 		t.Fatal("поздний пик должен вернуть waitVibeAI, иначе чтение канала остановится")
 	}
-	if len(m.vibeAI.feed) != 3 {
-		t.Fatalf("feed = %d треков, want 3: поздний пик не должен менять ленту", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 3 {
+		t.Fatalf("feed = %d треков, want 3: поздний пик не должен менять ленту", len(m.vibeAI.feed.tracks))
 	}
 	if want := []string{"1", "2", "3"}; !vibeAIEqual(want, m.queueIDs) {
 		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
 	}
-	if len(m.vibeAIP.m.feed) != 3 {
-		t.Errorf("feed = %d tracks, want 3 (поздний пик дублирует трек)", len(m.vibeAIP.m.feed))
+	if m.vibeAIP.m.feed != m.vibeAI.feed {
+		t.Errorf("the screen must read the bridge's feed, not a copy")
 	}
 }
 
@@ -326,8 +326,8 @@ func TestVibeAI_FeedPlayFromIndex(t *testing.T) {
 	m.playerState.Track = &m.queueTracks[len(m.queueTracks)-1]
 	next := []vibeai.Track{{ID: "4", Artist: "D", Title: "Four"}, {ID: "5", Artist: "E", Title: "Five"}}
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: startVibeTurn(m), tracks: next, elapsed: time.Second})
-	if len(m.vibeAI.feed) != 5 {
-		t.Fatalf("feed = %d tracks, want 5", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 5 {
+		t.Fatalf("feed = %d tracks, want 5", len(m.vibeAI.feed.tracks))
 	}
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 3})
 	if len(m.queueIDs) != 2 || m.queueIDs[0] != "4" || m.queueIDs[1] != "5" {
@@ -543,27 +543,129 @@ func TestVibeAI_AbortedTurnTrimsPicks(t *testing.T) {
 		m.vibeAITurnCmd("что-нибудь", true, false)
 		acceptPick(m, m.vibeAI.gen, "1", "A", "One")
 		acceptPick(m, m.vibeAI.gen, "2", "B", "Two")
-		if len(m.vibeAI.feed) != 2 {
-			t.Fatalf("fixture broken: feed = %d tracks, want 2", len(m.vibeAI.feed))
+		if len(m.vibeAI.feed.tracks) != 2 {
+			t.Fatalf("fixture broken: feed = %d tracks, want 2", len(m.vibeAI.feed.tracks))
 		}
 		return m
 	}
 	m := make(t)
 	m.cancelVibeAI()
-	if len(m.vibeAI.feed) != 0 {
-		t.Errorf("cancel: feed = %d tracks, want 0", len(m.vibeAI.feed))
+	if len(m.vibeAI.feed.tracks) != 0 {
+		t.Errorf("cancel: feed = %d tracks, want 0", len(m.vibeAI.feed.tracks))
 	}
 	if m.vibeAI.autoplay {
 		t.Error("cancel должен выключить автостарт")
 	}
 	failed := make(t)
 	failed.handleVibeAIMsg(vibeAIDoneMsg{gen: failed.vibeAI.gen, err: errors.New("бум")})
-	if len(failed.vibeAI.feed) != 0 {
-		t.Errorf("error: feed = %d tracks, want 0", len(failed.vibeAI.feed))
+	if len(failed.vibeAI.feed.tracks) != 0 {
+		t.Errorf("error: feed = %d tracks, want 0", len(failed.vibeAI.feed.tracks))
 	}
 	if failed.vibeAI.autoplay {
 		t.Error("ошибка хода должна выключить автостарт")
 	}
+}
+
+// TestVibeAI_FeedOneSourceAcrossScenarios pins the one feed after every event
+// that used to update two hand-synced mirrors — cancel, error, restart,
+// portion-done and hand-off — and that the rating index the screen sends
+// names the same track the bridge reads back from the feed.
+func TestVibeAI_FeedOneSourceAcrossScenarios(t *testing.T) {
+	if m := newModel(nil); m.vibeAIP.m.feed != m.vibeAI.feed {
+		t.Fatal("the screen must share the bridge's feed, not keep a copy")
+	}
+
+	picksOpen := func(t *testing.T) *Model {
+		t.Helper()
+		m := newModel(nil)
+		m.vibeAITurnCmd("что-нибудь", true, false)
+		acceptPick(m, m.vibeAI.gen, "1", "A", "One")
+		acceptPick(m, m.vibeAI.gen, "2", "B", "Two")
+		if len(m.vibeAI.feed.tracks) != 2 || m.vibeAI.feed.open != 0 {
+			t.Fatalf("fixture broken: feed = %d tracks, open = %d, want 2 picks over an empty portion", len(m.vibeAI.feed.tracks), m.vibeAI.feed.open)
+		}
+		return m
+	}
+	feedIDs := func(m *Model) []string {
+		ids := make([]string, len(m.vibeAI.feed.tracks))
+		for i, tr := range m.vibeAI.feed.tracks {
+			ids[i] = tr.ID
+		}
+		return ids
+	}
+	wantEmpty := func(t *testing.T, m *Model, site string) {
+		t.Helper()
+		if len(m.vibeAI.feed.tracks) != 0 || m.vibeAI.feed.open != 0 {
+			t.Fatalf("%s: feed = %v open = %d, want empty", site, feedIDs(m), m.vibeAI.feed.open)
+		}
+	}
+	ratePlaying := func(t *testing.T, m *Model, id string, wantIdx int) {
+		t.Helper()
+		m.playerState.Track = &provider.Track{ID: id}
+		got := press(m, "+")()
+		rate, ok := got.(VibeAIRateMsg)
+		if !ok || rate.Index != wantIdx || rate.Rating != 1 {
+			t.Fatalf("rate %s: got %#v, want index %d", id, got, wantIdx)
+		}
+		if named := m.vibeAI.feed.tracks[rate.Index].ID; named != id {
+			t.Fatalf("rate %s: index %d names track %q in the bridge's feed", id, rate.Index, named)
+		}
+		m.handleVibeAIMsg(rate)
+		if len(m.vibeAI.pending) != 1 || m.vibeAI.pending[0].ID != id {
+			t.Fatalf("rate %s: pending = %+v, want the outcome on the playing track", id, m.vibeAI.pending)
+		}
+	}
+
+	t.Run("cancel", func(t *testing.T) {
+		m := picksOpen(t)
+		m.cancelVibeAI()
+		wantEmpty(t, m, "cancel")
+	})
+
+	t.Run("error", func(t *testing.T) {
+		m := picksOpen(t)
+		m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, err: errors.New("бум")})
+		wantEmpty(t, m, "error")
+	})
+
+	t.Run("restart", func(t *testing.T) {
+		m := picksOpen(t)
+		m.vibeAIP.m.act(stage.Restart{})
+		for _, msg := range stageMsgs(t, m.vibeAIP.m.flush()) {
+			m.handleVibeAIMsg(msg)
+		}
+		wantEmpty(t, m, "restart")
+	})
+
+	t.Run("portion done", func(t *testing.T) {
+		m := picksOpen(t)
+		m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
+		if ids := feedIDs(m); !vibeAIEqual([]string{"1", "2", "3"}, ids) {
+			t.Fatalf("portion done: feed = %v, want the final tracks to replace the picks", ids)
+		}
+		if m.vibeAI.feed.open != 3 {
+			t.Fatalf("portion done: open = %d, want 3", m.vibeAI.feed.open)
+		}
+		stageIntoPlayer(m)
+		ratePlaying(t, m, "2", 1)
+	})
+
+	t.Run("handoff", func(t *testing.T) {
+		m := openVibeWithPortion(t)
+		stageIntoPlayer(m)
+		m.handleVibeAIMsg(vibeAIDoneMsg{gen: startVibeTurn(m), tracks: []vibeai.Track{
+			{ID: "4", Artist: "D", Title: "Four"},
+			{ID: "5", Artist: "E", Title: "Five"},
+		}, elapsed: time.Second})
+		if ids := feedIDs(m); !vibeAIEqual([]string{"1", "2", "3"}, ids) || m.vibeAI.feed.open != 3 {
+			t.Fatalf("staged: feed = %v open = %d, want only the landed 3", ids, m.vibeAI.feed.open)
+		}
+		m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
+		if ids := feedIDs(m); !vibeAIEqual([]string{"1", "2", "3", "4", "5"}, ids) || m.vibeAI.feed.open != 5 {
+			t.Fatalf("handoff: feed = %v open = %d, want 5 landed", ids, m.vibeAI.feed.open)
+		}
+		ratePlaying(t, m, "4", 3)
+	})
 }
 
 func TestVibeAI_StreamRefillAhead(t *testing.T) {
@@ -639,8 +741,8 @@ func TestVibeAI_StagedUntilLastTrack(t *testing.T) {
 	if !vibeAIEqual([]string{"1", "2", "3"}, m.queueIDs) {
 		t.Fatalf("queue = %v, want [1 2 3]: the portion must wait", m.queueIDs)
 	}
-	if len(m.vibeAI.feed) != 3 || len(m.vibeAIP.m.feed) != 3 {
-		t.Fatalf("feed host %d screen %d, want 3", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	if len(m.vibeAI.feed.tracks) != 3 {
+		t.Fatalf("feed = %d tracks, want 3", len(m.vibeAI.feed.tracks))
 	}
 	if m.vibeAI.staged == nil {
 		t.Fatal("staged = nil, want the waiting portion")
@@ -656,8 +758,8 @@ func TestVibeAI_StagedUntilLastTrack(t *testing.T) {
 	if want := []string{"1", "2", "3", "4", "5"}; !vibeAIEqual(want, m.queueIDs) {
 		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
 	}
-	if len(m.vibeAI.feed) != 5 || len(m.vibeAIP.m.feed) != 5 {
-		t.Fatalf("feed host %d screen %d, want 5 at handoff", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	if len(m.vibeAI.feed.tracks) != 5 {
+		t.Fatalf("feed = %d tracks, want 5 at handoff", len(m.vibeAI.feed.tracks))
 	}
 	if m.vibeAI.staged != nil {
 		t.Error("staged must clear at handoff")
@@ -707,8 +809,8 @@ func TestVibeAI_ContinuationPicksWait(t *testing.T) {
 		Name:     "D — Four",
 		Accepted: true,
 	}})
-	if len(m.vibeAI.feed) != 3 || len(m.vibeAIP.m.feed) != 3 {
-		t.Fatalf("feed host %d screen %d, want 3: the pick must wait for the handoff", len(m.vibeAI.feed), len(m.vibeAIP.m.feed))
+	if len(m.vibeAI.feed.tracks) != 3 {
+		t.Fatalf("feed = %d tracks, want 3: the pick must wait for the handoff", len(m.vibeAI.feed.tracks))
 	}
 	if _, ok := m.vibeAI.served["4"]; ok {
 		t.Error("the continuation pick must not be served before the handoff")
@@ -861,25 +963,21 @@ func TestVibeAI_ViewQuestionTracks(t *testing.T) {
 		},
 		Default: "2",
 	}
-	vq := vibeAIViewQuestion(q)
-	if len(vq.Tracks) != 2 {
-		t.Fatalf("tracks = %d, want 2", len(vq.Tracks))
+	sq := stageQuestion(q)
+	if len(sq.Tracks) != 2 {
+		t.Fatalf("tracks = %d, want 2", len(sq.Tracks))
 	}
-	if vq.Tracks[0].ID != "t1" || vq.Tracks[0].Artist != "Frank Ocean" || vq.Tracks[0].ArtworkURL != "https://x/{w}x{h}.jpg" {
-		t.Fatalf("tracks[0] = %+v", vq.Tracks[0])
-	}
-	if vq.Tracks[1].ID != "t2" || vq.Tracks[1].Artist != "Dijon" {
-		t.Fatalf("tracks[1] = %+v", vq.Tracks[1])
-	}
-	sq := stageQuestion(vq)
 	if sq.Def != 1 {
 		t.Fatalf("card def = %d, want 1", sq.Def)
 	}
-	if len(sq.Tracks) != 2 || sq.Tracks[0].Artist != "Frank Ocean" || sq.Tracks[1].Artist != "Dijon" {
-		t.Fatalf("card tracks = %+v", sq.Tracks)
+	if sq.Tracks[0].ID != "t1" || sq.Tracks[0].Artist != "Frank Ocean" {
+		t.Fatalf("tracks[0] = %+v", sq.Tracks[0])
+	}
+	if sq.Tracks[1].ID != "t2" || sq.Tracks[1].Artist != "Dijon" {
+		t.Fatalf("tracks[1] = %+v", sq.Tracks[1])
 	}
 	q.Default = "9"
-	if got := questionDefault(vibeAIViewQuestion(q)); got != 0 {
+	if got := questionDefault(q); got != 0 {
 		t.Errorf("def for 9 = %d, want 0", got)
 	}
 }
@@ -959,7 +1057,7 @@ func TestVibeAI_RateMsgPending(t *testing.T) {
 	if cmd != nil {
 		t.Errorf("rating a non-playing track must not return a cmd")
 	}
-	want := vibeai.Outcome{ID: m.vibeAI.feed[1].ID, Artist: "B", Title: "Two", Kind: "more"}
+	want := vibeai.Outcome{ID: m.vibeAI.feed.tracks[1].ID, Artist: "B", Title: "Two", Kind: "more"}
 	if len(m.vibeAI.pending) != 1 || m.vibeAI.pending[0] != want {
 		t.Fatalf("pending = %+v, want %+v", m.vibeAI.pending, want)
 	}

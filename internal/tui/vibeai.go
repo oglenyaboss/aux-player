@@ -70,8 +70,7 @@ type vibeAIRun struct {
 	fresh   bool
 
 	tracks       []vibeai.Track
-	feed         []vibeai.Track
-	portionStart int
+	feed         *vibeFeed
 	staged       *vibeAIStaged
 	dropStaged   bool
 	served       map[string]vibeai.Track
@@ -107,8 +106,35 @@ type vibeAIStaged struct {
 }
 
 func newVibeAIRun() *vibeAIRun {
-	return &vibeAIRun{events: make(chan tea.Msg, 64), answers: make(chan []string), served: make(map[string]vibeai.Track), stream: true, fresh: true}
+	return &vibeAIRun{feed: &vibeFeed{}, events: make(chan tea.Msg, 64), answers: make(chan []string), served: make(map[string]vibeai.Track), stream: true, fresh: true}
 }
+
+// vibeFeed is the single copy of what the listener has been served: accepted
+// picks and landed portions, newest last. The bridge writes it, the screen
+// reads it; open is where the portion being gathered starts, so a desync
+// between the two cannot exist.
+type vibeFeed struct {
+	tracks []vibeai.Track
+	open   int
+}
+
+// add appends one accepted pick to the open portion.
+func (f *vibeFeed) add(t vibeai.Track) { f.tracks = append(f.tracks, t) }
+
+// beginPortion marks where the next gathered portion starts.
+func (f *vibeFeed) beginPortion() { f.open = len(f.tracks) }
+
+// land replaces the open portion with the final tracks it turned into.
+func (f *vibeFeed) land(ts []vibeai.Track) {
+	f.tracks = append(f.tracks[:f.open], ts...)
+	f.open = len(f.tracks)
+}
+
+// trim drops the open portion, keeping the landed ones.
+func (f *vibeFeed) trim() { f.tracks = f.tracks[:f.open] }
+
+// reset empties the feed for a fresh request.
+func (f *vibeFeed) reset() { f.tracks, f.open = nil, 0 }
 
 type vibeAIBridge struct{ r *vibeAIRun }
 
@@ -188,7 +214,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.pending = nil
 	cfg := vibeAIConfig(m.cfg)
 	if fresh {
-		r.tracks, r.portion, r.feed = nil, 0, nil
+		r.tracks, r.portion = nil, 0
+		r.feed.reset()
 		r.playlistID, r.playlistName, r.savedPortion = "", "", 0
 		r.autoplay, r.autoplayID, r.later, r.laterAnswers = true, "", nil, nil
 		r.staged, r.dropStaged = nil, false
@@ -197,7 +224,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	}
 	drop := r.dropStaged
 	r.dropStaged = false
-	r.portionStart = len(r.feed)
+	r.feed.beginPortion()
 	answers := r.laterAnswers
 	r.laterAnswers = nil
 	m.appendLog(fmt.Sprintf("[vibe] turn %q (fresh=%v refill=%v)", text, fresh, refill))
@@ -278,9 +305,7 @@ func (m *Model) cancelVibeAI() {
 	}
 	r.gen++
 	r.busy = false
-	if len(r.feed) > r.portionStart {
-		r.feed = r.feed[:r.portionStart]
-	}
+	r.feed.trim()
 	r.staged = nil
 	r.autoplay = false
 	m.vibeAIP.m.NextClear()
@@ -366,13 +391,13 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 		if !r.fresh {
 			if msg.pick.Accepted {
-				v.NextPick(vibeAIViewTrack(msg.pick.Track))
+				v.NextPick(msg.pick.Track)
 			}
 			return waitVibeAI(r.events)
 		}
-		v.AddPick(vibeAIViewTrack(msg.pick.Track), msg.pick.Name, msg.pick.Accepted, msg.pick.Reason)
+		v.AddPick(msg.pick.Track, msg.pick.Name, msg.pick.Accepted, msg.pick.Reason)
 		if msg.pick.Accepted {
-			r.feed = append(r.feed, msg.pick.Track)
+			r.feed.add(msg.pick.Track)
 			r.served[msg.pick.Track.ID] = msg.pick.Track
 			if r.autoplay && !r.refill && r.autoplayID == "" {
 				r.autoplayID = msg.pick.Track.ID
@@ -385,11 +410,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		if msg.gen != r.gen || !r.busy {
 			return waitVibeAI(r.events)
 		}
-		qs := make([]VibeAIQuestion, len(msg.qs))
-		for i, q := range msg.qs {
-			qs[i] = vibeAIViewQuestion(q)
-		}
-		v.Ask(qs)
+		v.Ask(msg.qs)
 		return waitVibeAI(r.events)
 
 	case VibeAIAnswersMsg:
@@ -423,15 +444,15 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		return tea.Batch(waitVibeAI(r.events), m.vibeAIDone(msg))
 
 	case VibeAIActionMsg:
-		if len(r.feed) == 0 {
+		if len(r.feed.tracks) == 0 {
 			return nil
 		}
 		switch msg.Action {
 		case VibeAIPlay:
-			if msg.Index < 0 || msg.Index >= len(r.feed) {
+			if msg.Index < 0 || msg.Index >= len(r.feed.tracks) {
 				return nil
 			}
-			return m.vibeAIPlay(r.feed[msg.Index:])
+			return m.vibeAIPlay(r.feed.tracks[msg.Index:])
 		case VibeAIQueue:
 			v.SetNotice(fmt.Sprintf(stage.Tr("+%d в очередь", "+%d queued"), len(r.tracks)))
 			return m.vibeAIAppend(r.tracks)
@@ -453,10 +474,10 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 
 	case VibeAIRateMsg:
-		if msg.Index < 0 || msg.Index >= len(r.feed) {
+		if msg.Index < 0 || msg.Index >= len(r.feed.tracks) {
 			return nil
 		}
-		t := r.feed[msg.Index]
+		t := r.feed.tracks[msg.Index]
 		kind := "rate_clear"
 		switch msg.Rating {
 		case 1:
@@ -506,9 +527,7 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	r.mu.Unlock()
 	r.busy = false
 	if msg.err != nil {
-		if len(r.feed) > r.portionStart {
-			r.feed = r.feed[:r.portionStart]
-		}
+		r.feed.trim()
 		r.autoplay = false
 		m.appendLog(fmt.Sprintf("[vibe] error: %v", msg.err))
 		v.SetError(msg.err)
@@ -520,7 +539,7 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	if !r.fresh && (msg.refill || r.stream) {
 		r.staged = &vibeAIStaged{tracks: msg.tracks, note: msg.note, later: msg.later, refill: msg.refill}
 		m.appendLog(fmt.Sprintf("[vibe] portion staged: %d tracks in %s", len(msg.tracks), msg.elapsed.Round(time.Second)))
-		v.NextReady(vibeAIViewTracks(msg.tracks))
+		v.NextReady(msg.tracks)
 		return m.vibeAIHandoff(m.playerState)
 	}
 	r.tracks = msg.tracks
@@ -529,12 +548,12 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 		r.served[t.ID] = t
 	}
 	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks in %s", r.portion, len(msg.tracks), msg.elapsed.Round(time.Second)))
-	r.feed = append(r.feed[:r.portionStart], msg.tracks...)
-	v.PortionDone(vibeAIViewTracks(msg.tracks), msg.note)
+	r.feed.land(msg.tracks)
+	v.PortionDone(msg.tracks, msg.note)
 	v.NextClear()
 	if msg.later != nil {
 		r.later = msg.later
-		v.AskLater(vibeAIViewQuestion(*msg.later))
+		v.AskLater(*msg.later)
 	}
 	if r.autoplay {
 		r.autoplay = false
@@ -570,15 +589,14 @@ func (m *Model) vibeAIHandoff(s player.State) tea.Cmd {
 	for _, t := range st.tracks {
 		r.served[t.ID] = t
 	}
-	r.feed = append(r.feed[:r.portionStart], st.tracks...)
-	r.portionStart = len(r.feed)
+	r.feed.land(st.tracks)
 	m.appendLog(fmt.Sprintf("[vibe] portion %d: %d tracks handed off", r.portion, len(st.tracks)))
 	v := m.vibeAIP.m
-	v.PortionDone(vibeAIViewTracks(st.tracks), st.note)
+	v.PortionDone(st.tracks, st.note)
 	v.NextClear()
 	if st.later != nil {
 		r.later = st.later
-		v.AskLater(vibeAIViewQuestion(*st.later))
+		v.AskLater(*st.later)
 	}
 	cmds := []tea.Cmd{m.vibeAIAppend(st.tracks)}
 	if st.refill && r.playlistID != "" {
@@ -767,23 +785,6 @@ func vibeAIPlaylistName(query string) string {
 		q = append(q[:39], '…')
 	}
 	return "AUX · " + string(q)
-}
-
-func vibeAIViewTrack(t vibeai.Track) VibeAITrack {
-	return VibeAITrack{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Year: t.Year, Released: t.Released, Why: t.Why, Favorite: t.Favorite,
-		ArtworkURL: t.ArtworkURL, Dur: time.Duration(t.DurationMs) * time.Millisecond}
-}
-
-func vibeAIViewTracks(ts []vibeai.Track) []VibeAITrack {
-	out := make([]VibeAITrack, len(ts))
-	for i, t := range ts {
-		out[i] = vibeAIViewTrack(t)
-	}
-	return out
-}
-
-func vibeAIViewQuestion(q vibeai.Question) VibeAIQuestion {
-	return VibeAIQuestion{Question: q.Question, Options: q.Options, Tracks: vibeAIViewTracks(q.Tracks), Default: q.Default}
 }
 
 func vibeAIProviderTracks(ts []vibeai.Track) []provider.Track {

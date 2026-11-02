@@ -17,16 +17,16 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/stage"
 	"github.com/oglenyaboss/aux-player/internal/tui/art"
+	"github.com/oglenyaboss/aux-player/internal/vibeai"
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 type stageScreen struct {
 	st      *stage.Model
 	host    *Model
-	feed    []VibeAITrack // mirror of the bridge's r.feed: accepted picks, then the portion's final tracks
-	open    int           // index in feed where the open portion starts
-	out     []tea.Msg     // actions collected from OnAction, turned into commands
-	cmds    []tea.Cmd     // commands for actions that need I/O, flushed beside the messages
+	feed    *vibeFeed // the bridge's feed, shared by pointer: the bridge writes, the screen reads
+	out     []tea.Msg // actions collected from OnAction, turned into commands
+	cmds    []tea.Cmd // commands for actions that need I/O, flushed beside the messages
 	query   string
 	ticking bool
 	last    time.Time
@@ -41,7 +41,7 @@ type stageScreen struct {
 type stageCover struct{ key, url string }
 
 func newStageScreen(host *Model) *stageScreen {
-	s := &stageScreen{host: host, covers: map[string]bool{}}
+	s := &stageScreen{host: host, feed: host.vibeAI.feed, covers: map[string]bool{}}
 	if lang := host.cfg.VibeLang; lang != "" {
 		stage.SetLang(lang)
 	} else {
@@ -93,7 +93,7 @@ func (s *stageScreen) AddProgress(line string) {
 	s.st.Progress(line)
 }
 
-func (s *stageScreen) Ask(qs []VibeAIQuestion) {
+func (s *stageScreen) Ask(qs []vibeai.Question) {
 	cards := make([]stage.Question, len(qs))
 	for i, q := range qs {
 		cards[i] = stageQuestion(q)
@@ -106,44 +106,40 @@ func (s *stageScreen) Ask(qs []VibeAIQuestion) {
 	}
 }
 
-func (s *stageScreen) AskLater(q VibeAIQuestion) {
+func (s *stageScreen) AskLater(q vibeai.Question) {
 	s.st.AskLater(stageQuestion(q))
 	for _, t := range q.Tracks {
 		s.wantCover(t)
 	}
 }
 
-func (s *stageScreen) AddPick(t VibeAITrack, name string, accepted bool, reason string) {
+// AddPick shows one stream row; the accepted track joins the open portion in
+// the feed, which only the bridge writes.
+func (s *stageScreen) AddPick(t vibeai.Track, name string, accepted bool, reason string) {
 	s.st.Candidate(stageTrack(t, name), accepted, reason)
 	if accepted {
-		s.feed = append(s.feed, t)
 		s.wantCover(t)
 	}
 }
 
-// PortionDone mirrors the bridge: the open part of the feed is replaced by the
-// final tracks, the mirror index moves past them.
-func (s *stageScreen) PortionDone(tracks []VibeAITrack, note string) {
-	s.feed = append(s.feed[:s.open], tracks...)
-	s.open = len(s.feed)
+// PortionDone shows the landed portion; the feed itself is landed by the bridge.
+func (s *stageScreen) PortionDone(tracks []vibeai.Track, note string) {
 	cards := make([]stage.Track, len(tracks))
 	for i, t := range tracks {
 		cards[i] = stageTrack(t, "")
-	}
-	s.st.PortionDone(cards, note)
-	for _, t := range tracks {
 		s.wantCover(t)
 	}
+	s.st.PortionDone(cards, note)
 }
 
 func (s *stageScreen) NextGathering(reply string) { s.st.NextGathering(reply) }
 
-func (s *stageScreen) NextPick(t VibeAITrack) {
+func (s *stageScreen) NextPick(t vibeai.Track) {
 	s.st.NextPick(stageTrack(t, ""))
 	s.wantCover(t)
 }
 
-func (s *stageScreen) NextReady(tracks []VibeAITrack) {
+func (s *stageScreen) NextReady(tracks []vibeai.Track) {
 	cards := make([]stage.Track, len(tracks))
 	for i, t := range tracks {
 		cards[i] = stageTrack(t, "")
@@ -156,8 +152,8 @@ func (s *stageScreen) NextFailed() { s.st.NextFailed() }
 
 func (s *stageScreen) NextClear() { s.st.NextClear() }
 
+// SetError reports a failed turn; the bridge trims the open portion in the feed.
 func (s *stageScreen) SetError(err error) {
-	s.feed = s.feed[:s.open]
 	s.st.Fail(err.Error())
 }
 
@@ -203,7 +199,6 @@ func (s *stageScreen) act(a stage.Action) {
 	switch a := a.(type) {
 	case stage.Query:
 		s.query = a.Text
-		s.feed, s.open = nil, 0
 		s.out = append(s.out, VibeAISubmitMsg{Text: a.Text, Fresh: true})
 	case stage.Answers:
 		s.out = append(s.out, VibeAIAnswersMsg{Answers: a.Raw})
@@ -222,8 +217,7 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.Save:
 		s.out = append(s.out, VibeAIActionMsg{Action: VibeAISave})
 	case stage.Restart:
-		s.feed = s.feed[:s.open] // the bridge trims the same way on cancel
-		s.out = append(s.out, VibeAICancelMsg{})
+		s.out = append(s.out, VibeAICancelMsg{}) // the bridge trims the feed on cancel
 	case stage.Settings:
 		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
 		c[1] = false
@@ -335,15 +329,15 @@ func stageModelsReply(all []llm.ModelInfo, err error) stageModelsMsg {
 	return stageModelsMsg{list: list, total: len(all)}
 }
 
-// rateTarget locates the playing vibe track in the mirror feed; without it the
-// rating has nowhere to land.
+// rateTarget locates the playing vibe track in the feed the bridge owns;
+// without it the rating has nowhere to land.
 func (s *stageScreen) rateTarget() (int, bool) {
 	if s.host.playerState.Track == nil {
 		return 0, false
 	}
 	id := PlaybackID(*s.host.playerState.Track)
-	for i := len(s.feed) - 1; i >= 0; i-- {
-		if s.feed[i].ID == id {
+	for i := len(s.feed.tracks) - 1; i >= 0; i-- {
+		if s.feed.tracks[i].ID == id {
 			return i, true
 		}
 	}
@@ -373,7 +367,7 @@ func (s *stageScreen) flush() tea.Cmd {
 
 // ── helpers moved from the old views screen ───────────────────────────────
 
-func stageTrack(t VibeAITrack, name string) stage.Track {
+func stageTrack(t vibeai.Track, name string) stage.Track {
 	if t.ID == "" {
 		artist, title, ok := strings.Cut(name, " — ")
 		if !ok {
@@ -381,10 +375,10 @@ func stageTrack(t VibeAITrack, name string) stage.Track {
 		}
 		return stage.Track{Artist: artist, Title: title}
 	}
-	return stage.Track{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Released: t.Released, Why: t.Why, Dur: t.Dur.Seconds()}
+	return stage.Track{ID: t.ID, Artist: t.Artist, Title: t.Title, Album: t.Album, Released: t.Released, Why: t.Why, Dur: float64(t.DurationMs) / 1000}
 }
 
-func stageQuestion(q VibeAIQuestion) stage.Question {
+func stageQuestion(q vibeai.Question) stage.Question {
 	tracks := make([]stage.Track, len(q.Tracks))
 	for i, t := range q.Tracks {
 		tracks[i] = stageTrack(t, "")
@@ -392,7 +386,7 @@ func stageQuestion(q VibeAIQuestion) stage.Question {
 	return stage.Question{Title: q.Question, Options: q.Options, Tracks: tracks, Def: questionDefault(q)}
 }
 
-func questionDefault(q VibeAIQuestion) int {
+func questionDefault(q vibeai.Question) int {
 	if n, err := strconv.Atoi(q.Default); err == nil && n >= 1 && n <= len(q.Options) {
 		return n - 1
 	}
@@ -430,7 +424,7 @@ func thinkingPhrase(rest string) string {
 
 // ── covers ────────────────────────────────────────────────────────────────
 
-func (s *stageScreen) wantCover(t VibeAITrack) {
+func (s *stageScreen) wantCover(t vibeai.Track) {
 	if t.ArtworkURL == "" || s.covers[t.ID] {
 		return
 	}
