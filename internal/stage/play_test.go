@@ -145,6 +145,20 @@ func TestEmptyPortionAfterPicks(t *testing.T) {
 	}
 }
 
+// #8: seek-forward with an unknown duration keeps the position at zero instead of
+// a negative timecode.
+func TestSelfPlaySeekForwardUnknownDur(t *testing.T) {
+	m := New(Options{SelfPlay: true})
+	m.SetSize(110, 32)
+	m.JumpPlay([]Track{{Artist: "A", Title: "Zero", Dur: 0}}, 0, 0)
+	if !m.Key("]", "") {
+		t.Fatal("] в self-play должен принадлежать экрану")
+	}
+	if m.pos < 0 {
+		t.Fatalf("pos=%v, ждём ≥ 0", m.pos)
+	}
+}
+
 // R5: a track with no duration neither panics nor advances on its own.
 func TestZeroDur(t *testing.T) {
 	m := New(Options{SelfPlay: true})

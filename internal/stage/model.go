@@ -1315,7 +1315,7 @@ func (m *Model) playKey(k, text string) bool {
 		return false
 	case "]":
 		if m.o.SelfPlay {
-			m.pos = min(m.pos+10, m.curTrack().Dur-1)
+			m.pos = max(0, min(m.pos+10, m.curTrack().Dur-1))
 			return true
 		}
 		return false
