@@ -332,15 +332,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *Model) togglePlayPause() tea.Cmd {
+	p, playing := m.player, m.playerState.Playing
 	return func() tea.Msg {
-		if m.player == nil {
+		if p == nil {
 			return errMsg{fmt.Errorf("no player")}
 		}
 		var err error
-		if m.playerState.Playing {
-			err = m.player.Pause()
+		if playing {
+			err = p.Pause()
 		} else {
-			err = m.player.Play()
+			err = p.Play()
 		}
 		if err != nil {
 			return errMsg{err}
