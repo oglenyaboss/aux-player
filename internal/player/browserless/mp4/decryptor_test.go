@@ -249,3 +249,54 @@ func TestDecryptSegmentSignedDataOffset(t *testing.T) {
 		t.Error("expected error for negative out-of-bounds offset, got nil")
 	}
 }
+
+// Apple's short closing segments leave sample sizes out of trun and carry a
+// single default_sample_size in tfhd instead.
+func TestDecryptSegmentTakesSampleSizeFromTfhdDefault(t *testing.T) {
+	const sampleSize = 4
+	sampleData := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+
+	var tfhd bytes.Buffer
+	tfhd.Write([]byte{0x00, 0x02, 0x00, 0x18}) // default-base-is-moof, default duration, default size
+	tfhd.Write([]byte{0x00, 0x00, 0x00, 0x01}) // track_ID
+	tfhd.Write([]byte{0x00, 0x00, 0x04, 0x00}) // default_sample_duration
+	tfhd.Write([]byte{0x00, 0x00, 0x00, sampleSize})
+	tfhdBox := makeBox("tfhd", tfhd.Bytes())
+
+	var senc bytes.Buffer
+	senc.Write([]byte{0x00, 0x00, 0x00, 0x00}) // ver/flags, no subsamples
+	senc.Write([]byte{0x00, 0x00, 0x00, 0x02}) // sample_count = 2
+	senc.Write(bytes.Repeat([]byte{0xAA}, 8))
+	senc.Write(bytes.Repeat([]byte{0xBB}, 8))
+	sencBox := makeBox("senc", senc.Bytes())
+
+	var trun bytes.Buffer
+	trun.Write([]byte{0x00, 0x00, 0x01, 0x01}) // data_offset + sample_duration present
+	trun.Write([]byte{0x00, 0x00, 0x00, 0x02}) // sample_count = 2
+	offPos := trun.Len()
+	trun.Write([]byte{0x00, 0x00, 0x00, 0x00}) // data_offset placeholder
+	trun.Write([]byte{0x00, 0x00, 0x04, 0x00})
+	trun.Write([]byte{0x00, 0x00, 0x04, 0x00})
+	trunBox := makeBox("trun", trun.Bytes())
+
+	trafPayload := append(append(append([]byte(nil), tfhdBox...), trunBox...), sencBox...)
+	moofBox := makeBox("moof", makeBox("traf", trafPayload))
+	trunIdx := bytes.Index(moofBox, []byte("trun"))
+	binary.BigEndian.PutUint32(moofBox[trunIdx+4+offPos:], uint32(len(moofBox)+8)) //nolint:gosec // G115: synthetic segment size fits uint32
+	seg := append(append([]byte(nil), moofBox...), makeBox("mdat", sampleData)...)
+
+	var inputs [][]byte
+	out, err := DecryptSegment(seg, make([]byte, 16), DefaultAudioConfig(), func(_, _, input []byte, _ []Subsample) ([]byte, error) {
+		inputs = append(inputs, append([]byte(nil), input...))
+		return input, nil
+	})
+	if err != nil {
+		t.Fatalf("DecryptSegment: %v", err)
+	}
+	if len(inputs) != 2 || !bytes.Equal(inputs[0], sampleData[:sampleSize]) || !bytes.Equal(inputs[1], sampleData[sampleSize:]) {
+		t.Fatalf("decrypt inputs = %v, want two %d-byte samples of %v", inputs, sampleSize, sampleData)
+	}
+	if want := 2 * (7 + sampleSize); len(out) != want {
+		t.Errorf("output length = %d, want %d", len(out), want)
+	}
+}
