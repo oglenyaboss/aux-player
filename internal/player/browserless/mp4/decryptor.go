@@ -305,8 +305,17 @@ func DecryptSegment(
 		return nil, fmt.Errorf("truncated trun sample entries")
 	}
 
+	defaultSize := 0
+	if !hasSize {
+		var err error
+		if defaultSize, err = tfhdDefaultSampleSize(moofData); err != nil {
+			return nil, err
+		}
+	}
+
 	sampleSizes := make([]int, sampleCount)
 	for i := range sampleCount {
+		sampleSizes[i] = defaultSize
 		if hasDuration {
 			trunOffset += 4
 		}
@@ -352,4 +361,35 @@ func DecryptSegment(
 	}
 
 	return outBuf.Bytes(), nil
+}
+
+// tfhdDefaultSampleSize reads default_sample_size from the tfhd box, the size
+// every sample takes when trun carries no per-sample sizes.
+func tfhdDefaultSampleSize(moofData []byte) (int, error) {
+	tfhdIdx := bytes.Index(moofData, []byte("tfhd"))
+	if tfhdIdx < 4 {
+		return 0, fmt.Errorf("trun has no sample sizes and tfhd box not found in moof")
+	}
+	tfhdStart := tfhdIdx - 4
+	if tfhdStart+16 > len(moofData) {
+		return 0, fmt.Errorf("truncated tfhd box")
+	}
+	tfhdFlags := binary.BigEndian.Uint32(moofData[tfhdStart+8:tfhdStart+12]) & 0x00FFFFFF
+	if tfhdFlags&0x10 == 0 {
+		return 0, fmt.Errorf("neither trun nor tfhd carries sample sizes")
+	}
+	p := tfhdStart + 16
+	if tfhdFlags&0x01 != 0 {
+		p += 8 // base_data_offset
+	}
+	if tfhdFlags&0x02 != 0 {
+		p += 4 // sample_description_index
+	}
+	if tfhdFlags&0x08 != 0 {
+		p += 4 // default_sample_duration
+	}
+	if p+4 > len(moofData) {
+		return 0, fmt.Errorf("truncated tfhd default_sample_size")
+	}
+	return int(binary.BigEndian.Uint32(moofData[p : p+4])), nil
 }

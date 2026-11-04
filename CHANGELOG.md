@@ -3,6 +3,14 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
+## [1.1.0] — 2026-11-04
+
+- The scan is now a turntable: each kept track arrives as a sleeve with its real cover, its record is laid on the platter, and the needle drops into the player once the side is full.
+- Rejected picks show their real covers, and picks past a full portion stay off the screen.
+- Playback no longer stops after a long pause: an expired license is renewed on the fly instead of failing the track.
+- Fixed a stream crash on the short closing segment of some tracks.
+- Fixed a broken timecode when seeking forward in a track of unknown length, and a crash when playback started over an empty queue.
+
 ## [1.0.0] — 2026-10-31
 
 First public release.
