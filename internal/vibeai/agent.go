@@ -806,8 +806,12 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 					Name:     v.Song.Artist + " — " + v.Song.Title,
 					Accepted: true,
 				})
-			} else {
-				a.UI.Picked(Pick{Name: t.Artist + " — " + t.Title, Reason: v.Reason})
+			} else if a.Session.Need() > 0 {
+				p := Pick{Name: t.Artist + " — " + t.Title, Reason: v.Reason}
+				if v.Song.ID != "" {
+					p.Track = toTrack(Entry{Song: v.Song, Why: sug.Why})
+				}
+				a.UI.Picked(p)
 			}
 		}
 		if v.Accepted {

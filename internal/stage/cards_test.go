@@ -245,7 +245,7 @@ func TestScanSlotsOption(t *testing.T) {
 	}
 	m.PortionDone(tracks, "")
 	sawDone := false
-	for range int(10 / eventDT) {
+	for range int(16 / eventDT) {
 		m.Step(eventDT)
 		if m.Phase() == PhDone {
 			sawDone = true

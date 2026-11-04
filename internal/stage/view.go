@@ -19,8 +19,8 @@ func (m *Model) render() *fb {
 		m.drawChips(f)
 		m.drawAsk(f)
 	case phScan, phDone:
-		m.drawChips(f)
 		m.drawScan(f)
+		m.drawChips(f)
 	case phPlay:
 		m.drawPlay(f)
 		m.drawChips(f)
@@ -39,9 +39,15 @@ func (m *Model) render() *fb {
 }
 
 // backdrop: a slow, barely-there tint of the accent, plus bloom; in play
-// phase the whole field flows in the colors of the current track's cover.
+// phase the whole field flows in the colors of the current track's cover, on the
+// scan in those of the last keeper on side A.
 func (m *Model) backdrop(f *fb) {
 	th := m.th
+	var cutKey, cutPrev string
+	cutWipe := 0.0
+	if m.ph == phScan || m.ph == phDone {
+		cutKey, cutPrev, cutWipe = m.labelKeys()
+	}
 	for y := 0; y < f.h; y++ {
 		for x := 0; x < f.w; x++ {
 			fx, fy := float64(x), float64(y)*2
@@ -56,6 +62,16 @@ func (m *Model) backdrop(f *fb) {
 			} else {
 				n := math.Sin(fx*0.035+m.t*0.08) + math.Sin(fy*0.05-m.t*0.06) + math.Sin((fx+fy)*0.025+m.t*0.04)
 				bg = th.bg.lerp(th.a1, smooth((n+1)/4)*0.07)
+				if cutKey != "" {
+					u, v := fx/float64(f.w), fy/float64(f.h*2)
+					cf := m.coverField(cutKey, u, v)
+					if cutPrev != "" {
+						cf = m.coverField(cutPrev, u, v).lerp(cf, cutWipe)
+					} else {
+						cf = bg.lerp(cf, cutWipe)
+					}
+					bg = bg.lerp(cf, 0.75)
+				}
 			}
 			vx := math.Abs(fx/float64(f.w)-0.5) * 2
 			vy := math.Abs(fy/float64(f.h*2)-0.4) * 2
@@ -474,127 +490,6 @@ func (m *Model) drawTrackList(f *fb, q Question, x, y, w int) {
 	}
 }
 
-// candLine renders one stream row: pending ones decode, accepted settle, rejected break apart.
-func (m *Model) candLine(f *fb, c *cand, i, x, y, w int, la float64) {
-	title := trunc(c.tr.Title, w-4)
-	artist := c.tr.Artist
-	age := m.t - c.born
-	switch {
-	case c.decided < 0:
-		a := la * easeOut(prog(age, 0, 0.25))
-		f.fade(x, y, "›", m.th.a1, a, false)
-		f.fade(x+2, y, title, m.th.text.lerp(m.th.a1, 0.4), a, false)
-	case c.ok:
-		d := m.t - c.decided
-		fl := math.Exp(-d * 4)
-		for xx := x - 1; xx < x+w; xx++ {
-			f.tint(xx, y, m.th.a1, 0.15*fl)
-		}
-		f.style(x, y, '✓', m.th.a1.lerp(white, fl), true, false)
-		n := f.fade(x+2, y, title, m.th.text.lerp(m.th.dim, clamp01((d-1.2)/1.5)*0.5).lerp(white, fl), la, false)
-		f.fade(x+4+n, y, trunc(artist, w-6-n), m.th.dim, la*0.8, false)
-	default:
-		ra := easeOut(clamp01((m.t - c.decided) / 0.5))
-		reason := c.reason
-		f.fade(x, y, "✕", m.th.bad, la*0.7, false)
-		f.fade(x+2, y, trunc(c.tr.Title, w-6-len([]rune(reason))), m.th.bad.lerp(m.th.dim, ra), la*(1-0.6*ra), false)
-		f.fade(x+w-len([]rune(reason)), y, reason, m.th.bad, la*0.7*ra, false)
-	}
-}
-
-func (m *Model) drawScan(f *fb) {
-	sx, y0, y1, sw, show := m.streamGeom()
-	_, _, cols, cw, cards := m.gridGeom()
-	f.textS(3, 3, fmt.Sprintf(tr("Порция %d", "Batch %d"), m.portionNo), m.th.text, true, false)
-	cnt := fmt.Sprintf(tr("%d из %d", "%d of %d"), m.filled, len(m.slots))
-	f.textS(m.w-3-len([]rune(cnt)), 3, cnt, m.th.a1, true, false)
-	if m.rejected > 0 && m.w >= 70 {
-		miss := fmt.Sprintf(tr("мимо %d", "passed %d"), m.rejected)
-		f.text(m.w-6-len([]rune(cnt))-len([]rune(miss)), 3, miss, m.th.dim)
-	}
-	switch {
-	case m.ph == PhDone:
-		note := []rune(m.note)
-		n := int(prog(m.pt, 0.5, 1.2) * float64(len(note)))
-		f.textS(3, 4, trunc(string(note[:n]), m.w-6), m.th.a2.lerp(m.th.text, 0.3), false, true)
-	case m.thinking:
-		if s := m.status; s != "" {
-			m.wave(f, 3, 4, trunc(s, m.w-6), m.th.a1)
-		} else {
-			m.wave(f, 3, 4, tr("агент думает, что ещё подходит", "agent is looking for more fits"), m.th.a1)
-		}
-	default:
-		m.wave(f, 3, 4, tr("проверяю в Apple Music и по библиотеке", "checking Apple Music and the library"), m.th.a1)
-	}
-
-	first := m.visible()
-	for i := first; i < len(m.cands); i++ {
-		y := y0 + i - first
-		if y >= y1 {
-			break
-		}
-		la := 1 - 0.65*clamp01(float64(len(m.cands)-1-i-6)/8)
-		if !show {
-			la = 1
-		}
-		m.candLine(f, m.cands[i], i, sx, y, sw, la)
-	}
-
-	for i, s := range m.slots {
-		px, py := m.slotPos(i)
-		if py+1 >= m.h {
-			break
-		}
-		wave := 0.0
-		if m.ph == phDone {
-			e := (m.pt - 0.15 - float64(i%cols+i/cols)*0.09) * 5
-			wave = math.Exp(-e * e)
-		}
-		base := m.th.bg.lerp(m.th.text, 0.04)
-		for yy := py; yy < py+2; yy++ {
-			for xx := px; xx < px+cw; xx++ {
-				if p := f.at(xx, yy); p != nil {
-					p.bg, p.ch, p.pix = p.bg.lerp(base, 0.9).lerp(m.th.a1, 0.3*wave), ' ', false
-				}
-			}
-		}
-		switch {
-		case s.fillAt < 0:
-			b := 0.0
-			if i == m.filled && m.ph == phScan {
-				b = 0.05 + 0.05*math.Sin(m.t*4)
-			}
-			for yy := py; yy < py+2; yy++ {
-				for xx := px; xx < px+cw; xx++ {
-					f.tint(xx, yy, m.th.a1, b)
-				}
-			}
-			f.put(px+min(cw/2, 2), py, '·', m.th.dim)
-		default:
-			age := m.t - s.fillAt
-			fl := math.Exp(-age * 4)
-			for yy := py; yy < py+2; yy++ {
-				for xx := px; xx < px+cw; xx++ {
-					f.tint(xx, yy, m.th.a1, 0.18*fl)
-				}
-			}
-			g := m.cover(s.tr.Key(), 4, 4)
-			r := easeOut(age / 0.35)
-			for yy := range 4 {
-				for xx := range 4 {
-					f.pixel(px+xx, py*2+yy, f.pixelAt(px+xx, py*2+yy).lerp(g.at(xx, yy).lerp(white, 0.4*wave), r))
-				}
-			}
-			if !cards {
-				continue
-			}
-			tw := cw - 6
-			f.fade(px+5, py, trunc(s.tr.Title, tw), m.th.text.lerp(white, wave), r, true)
-			f.fade(px+5, py+1, trunc(s.tr.Artist, tw), m.th.dim, r, false)
-		}
-	}
-}
-
 func fmtDur(s float64) string { return fmt.Sprintf("%d:%02d", int(s)/60, int(s)%60) }
 
 type playGeom struct {
@@ -659,7 +554,7 @@ func (m *Model) drawPlay(f *fb) {
 	}
 	rows := 0
 	if !g.mini && (g.side && g.ch >= 12 || !g.side && m.h-y >= 12) {
-		rows, m.titleBox = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e)
+		rows, m.titleBox = m.bigText(f, x, y, tk.Title, pw, easeOut(prog(m.titleT(), 0.1, 0.8)), lf, m.cur+100, e, m.titleT())
 	}
 	if rows == 0 {
 		rows = 1
@@ -1079,7 +974,7 @@ func (m *Model) wave(f *fb, x, y int, s string, base col) {
 	}
 }
 
-func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg) (int, image.Rectangle) {
+func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float64, seed int, e *egg, at float64) (int, image.Rectangle) {
 	drips := e != nil && e.drips
 	rs := []rune(strings.ToUpper(s))
 	for _, r := range rs {
@@ -1102,7 +997,7 @@ func (m *Model) bigText(f *fb, x, y int, s string, maxW int, reveal, flash float
 		return 0, image.Rectangle{}
 	}
 	wpx := float64(cols * sc)
-	sweep := prog(m.titleT(), 0.9, 1.2)*1.6 - 0.3
+	sweep := prog(at, 0.9, 1.2)*1.6 - 0.3
 	gx0 := 0
 	for _, r := range rs {
 		g := font3[r]

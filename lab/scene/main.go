@@ -4,6 +4,7 @@
 //	go run ./lab/scene -demo    plays itself
 //	go run ./lab/scene -onboard=false   skips the first-run onboarding
 //	go run ./lab/scene -shots 3,6.5 -size 160x45   renders frames of the demo to /tmp/scene-*.png
+//	go run ./lab/scene -demo -wait 45   the agent thinks as long as the real one
 //	go run ./lab/scene -egg "Playboi Carti Stop Breathing@20"   opens the player on any catalog track to look at its egg; [ ] seek
 package main
 
@@ -71,6 +72,7 @@ func main() {
 	firstRun := flag.Bool("onboard", true, "start with the first-run onboarding")
 	eggAt := flag.String("egg", "", `open the player on "artist title[@seconds]" to look at its egg`)
 	langFlag := flag.String("lang", "", "interface language: en or ru, empty picks from the environment")
+	wait := flag.Float64("wait", 9, "seconds the fake agent thinks before its batch; the real one takes 40–70")
 	flag.Parse()
 
 	switch l := *langFlag; {
@@ -87,6 +89,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, " %d\n", len(covers))
 
 	s := newScene(*firstRun, *demo && *eggAt == "")
+	s.wait = *wait
 	for key, img := range covers {
 		s.m.SetCover(key, img)
 	}

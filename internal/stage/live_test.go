@@ -97,8 +97,8 @@ func TestProgressStatus(t *testing.T) {
 	}
 }
 
-// R3: the pack of candidates does not flood the stream: the first lands at once, the
-// rest pace out.
+// R3: a batch of candidates auditions one at a time: the first steps on stage at once,
+// the rest wait behind it and all of them are through within about fifteen seconds.
 func TestCandidatePacing(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
@@ -107,12 +107,17 @@ func TestCandidatePacing(t *testing.T) {
 	for range 5 {
 		m.Candidate(tr, true, "")
 	}
+	steps(m, 0.1)
 	if len(m.cands) != 1 {
-		t.Fatalf("в потоке %d сразу после пачки, ждём 1", len(m.cands))
+		t.Fatalf("на сцене %d через 0.1с после пачки, ждём 1", len(m.cands))
 	}
 	steps(m, 0.5)
-	if len(m.cands) != 5 {
-		t.Fatalf("в потоке %d после 0.5с, ждём 5", len(m.cands))
+	if len(m.cands) != 1 {
+		t.Fatalf("на сцене %d через 0.6с, ждём 1: следующий ждёт ухода первого", len(m.cands))
+	}
+	steps(m, 14)
+	if len(m.cands) != 5 || len(m.inbox) != 0 {
+		t.Fatalf("прошло %d, в очереди %d через 14.6с; ждём 5 и 0", len(m.cands), len(m.inbox))
 	}
 }
 

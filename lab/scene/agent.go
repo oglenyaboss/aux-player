@@ -13,15 +13,13 @@ type scene struct {
 
 	pilot bool // old drive(): the demo walks its own flow, only with -demo
 
-	// the fake agent: it streams candidates in batches after the wake-up; its timings carry
-	// over unchanged from the old scanStep
-	r        *rand.Rand
-	clock    float64
-	next     int
-	inBatch  int
-	batch    int
-	emit     bool
-	accepted []stage.Track
+	// the fake agent paced like the real one: a long think with progress lines, then one
+	// submit that lands the whole batch at once
+	r     *rand.Rand
+	clock float64
+	said  int
+	emit  bool
+	wait  float64 // seconds the agent thinks before its submit
 
 	keyTyped    int // how many key runes the onboarding autopilot typed in
 	filterTyped int // how many filter runes the onboarding autopilot typed in
@@ -36,7 +34,9 @@ func newScene(firstRun, pilot bool) *scene {
 		OnAction: s.onAction,
 		Example:  demoQuery,
 		Chips:    demoChips,
+		Slots:    portionSize,
 	})
+	s.wait = 9
 	return s
 }
 
@@ -53,8 +53,7 @@ func (s *scene) onAction(a stage.Action) {
 	case stage.Query:
 		s.m.Ask(questions())
 	case stage.Answers:
-		s.next, s.batch, s.inBatch, s.accepted = 0, 0, 0, nil
-		s.clock, s.emit = 0.9, true
+		s.clock, s.said, s.emit = 0, 0, true
 	case stage.Say:
 		s.rebuild()
 	case stage.LaterPick:
@@ -70,8 +69,7 @@ func (s *scene) onAction(a stage.Action) {
 	case stage.Quit:
 		s.quit = true
 	case stage.Restart:
-		s.next, s.batch, s.inBatch, s.clock = 0, 0, 0, 0
-		s.emit, s.accepted = false, nil
+		s.clock, s.said, s.emit = 0, 0, false
 		s.r = rand.New(rand.NewSource(7)) //nolint:gosec // G404: the demo narrates the same takes on every run
 	}
 }
@@ -83,33 +81,33 @@ func (s *scene) rebuild() {
 	s.m.SetAhead(keys)
 }
 
-// stream is the timer part of the old scanStep, moved out of the screen: every dt it
-// may feed one candidate, keep the batch gaps and close the portion after the last one.
+// stream plays the agent's turn: its steps spread over the wait, then the submit lands
+// every candidate of the batch in one go and closes the portion.
 func (s *scene) stream(dt float64) {
 	if !s.emit {
 		return
 	}
-	s.clock -= dt
-	cands := demoCandidates()
-	if s.next < len(cands) && s.clock <= 0 {
-		c := cands[s.next]
+	s.clock += dt
+	steps := demoSteps()
+	for s.said < len(steps) && s.clock >= s.wait*float64(s.said)/float64(len(steps)) {
+		s.m.Progress(steps[s.said])
+		s.said++
+	}
+	if s.clock < s.wait {
+		return
+	}
+	s.emit = false
+	var accepted []stage.Track
+	for _, c := range demoCandidates() {
+		if len(accepted) == portionSize {
+			break
+		}
 		t := stage.Track{Artist: c.artist, Title: c.title, Why: c.why,
 			Album: demoAlbums[c.artist+" "+c.title], Dur: c.dur}
 		s.m.Candidate(t, c.ok, c.reason)
 		if c.ok {
-			s.accepted = append(s.accepted, t)
-		}
-		s.next++
-		s.inBatch++
-		s.clock = 0.24
-		if s.batch < len(batches()) && s.inBatch >= batches()[s.batch] {
-			s.batch++
-			s.inBatch = 0
-			s.clock = 1.5
-			s.m.SetThinking(true)
-		}
-		if s.next == len(cands) {
-			s.m.PortionDone(s.accepted, portionNote())
+			accepted = append(accepted, t)
 		}
 	}
+	s.m.PortionDone(accepted, portionNote())
 }
