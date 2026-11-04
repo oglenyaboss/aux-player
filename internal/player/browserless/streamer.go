@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -32,6 +33,8 @@ type segmentRef struct {
 type trackStream struct {
 	trackID   string
 	kid       []byte
+	keyURI    string
+	keyServer string
 	audioCfg  mp4.AudioConfig
 	baseURI   string
 	segments  []segmentRef
@@ -242,16 +245,8 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 	}
 
 	// 5. Generate CDM challenge & acquire license
-	challenge, sessionID, err := s.cdmEngine.GenerateChallenge(kidBytes)
-	if err != nil {
-		return "", 0, fmt.Errorf("generate challenge: %w", err)
-	}
-	licBytes, err := s.licClient.AcquireLicense(ctx, info.HLSKeyServerURL, challenge, keyURI, trackID)
-	if err != nil {
-		return "", 0, fmt.Errorf("acquire license: %w", err)
-	}
-	if err := s.cdmEngine.UpdateSession(sessionID, licBytes); err != nil {
-		return "", 0, fmt.Errorf("update session: %w", err)
+	if err := s.acquireKey(ctx, info.HLSKeyServerURL, keyURI, kidBytes, trackID); err != nil {
+		return "", 0, err
 	}
 
 	// 6. Base URI & Init segment
@@ -287,6 +282,8 @@ func (s *StreamServer) PrepareTrack(ctx context.Context, trackID string, prefer2
 	st := &trackStream{
 		trackID:   trackID,
 		kid:       kidBytes,
+		keyURI:    keyURI,
+		keyServer: info.HLSKeyServerURL,
 		audioCfg:  audioCfg,
 		baseURI:   baseURI,
 		segments:  segments,
@@ -501,7 +498,24 @@ func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.
 	if err != nil {
 		return nil, stage, err
 	}
-	aacData, err := mp4.DecryptSegment(segData, st.kid, st.audioCfg, func(kid, iv, input []byte, subs []mp4.Subsample) ([]byte, error) {
+	aacData, err := s.decryptSegment(segData, st)
+	if errors.Is(err, cdm.ErrNoKey) {
+		// The license expires some time after it was acquired, so a track
+		// paused long enough, or prefetched long before it plays, needs a new
+		// one to go on.
+		if err := s.acquireKey(ctx, st.keyServer, st.keyURI, st.kid, st.trackID); err != nil {
+			return nil, "relicense", err
+		}
+		aacData, err = s.decryptSegment(segData, st)
+	}
+	if err != nil {
+		return nil, "decrypt", err
+	}
+	return aacData, "", nil
+}
+
+func (s *StreamServer) decryptSegment(segData []byte, st *trackStream) ([]byte, error) {
+	return mp4.DecryptSegment(segData, st.kid, st.audioCfg, func(kid, iv, input []byte, subs []mp4.Subsample) ([]byte, error) {
 		cdmSubs := make([]cdm.Subsample, len(subs))
 		for si, sb := range subs {
 			cdmSubs[si] = cdm.Subsample{
@@ -511,10 +525,22 @@ func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.
 		}
 		return s.cdmEngine.DecryptSubsamples(kid, iv, input, cdmSubs)
 	})
+}
+
+// acquireKey loads a fresh Widevine license for kid into the CDM.
+func (s *StreamServer) acquireKey(ctx context.Context, keyServer, keyURI string, kid []byte, trackID string) error {
+	challenge, sessionID, err := s.cdmEngine.GenerateChallenge(kid)
 	if err != nil {
-		return nil, "decrypt", err
+		return fmt.Errorf("generate challenge: %w", err)
 	}
-	return aacData, "", nil
+	licBytes, err := s.licClient.AcquireLicense(ctx, keyServer, challenge, keyURI, trackID)
+	if err != nil {
+		return fmt.Errorf("acquire license: %w", err)
+	}
+	if err := s.cdmEngine.UpdateSession(sessionID, licBytes); err != nil {
+		return fmt.Errorf("update session: %w", err)
+	}
+	return nil
 }
 
 // segmentRetryBackoffs defines the wait intervals between retry attempts for

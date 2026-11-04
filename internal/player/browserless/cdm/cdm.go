@@ -124,6 +124,9 @@ func (c *CDM) UpdateSession(sessionID string, license []byte) error {
 	return nil
 }
 
+// statusNoKey is cdm::kNoKey, which cdm_context_decrypt passes through.
+const statusNoKey = 2
+
 // Subsample specifies the clear and encrypted byte counts in an audio sample.
 type Subsample struct {
 	ClearBytes  uint16
@@ -175,6 +178,9 @@ func (c *CDM) DecryptSubsamples(keyID, iv, input []byte, subsamples []Subsample)
 		(*C.uint8_t)(unsafe.Pointer(&decrypted[0])),
 		&outSize,
 	)
+	if ret == statusNoKey {
+		return nil, ErrNoKey
+	}
 	if ret != 0 {
 		return nil, fmt.Errorf("decryption failed with status %d", ret)
 	}
