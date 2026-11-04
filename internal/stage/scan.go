@@ -789,7 +789,7 @@ func wrapWords(s string, w, n int) []string {
 	}
 	var out []string
 	line := ""
-	for _, word := range strings.Fields(s) {
+	for word := range strings.FieldsSeq(s) {
 		switch {
 		case line == "":
 			line = word
