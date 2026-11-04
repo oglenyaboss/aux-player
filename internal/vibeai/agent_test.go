@@ -1032,6 +1032,32 @@ func TestSubmitCandidatesPickedEvents(t *testing.T) {
 	}
 }
 
+// A rejected track that Apple knows carries its song for the cover; once the portion
+// is full the rest of the batch stays off the screen.
+func TestSubmitRejectedPicks(t *testing.T) {
+	ui := &fakeUI{}
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, ui)
+	if res := a.dispatch(context.Background(), call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)); !strings.HasPrefix(res, "plan accepted") {
+		t.Fatalf("set_plan: %q", res)
+	}
+	if res := a.dispatch(context.Background(), call("s", "submit_candidates", `{"tracks":[
+		{"artist":"A","title":"T1","why":"w1"},
+		{"artist":"A","title":"T1","why":"w2"},
+		{"artist":"B","title":"T2","why":"w"},
+		{"artist":"C","title":"T3","why":"w"},
+		{"artist":"D","title":"T4","why":"w"}
+	]}`)); strings.HasPrefix(res, "error") {
+		t.Fatalf("submit_candidates: %q", res)
+	}
+	picks := ui.picks
+	if len(picks) != 4 {
+		t.Fatalf("picks: %d, want 4 (D — T4 over the full portion stays hidden): %+v", len(picks), picks)
+	}
+	if p := picks[1]; p.Accepted || p.Reason == "" || p.Track.ID != "A/T1" || p.Track.Why != "w2" {
+		t.Errorf("picks[1]: %+v, want rejected A/T1 with its song and why", p)
+	}
+}
+
 func TestNoteKeptUntilNextTurn(t *testing.T) {
 	ch := &fakeChatter{resps: []llm.Response{
 		toolResp(

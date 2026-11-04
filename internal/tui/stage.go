@@ -117,9 +117,7 @@ func (s *stageScreen) AskLater(q vibeai.Question) {
 // the feed, which only the bridge writes.
 func (s *stageScreen) AddPick(t vibeai.Track, name string, accepted bool, reason string) {
 	s.st.Candidate(stageTrack(t, name), accepted, reason)
-	if accepted {
-		s.wantCover(t)
-	}
+	s.wantCover(t)
 }
 
 // PortionDone shows the landed portion; the feed itself is landed by the bridge.
