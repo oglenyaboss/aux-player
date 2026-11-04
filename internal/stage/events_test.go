@@ -194,7 +194,7 @@ func TestPortionShrinks(t *testing.T) {
 	m.Candidate(Track{Artist: "Delta", Title: "Four"}, false, "no")
 	m.PortionDone(tracks, "n")
 	sawDone := false
-	for range int(5 / eventDT) {
+	for range int(12 / eventDT) {
 		m.Step(eventDT)
 		if m.Phase() == PhDone {
 			sawDone = true

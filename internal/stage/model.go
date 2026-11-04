@@ -142,7 +142,7 @@ type Options struct {
 	LastfmAskKeys bool                      // the Last.fm app key or secret is missing: the Last.fm step asks for both
 	LastfmKey     string                    // the Last.fm API key already known, prefilled in that field
 	NoEggs        bool                      // no easter eggs
-	Slots         int                       // portion slots in the scan grid; 0 means 20
+	Slots         int                       // tracks on side A in the scan; 0 means 20
 }
 
 type chip struct {
@@ -154,13 +154,18 @@ type cand struct {
 	tr      Track
 	ok      bool
 	reason  string
-	born    float64
+	born    float64 // stepped on stage
+	verdict float64 // seconds after born the verdict lands
 	decided float64
+	leave   float64 // steps off stage
+	pace    float64 // its timeline runs this many times faster than nominal, queue permitting
+	slot    int     // side A row it went into, -1 for none
 }
 
 type slot struct {
 	tr     Track
 	fillAt float64
+	landAt float64 // the record lands in its side A row
 }
 
 type nextState int
@@ -224,8 +229,12 @@ type Model struct {
 
 	cands     []*cand
 	inbox     []*cand
-	lastCand  float64
 	status    string
+	journal   []journalLine
+	spin      float64
+	spinV     float64
+	seatKey   string  // the record on the platter, "" for none
+	seatSpin  float64 // platter angle when it was put on
 	thinking  bool
 	launchOut float64
 	slots     []*slot
@@ -400,8 +409,11 @@ func (m *Model) Step(dt float64) {
 			}
 		}
 	case PhScan:
+		m.spinStep(dt)
 		m.scanStep(dt)
 	case PhDone:
+		m.spinStep(dt)
+		m.scanStep(dt)
 		if m.pt > 3.2 {
 			m.toPlay()
 		}
@@ -446,20 +458,14 @@ func (m *Model) Ask(qs []Question) {
 	}
 }
 
-// Candidate adds one stream row; a rejected one only visits with its reason. In the
-// player phase the rows of the coming portions are ignored — they land via
-// PortionDone. Rows arriving faster than the stream paces out wait in the inbox.
+// Candidate queues one audition; a rejected one only visits with its reason. In the
+// player phase the candidates of the coming portions are ignored — they land via
+// PortionDone. The scan takes them on stage one at a time.
 func (m *Model) Candidate(t Track, ok bool, reason string) {
 	if m.ph == PhPlay {
 		return
 	}
-	if m.ph == PhScan && len(m.inbox) == 0 && m.t-m.lastCand >= candGap {
-		m.lastCand = m.t
-		m.thinking = false
-		m.cands = append(m.cands, &cand{tr: t, ok: ok, reason: reason, born: m.t, decided: -1})
-		return
-	}
-	m.inbox = append(m.inbox, &cand{tr: t, ok: ok, reason: reason, decided: -1})
+	m.inbox = append(m.inbox, &cand{tr: t, ok: ok, reason: reason, decided: -1, slot: -1})
 }
 
 // SetThinking shows or hides the "agent is looking" line.
@@ -470,6 +476,13 @@ func (m *Model) SetThinking(on bool) { m.thinking = on }
 func (m *Model) Progress(line string) {
 	m.status = strings.TrimSpace(line)
 	m.thinking = true
+	if m.status == "" || len(m.journal) > 0 && m.journal[len(m.journal)-1].text == m.status {
+		return
+	}
+	m.journal = append(m.journal, journalLine{text: m.status, at: m.t})
+	if len(m.journal) > 12 {
+		m.journal = m.journal[1:]
+	}
 }
 
 // NextGathering opens the next portion: the agent is picking it now, reply is the owner's
@@ -620,11 +633,7 @@ func (m *Model) SetAhead(keys []string) {
 // JumpPlay opens the player on track i seeked to pos, without the scan in between.
 func (m *Model) JumpPlay(tracks []Track, i int, pos float64) {
 	m.ob = nil
-	n := 0
-	for n < len(tracks) && n < len(m.slots) {
-		m.slots[n].tr, m.slots[n].fillAt = tracks[n], 0
-		n++
-	}
+	m.portion = append([]Track(nil), tracks...)
 	if !m.toPlay() {
 		return
 	}
@@ -888,99 +897,6 @@ func (m *Model) answerFree(raw, label string) {
 }
 
 func (m *Model) track(x, y, w int) (tx, ty, tw int) { return x + 5, y + 5, w - 10 }
-
-// ---------- scan ----------
-
-// streamGeom: the candidate stream gets its own column only on wide screens.
-func (m *Model) streamGeom() (x, y0, y1, w int, show bool) {
-	if m.w < 120 {
-		return 3, 6, 7, m.w - 6, false
-	}
-	return 3, 7, m.h - 2, max(30, min(46, m.w/3)), true
-}
-
-// gridGeom picks full cards when all slots fit, thumbnails otherwise.
-func (m *Model) gridGeom() (x, y, cols, cw int, cards bool) {
-	sx, _, _, sw, show := m.streamGeom()
-	x, y = 3, 8
-	if show {
-		x, y = sx+sw+4, 7
-	}
-	avail := m.w - x - 2
-	cols = max(1, min(5, (avail+2)/24))
-	if rows := (len(m.slots) + cols - 1) / cols; rows*3-1 <= m.h-y-1 {
-		return x, y, cols, 22, true
-	}
-	cols = max(1, min(10, (avail+1)/5))
-	return x, y, cols, 4, false
-}
-
-func (m *Model) slotPos(i int) (x, y int) {
-	gx, gy, cols, cw, _ := m.gridGeom()
-	return gx + (i%cols)*(cw+2), gy + (i/cols)*3
-}
-
-func (m *Model) visible() (first int) {
-	_, y0, y1, _, _ := m.streamGeom()
-	return max(0, len(m.cands)-(y1-y0))
-}
-
-// candGap is the stream tempo: one candidate lands at most once in candGap seconds.
-const candGap = 0.12
-
-func (m *Model) scanStep(dt float64) {
-	if len(m.inbox) > 0 && m.t-m.lastCand >= candGap {
-		c := m.inbox[0]
-		m.inbox = m.inbox[1:]
-		m.lastCand = min(m.lastCand+candGap, m.t)
-		c.born, m.thinking = m.t, false
-		m.cands = append(m.cands, c)
-	}
-	for _, c := range m.cands {
-		if c.decided >= 0 || m.t-c.born < 0.5 {
-			continue
-		}
-		c.decided = m.t
-		m.checked++
-		if !c.ok {
-			m.rejected++
-			continue
-		}
-		if m.filled < len(m.slots) {
-			m.slots[m.filled].tr = c.tr
-			m.slots[m.filled].fillAt = m.t
-			m.filled++
-		}
-	}
-	if m.pDone {
-		solved := len(m.inbox) == 0
-		for _, c := range m.cands {
-			if c.decided < 0 {
-				solved = false
-				break
-			}
-		}
-		if solved && m.filled == 0 {
-			m.Fail(tr("ничего не нашлось — попробуй сказать иначе", "found nothing — try saying it another way"))
-			return
-		}
-		if solved && m.filled > 0 && m.filled < len(m.slots) {
-			m.slots = m.slots[:m.filled]
-		}
-		if m.filled == len(m.slots) {
-			landed := true
-			for _, s := range m.slots {
-				if s.fillAt < 0 {
-					landed = false
-				}
-			}
-			if landed {
-				m.setPhase(PhDone)
-				m.doneAt = m.t
-			}
-		}
-	}
-}
 
 // ---------- play ----------
 

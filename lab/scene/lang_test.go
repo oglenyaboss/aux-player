@@ -72,14 +72,14 @@ func TestLangEnFramesHaveNoCyrillic(t *testing.T) {
 
 func TestLangEnScanAndPlayText(t *testing.T) {
 	langEN(t)
-	frame := frameText(t, 110, 32, 40)
-	for _, s := range []string{"Batch", "of 20", "passed"} {
+	frame := frameText(t, 110, 32, 50)
+	for _, s := range []string{"Batch", "of 5", "passed", "side A"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("кадр сканирования 40 без %q:\n%s", s, frame)
+			t.Errorf("кадр сканирования 50 без %q:\n%s", s, frame)
 		}
 	}
-	if frame := frameText(t, 110, 32, 57); !strings.Contains(frame, "noted: more like this") {
-		t.Errorf("кадр плеера 57 без тоста:\n%s", frame)
+	if frame := frameText(t, 110, 32, 69.5); !strings.Contains(frame, "noted: more like this") {
+		t.Errorf("кадр плеера 69.5 без тоста:\n%s", frame)
 	}
 }
 

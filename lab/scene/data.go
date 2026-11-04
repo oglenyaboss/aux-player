@@ -50,7 +50,20 @@ func portionNote() string {
 	return stage.Tr("без крика, держу ночной мелодичный рэйдж", "no shouting, keeping the melodic night rage")
 }
 
-func batches() []int { return []int{10, 10, 9} }
+// portionSize is the app's portion: five tracks on side A.
+const portionSize = 5
+
+// demoSteps are the agent's progress lines during its think, as the host phrases them.
+func demoSteps() []string {
+	return []string{
+		stage.Tr("читаю про Don Toliver", "reading about Don Toliver"),
+		stage.Tr("наметил план", "sketched a plan"),
+		stage.Tr("смотрю соседей Don Toliver", "checking neighbors of Don Toliver"),
+		stage.Tr("читаю про Travis Scott", "reading about Travis Scott"),
+		stage.Tr("смотрю соседей Playboi Carti", "checking neighbors of Playboi Carti"),
+		stage.Tr("проверяю в Apple Music…", "checking Apple Music…"),
+	}
+}
 
 func demoCandidates() []demoCandidate {
 	return []demoCandidate{

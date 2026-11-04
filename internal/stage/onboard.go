@@ -451,24 +451,33 @@ type discView struct {
 	cx, cy, R float64
 	tilt      float64
 	spin      float64
+	focal     float64 // perspective, in record radii; 0 means obFocal
+}
+
+func (d discView) fl() float64 {
+	if d.focal > 0 {
+		return d.focal
+	}
+	return obFocal
 }
 
 // toDisc maps a screen pixel to the record plane, unit radius; the top edge leans away from the viewer.
 func (d discView) toDisc(sx, sy float64) (float64, float64, bool) {
 	u, v := (sx-d.cx)/d.R, (sy-d.cy)/d.R
 	sn, cs := math.Sin(d.tilt), math.Cos(d.tilt)
-	den := obFocal*cs + v*sn
+	fl := d.fl()
+	den := fl*cs + v*sn
 	if den <= 0.05 {
 		return 0, 0, false
 	}
-	y := v * obFocal / den
-	s := obFocal / (obFocal - y*sn)
+	y := v * fl / den
+	s := fl / (fl - y*sn)
 	return u / s, y, true
 }
 
 func (d discView) toScreen(x, y, z float64) (sx, sy float64) {
 	sn, cs := math.Sin(d.tilt), math.Cos(d.tilt)
-	s := obFocal / (obFocal - y*sn)
+	s := d.fl() / (d.fl() - y*sn)
 	return d.cx + x*s*d.R, d.cy + (y*cs*s-z*sn)*d.R
 }
 
