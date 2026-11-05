@@ -25,7 +25,7 @@ import (
 type tickMsg time.Time
 
 func tick() tea.Cmd {
-	return tea.Tick(time.Second/30, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 // sceneUI is the thin tea model around the screen: it feeds the tick and the keys.
@@ -106,7 +106,7 @@ func main() {
 			f, _ := strconv.ParseFloat(v, 64)
 			times = append(times, f)
 		}
-		const dt = 1.0 / 30
+		const dt = 1.0 / 60
 		var t float64
 		for _, at := range times {
 			for t+dt <= at {
@@ -114,7 +114,7 @@ func main() {
 				s.m.View()
 				t += dt
 			}
-			p := fmt.Sprintf("%s-%05.1f.png", *out, at)
+			p := fmt.Sprintf("%s-%08.3f.png", *out, at)
 			if err := s.m.PNG(p); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
