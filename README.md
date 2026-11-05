@@ -2,7 +2,13 @@
 
 A terminal music player for Apple Music: describe a vibe, an AI agent picks the tracks.
 
+![AUX in a terminal, cutting between album scenes](assets/demo.gif)
+
+[Watch the full demo with sound](assets/demo.mp4), 1:14 at 1080p60. `lab/promo` renders it frame by frame from the real stage. The agent's answers are scripted and its wait is cut short.
+
 You type what you want to hear ("late-night coding, like Westside Gunn but calmer"). The agent may ask one quick question with real tracks to choose from, then plays portions of five tracks, keeps the next portion ready while the current one plays, and learns from what you skip, finish, and rate. It remembers your stable preferences between sessions.
+
+Thirteen albums have their own animated scene, among them *Yeezus*, *UTOPIA*, *Currents* and *WILD EA$T*. Everything else plays on the usual stage. The **Easter eggs** switch in settings turns the scenes off.
 
 ## Requirements
 
@@ -103,5 +109,7 @@ Release builds check GitHub for a newer release once a day and update themselves
 AUX is based on [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi, released under the MIT license. See `LICENSE` and `NOTICE`.
 
 Some Easter egg scenes quote album artwork: *Blonde* by Frank Ocean, *My Beautiful Dark Twisted Fantasy* by Kanye West (paintings by George Condo), *The Dark Side of the Moon* by Pink Floyd (design by Hipgnosis), *Unknown Pleasures* by Joy Division (design by Peter Saville) and *IGOR* by Tyler, the Creator. All rights belong to their owners.
+
+The demo video uses iTunes previews and cover art of tracks by SALUKI, Kanye West, Travis Scott, Metro Boomin, Tyler, the Creator and Tame Impala. All rights belong to their owners.
 
 Apple Music is a trademark of Apple Inc. AUX is not affiliated with or endorsed by Apple.
