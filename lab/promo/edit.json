@@ -1,0 +1,22 @@
+{
+  "dropBpm": 95.5,
+  "prerollBars": 7,
+  "tail": 6.5,
+  "scanRate": 1.9338,
+  "query": "SALUKI, Kanye, Travis и немного психоделики",
+  "say": "жёстче",
+  "url": "github.com/oglenyaboss/aux-player",
+  "segments": [
+    {"key": "saluki-bang",    "in": 3.074,  "beats": 16, "bpm": 95.5,   "pos": 40.276, "eggBpm": 95.3},
+    {"key": "yeezus",         "in": 14.155, "beats": 12, "bpm": 129.96, "pos": 60, "warm": 0.4},
+    {"key": "mbdtf",          "in": 17.390, "beats": 8,  "bpm": 77,     "pos": 40},
+    {"key": "utopia-fein",    "in": 24.563, "beats": 8,  "bpm": 148.01, "pos": 43.5},
+    {"key": "hv-superhero",   "in": 16.750, "beats": 12, "bpm": 116.84, "pos": 40, "warm": 1.5,
+     "caption": "и всё это рисует терминал"},
+    {"key": "igor-earfquake", "in": 3.336,  "beats": 4,  "bpm": 79.56,  "pos": 30, "warm": 0.2},
+    {"key": "currents",       "in": 17.584, "beats": 16, "bpm": 124.99, "pos": 60, "warm": 0.8},
+    {"key": "saluki-lights",  "in": 20.399, "beats": 16, "bpm": 125,    "pos": 40.465, "eggBpm": 124.5, "warm": 2,
+     "caption": "опиши вайб — остальное сделает агент"}
+  ],
+  "endCaption": "плеер Apple Music в терминале"
+}
