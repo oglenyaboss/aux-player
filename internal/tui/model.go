@@ -44,6 +44,7 @@ type Model struct {
 	recentTracks []provider.Track          // tracks played this launch, newest first
 	musicTracks  map[string]provider.Track // the music screen's song rows, keyed by their item ID
 	library      *library.Store            // the library on disk; nil until musicLibrary opens it
+	libraryOf    string                    // the provider type and token the store was opened for
 	musicChecks  int                       // background library refreshes in flight
 	musicFound   map[string]musicSearchHit // recent searches by query
 	saves        map[string]saveState

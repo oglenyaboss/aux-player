@@ -620,3 +620,37 @@ func TestMusicRefreshNoticeAfterLast(t *testing.T) {
 		t.Fatalf("no notice after the last refresh:\n%s", frame)
 	}
 }
+
+type otherMusicProvider struct{ *musicProvider }
+
+// B9: the store follows the account and the music source: a new token or another
+// provider reads its own rows, never the previous one's.
+func TestMusicLibraryFollowsIdentity(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	ctx := context.Background()
+	if _, err := m.musicLibrary().Load(ctx, library.Songs, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	m.cfg.AppleUserToken = "another account"
+	p2 := newMusicProvider()
+	m.provider = p2
+	if _, err := m.musicLibrary().Load(ctx, library.Songs, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !p2.called("GetLibraryTracks") {
+		t.Fatal("a new token was served the previous account's rows")
+	}
+
+	p3 := newMusicProvider()
+	p3.favTracks = []provider.Track{{ID: "demo:1", Title: "Demo"}}
+	m.provider = otherMusicProvider{p3}
+	r, err := m.musicLibrary().Load(ctx, library.Songs, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p3.called("GetLibraryTracks") || len(r.Songs) != 1 || r.Songs[0].ID != "demo:1" {
+		t.Fatalf("another music source was served the Apple rows: %+v", r.Songs)
+	}
+}

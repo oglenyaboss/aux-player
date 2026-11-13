@@ -31,6 +31,7 @@ type fakeProvider struct {
 	catalogPlaylistTracks map[string][]provider.Track
 
 	blockLibraryAlbums func()
+	blockLibraryTracks func()
 }
 
 func (f *fakeProvider) count(method string) {
@@ -69,6 +70,9 @@ func (f *fakeProvider) Search(_ context.Context, _ string) (*provider.SearchResu
 
 func (f *fakeProvider) GetLibraryTracks(_ context.Context) ([]provider.Track, error) {
 	f.count("GetLibraryTracks")
+	if f.blockLibraryTracks != nil {
+		f.blockLibraryTracks()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.libraryTracks, f.libraryTracksErr
@@ -581,8 +585,16 @@ func TestOwnerIsolation(t *testing.T) {
 	aDir := filepath.Join(dir, a.owner)
 
 	b := Open(dir, fake, "b")
+	if _, err := os.Stat(aDir); err != nil {
+		t.Fatalf("a recently used owner dir was deleted: %v", err)
+	}
+	old := time.Now().Add(-31 * 24 * time.Hour)
+	if err := os.Chtimes(aDir, old, old); err != nil {
+		t.Fatal(err)
+	}
+	b = Open(dir, fake, "b")
 	if _, err := os.Stat(aDir); !os.IsNotExist(err) {
-		t.Fatalf("previous owner dir survived: %v", err)
+		t.Fatalf("an owner dir unused for 31 days survived: %v", err)
 	}
 	if _, err := b.Load(ctx, Songs, ""); err != nil {
 		t.Fatalf("Load as b: %v", err)
@@ -638,5 +650,75 @@ func TestProviderErrors(t *testing.T) {
 	r, err = reopened.Load(ctx, Songs, "")
 	if err != nil || len(r.Songs) != 1 {
 		t.Fatalf("reopened Load = %v, %+v; want stored songs without a fetch", err, r.Songs)
+	}
+}
+
+// A refresh whose context ran out, or that came back empty over stored rows,
+// keeps the stored rows: a cut scan must not pass for the whole library.
+func TestRefreshKeepsStoredOnShortAnswer(t *testing.T) {
+	fake := &fakeProvider{libraryTracks: []provider.Track{testTrack("i.1", false), testTrack("i.2", true)}}
+	s := Open(t.TempDir(), fake, "tok")
+	if _, err := s.Load(context.Background(), Songs, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	fake.setLibraryTracks([]provider.Track{testTrack("i.1", false)})
+	cut, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := s.Refresh(cut, Songs, "", true); err == nil {
+		t.Fatal("a refresh past its context stored its answer")
+	}
+
+	fake.setLibraryTracks(nil)
+	if _, _, err := s.Refresh(context.Background(), Songs, "", true); err == nil {
+		t.Fatal("an empty answer replaced stored songs")
+	}
+
+	r, err := s.Load(context.Background(), Songs, "")
+	if err != nil || len(r.Songs) != 2 {
+		t.Fatalf("stored songs = %v, %+v; want the two stored", err, r.Songs)
+	}
+	if e := readStored(t, s, Songs, ""); len(e.Songs) != 2 {
+		t.Fatalf("songs file = %+v, want the two stored", e.Songs)
+	}
+}
+
+// A save noted while a songs refresh is out survives the refresh's answer.
+func TestNoteSavedDuringRefresh(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	fake := &fakeProvider{libraryTracks: []provider.Track{testTrack("i.1", false)}}
+	s := Open(t.TempDir(), fake, "tok")
+	if _, err := s.Load(context.Background(), Songs, ""); err != nil {
+		t.Fatal(err)
+	}
+	fake.blockLibraryTracks = func() {
+		once.Do(func() { close(started) })
+		<-release
+	}
+	done := make(chan Result)
+	go func() {
+		r, _, _ := s.Refresh(context.Background(), Songs, "", true)
+		done <- r
+	}()
+	<-started
+	s.NoteSaved(provider.Track{ID: "i.9", Title: "Saved"}, true)
+	close(release)
+	r := <-done
+
+	has := func(songs []provider.Track) bool {
+		for _, t := range songs {
+			if t.ID == "i.9" && t.Favorite {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(r.Songs) {
+		t.Fatalf("refresh result lost the save: %+v", r.Songs)
+	}
+	if e := readStored(t, s, Songs, ""); !has(e.Songs) {
+		t.Fatalf("songs file lost the save: %+v", e.Songs)
 	}
 }

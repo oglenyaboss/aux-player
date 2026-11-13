@@ -14,9 +14,13 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := os.Setenv("XDG_CACHE_HOME", dir); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// os.UserCacheDir reads XDG_CACHE_HOME on Linux, HOME on macOS and
+	// LocalAppData on Windows.
+	for _, key := range []string{"XDG_CACHE_HOME", "HOME", "LocalAppData"} {
+		if err := os.Setenv(key, dir); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	code := m.Run()
 	_ = os.RemoveAll(dir)

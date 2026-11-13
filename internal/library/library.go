@@ -43,6 +43,7 @@ const (
 	countProbeWindow = 6 * time.Hour
 	recheckInterval  = 15 * time.Minute
 	catalogAlbumTTL  = 30 * 24 * time.Hour
+	ownerTTL         = 30 * 24 * time.Hour
 	hashLen          = 16
 )
 
@@ -69,8 +70,15 @@ type flight struct {
 	err     error
 }
 
-// Store caches library data on disk, one file per kind and id, scoped to the
-// user token so accounts never see each other's libraries.
+// note is a save AUX made while a songs refresh was out.
+type note struct {
+	t        provider.Track
+	favorite bool
+}
+
+// Store caches library data on disk, one file per kind and id, scoped to an
+// identity (the account and the music source) so they never see each other's
+// libraries.
 type Store struct {
 	dir     string
 	owner   string
@@ -82,14 +90,15 @@ type Store struct {
 	mem     map[string]*entry
 	checked map[string]bool
 	flights map[string]*flight
+	notes   []note // saves to fold into the answer of the songs refresh in flight
 }
 
-// Open returns a store rooted at dir for the user behind userToken, deleting
-// the on-disk data of other users found under dir.
-func Open(dir string, prov provider.Provider, userToken string) *Store {
+// Open returns a store rooted at dir for identity, deleting the on-disk data of
+// other identities under dir that went unused for 30 days.
+func Open(dir string, prov provider.Provider, identity string) *Store {
 	s := &Store{
 		dir:     dir,
-		owner:   hashPrefix(userToken),
+		owner:   hashPrefix(identity),
 		prov:    prov,
 		now:     time.Now,
 		mem:     make(map[string]*entry),
@@ -113,6 +122,9 @@ func (s *Store) removeOtherOwners() {
 	}
 	for _, e := range entries {
 		if !e.IsDir() || e.Name() == s.owner {
+			continue
+		}
+		if info, err := e.Info(); err != nil || s.now().Sub(info.ModTime()) < ownerTTL {
 			continue
 		}
 		_ = os.RemoveAll(filepath.Join(s.dir, e.Name()))
@@ -186,7 +198,8 @@ func (s *Store) Load(ctx context.Context, k Kind, id string) (Result, error) {
 
 // Refresh refetches k from the provider and stores it, returning the fresh
 // result and whether the data changed. Concurrent refreshes of the same entry
-// share one fetch. On error the stored data stays untouched.
+// share one fetch. On error the stored data stays untouched; an answer that
+// arrived after ctx ended, or an empty one over stored rows, is an error.
 func (s *Store) Refresh(ctx context.Context, k Kind, id string, force bool) (r Result, changed bool, err error) {
 	if err := validate(k, id); err != nil {
 		return Result{}, false, err
@@ -204,10 +217,13 @@ func (s *Store) Refresh(ctx context.Context, k Kind, id string, force bool) (r R
 
 	r, changed, err = s.refresh(ctx, k, id, key, force)
 	fl.r, fl.changed, fl.err = r, changed, err
-	close(fl.done)
 	s.mu.Lock()
 	delete(s.flights, key)
+	if k == Songs {
+		s.notes = nil
+	}
 	s.mu.Unlock()
+	close(fl.done)
 	return r, changed, err
 }
 
@@ -224,15 +240,20 @@ func (s *Store) refresh(ctx context.Context, k Kind, id, key string, force bool)
 	if s.counter != nil && !force && k == Songs && stored != nil && now.Sub(stored.Fetched) < countProbeWindow {
 		count, err := s.counter.LibrarySongCount(ctx)
 		if err == nil && count != 0 && count == len(stored.Songs) {
-			e := *stored
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			cur := stored
+			if m := s.mem[key]; m != nil {
+				cur = m
+			}
+			e := *cur
 			e.Checked = now
+			s.notes = nil
 			if err := s.writeEntry(k, id, &e); err != nil {
 				return Result{}, false, err
 			}
-			s.mu.Lock()
 			s.mem[key] = &e
 			s.checked[key] = true
-			s.mu.Unlock()
 			return result(k, &e), false, nil
 		}
 	}
@@ -275,7 +296,24 @@ func (s *Store) refresh(ctx context.Context, k Kind, id, key string, force bool)
 	if err != nil {
 		return Result{}, false, err
 	}
+	if err := ctx.Err(); err != nil {
+		return Result{}, false, fmt.Errorf("library: %s answer may be cut short: %w", k, err)
+	}
+	// ponytail: an empty answer over stored rows is taken for a glitch, so a
+	// library emptied on purpose shows its old rows until Forget.
+	if stored != nil && len(songs)+len(albums)+len(playlists) == 0 &&
+		len(stored.Songs)+len(stored.Albums)+len(stored.Playlists) > 0 {
+		return Result{}, false, fmt.Errorf("library: empty %s answer over stored data", k)
+	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if k == Songs {
+		for _, n := range s.notes {
+			songs = fold(songs, n.t, n.favorite)
+		}
+		s.notes = nil
+	}
 	changed := false
 	switch k {
 	case Songs, Album, Playlist:
@@ -297,10 +335,8 @@ func (s *Store) refresh(ctx context.Context, k Kind, id, key string, force bool)
 	if err := s.writeEntry(k, id, e); err != nil {
 		return Result{}, false, err
 	}
-	s.mu.Lock()
 	s.mem[key] = e
 	s.checked[key] = true
-	s.mu.Unlock()
 	return result(k, e), changed, nil
 }
 
@@ -330,6 +366,9 @@ func (s *Store) NoteSaved(t provider.Track, favorite bool) []provider.Track {
 	key := entryKey(k, id)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.flights[key] != nil {
+		s.notes = append(s.notes, note{t: t, favorite: favorite})
+	}
 	e := s.mem[key]
 	if e == nil {
 		e = s.readDisk(k, id)
@@ -337,28 +376,34 @@ func (s *Store) NoteSaved(t provider.Track, favorite bool) []provider.Track {
 			return nil
 		}
 	}
-	songs := make([]provider.Track, len(e.Songs))
-	copy(songs, e.Songs)
-	at := len(songs)
-	for i := range songs {
-		if songs[i].ID == t.ID || (songs[i].CatalogID != "" && songs[i].CatalogID == catalogID(t)) {
-			at = i
-			break
-		}
-	}
-	if at == len(songs) {
-		songs = append(songs, t)
-	}
-	if favorite {
-		songs[at].Favorite = true
-	}
 	ne := *e
-	ne.Songs = songs
+	ne.Songs = fold(e.Songs, t, favorite)
 	if err := s.writeEntry(k, id, &ne); err != nil {
 		return nil
 	}
 	s.mem[key] = &ne
-	return songs
+	return ne.Songs
+}
+
+// fold returns songs with t in them, flagged as a favorite when favorite is
+// set; a song with t's ID or catalog song stands for t. songs is not modified.
+func fold(songs []provider.Track, t provider.Track, favorite bool) []provider.Track {
+	out := make([]provider.Track, len(songs), len(songs)+1)
+	copy(out, songs)
+	at := len(out)
+	for i := range out {
+		if out[i].ID == t.ID || (out[i].CatalogID != "" && out[i].CatalogID == catalogID(t)) {
+			at = i
+			break
+		}
+	}
+	if at == len(out) {
+		out = append(out, t)
+	}
+	if favorite {
+		out[at].Favorite = true
+	}
+	return out
 }
 
 // catalogID is the catalog song behind t: its CatalogID, or its ID when it came

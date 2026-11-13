@@ -346,15 +346,21 @@ func musicTargetFor(sec stage.MusicSection, parent *stage.MusicItem) (musicTarge
 	return musicTarget{}, false
 }
 
-// musicLibrary is the user's library store, opened on first use for the current
-// provider and token.
+// musicLibrary is the library store of the current provider and token, opened
+// again when either changes: a re-login or another music source keeps its own rows.
 func (m *Model) musicLibrary() *library.Store {
-	if m.library == nil && m.provider != nil {
+	if m.provider == nil {
+		return nil
+	}
+	identity := fmt.Sprintf("%T\x00%s", m.provider, m.cfg.AppleUserToken)
+	if m.library == nil || identity != m.libraryOf {
 		dir, err := os.UserCacheDir()
 		if err != nil {
 			dir = os.TempDir()
 		}
-		m.library = library.Open(filepath.Join(dir, "aux", "library"), m.provider, m.cfg.AppleUserToken)
+		m.library = library.Open(filepath.Join(dir, "aux", "library"), m.provider, identity)
+		m.libraryOf = identity
+		m.musicFound = nil
 	}
 	return m.library
 }
