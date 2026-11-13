@@ -38,9 +38,10 @@ type Model struct {
 	playerState player.State
 	stateCh     <-chan player.State
 
-	queueIDs     []string         // current playback queue IDs
-	queueTracks  []provider.Track // full track objects for the agent's stream top-up
-	recentTracks []provider.Track // tracks played this launch, newest first
+	queueIDs     []string                  // current playback queue IDs
+	queueTracks  []provider.Track          // full track objects for the agent's stream top-up
+	recentTracks []provider.Track          // tracks played this launch, newest first
+	musicTracks  map[string]provider.Track // the music screen's song rows, keyed by their item ID
 	saves        map[string]saveState
 
 	artHTTP          *http.Client
@@ -193,6 +194,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SaveTrackMsg, saveTrackDoneMsg:
 		cmds = append(cmds, m.handleSaveMsg(msg))
+
+	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg:
+		cmds = append(cmds, m.handleMusicMsg(msg))
 
 	case tickMsg:
 		if m.errMsg != "" && time.Now().After(m.errExpiry) {

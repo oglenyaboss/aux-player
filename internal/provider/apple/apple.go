@@ -21,7 +21,7 @@ import (
 
 const (
 	defaultBaseURL        = "https://api.music.apple.com/v1"
-	favoritesPlaylistID   = "aux:favorites"
+	favoritesPlaylistID   = provider.FavoritesPlaylistID
 	favoritesPlaylistName = "Favorites"
 	// favoritesEndpoint asks Apple to report inFavorites on every library song.
 	favoritesEndpoint = "/me/library/songs?limit=100&extend=inFavorites"

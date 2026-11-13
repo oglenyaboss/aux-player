@@ -52,6 +52,11 @@ type Artist struct {
 	Name string
 }
 
+// FavoritesPlaylistID addresses the user's Apple Music Favorites as a playlist:
+// GetPlaylistTracks with this ID returns the loved songs, and library playlist
+// listings carry it as a synthetic entry alongside the real ones.
+const FavoritesPlaylistID = "aux:favorites"
+
 type Playlist struct {
 	ID         string
 	Name       string

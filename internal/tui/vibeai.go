@@ -359,6 +359,9 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		return tea.Batch(v.flush(), v.coverCmds(m.artHTTP), stageTick())
 
 	case stageCoverMsg:
+		if v.inflight > 0 {
+			v.inflight--
+		}
 		if msg.err == nil && msg.img != nil {
 			v.st.SetCover(msg.key, msg.img)
 		}
@@ -718,11 +721,24 @@ func (m *Model) vibeAIPlay(ts []vibeai.Track) tea.Cmd {
 		return nil
 	}
 	tracks := vibeAIProviderTracks(ts)
+	m.appendLog(fmt.Sprintf("[vibe] play %d tracks from %s — %s", len(tracks), tracks[0].Artist, tracks[0].Title))
+	return m.setQueue(tracks)
+}
+
+// vibeAIAppend puts ts at the end of the player queue.
+func (m *Model) vibeAIAppend(ts []vibeai.Track) tea.Cmd {
+	if len(ts) == 0 {
+		return nil
+	}
+	return m.appendQueue(vibeAIProviderTracks(ts))
+}
+
+// setQueue replaces the player queue with tracks and starts the first one.
+func (m *Model) setQueue(tracks []provider.Track) tea.Cmd {
 	ids := make([]string, len(tracks))
 	for i, t := range tracks {
 		ids[i] = PlaybackID(t)
 	}
-	m.appendLog(fmt.Sprintf("[vibe] play %d tracks from %s — %s", len(tracks), tracks[0].Artist, tracks[0].Title))
 	m.queueTracks = tracks
 	m.queueIDs = ids
 	first := tracks[0]
@@ -738,12 +754,8 @@ func (m *Model) vibeAIPlay(ts []vibeai.Track) tea.Cmd {
 	return m.playerCmd(func(p player.Player) error { return p.SetQueue(ids) })
 }
 
-// vibeAIAppend puts ts at the end of the player queue.
-func (m *Model) vibeAIAppend(ts []vibeai.Track) tea.Cmd {
-	if len(ts) == 0 {
-		return nil
-	}
-	tracks := vibeAIProviderTracks(ts)
+// appendQueue puts tracks at the end of the player queue.
+func (m *Model) appendQueue(tracks []provider.Track) tea.Cmd {
 	ids := make([]string, len(tracks))
 	for i, t := range tracks {
 		ids[i] = PlaybackID(t)

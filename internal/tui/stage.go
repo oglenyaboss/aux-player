@@ -33,9 +33,10 @@ type stageScreen struct {
 	covers  map[string]bool // keys whose cover was requested
 	want    []stageCover    // covers to fetch on the next tick
 
-	initErr string // launch error the scene shows on the next tick
-	lastErr string // host error already shown in the player, so a new one toasts once
-	quit    bool   // the scene asked to leave the program; the tick chain stops
+	initErr  string // launch error the scene shows on the next tick
+	lastErr  string // host error already shown in the player, so a new one toasts once
+	quit     bool   // the scene asked to leave the program; the tick chain stops
+	inflight int    // cover fetches started and not yet answered
 }
 
 type stageCover struct{ key, url string }
@@ -237,6 +238,16 @@ func (s *stageScreen) act(a stage.Action) {
 		if !found {
 			s.st.Toast(stage.Tr("трек выпал из списка недавних", "that track left the recent list"))
 		}
+	case stage.MusicLoad:
+		s.out = append(s.out, musicLoadMsg{gen: a.Gen, sec: a.Section, query: a.Query, parent: a.Parent})
+	case stage.MusicPlay:
+		s.out = append(s.out, musicPlayMsg{items: a.Items, start: a.Start})
+	case stage.MusicPlayAll:
+		s.out = append(s.out, musicPlayAllMsg{item: a.Item})
+	case stage.MusicAppend:
+		s.out = append(s.out, musicAppendMsg{item: a.Item})
+	case stage.MusicSave:
+		s.out = append(s.out, SaveTrackMsg{Track: s.host.musicTrackFor(a.Item), Favorite: a.Favorites})
 	case stage.Restart:
 		s.out = append(s.out, VibeAICancelMsg{}) // the bridge trims the feed on cancel
 	case stage.Settings:
@@ -446,25 +457,34 @@ func thinkingPhrase(rest string) string {
 // ── covers ────────────────────────────────────────────────────────────────
 
 func (s *stageScreen) wantCover(t vibeai.Track) {
-	if t.ArtworkURL == "" || s.covers[t.ID] {
-		return
-	}
-	s.covers[t.ID] = true
-	url := strings.NewReplacer("{w}", "300", "{h}", "300").Replace(t.ArtworkURL)
-	s.want = append(s.want, stageCover{key: t.ID, url: url})
+	s.wantArt(t.ID, t.ArtworkURL)
 }
 
-// coverCmds turns the queued cover keys into fetch commands and clears the queue;
-// terminals without colour support skip the download entirely.
+// wantArt queues one cover fetch under key, at most once per key.
+func (s *stageScreen) wantArt(key, artworkURL string) {
+	if artworkURL == "" || s.covers[key] {
+		return
+	}
+	s.covers[key] = true
+	url := strings.NewReplacer("{w}", "300", "{h}", "300").Replace(artworkURL)
+	s.want = append(s.want, stageCover{key: key, url: url})
+}
+
+// coverCmds starts the queued cover fetches, at most stageCoverMax in flight; the
+// rest keep their place in s.want for the next tick. Terminals without colour
+// support skip the download entirely.
 func (s *stageScreen) coverCmds(client *http.Client) tea.Cmd {
-	if len(s.want) == 0 {
-		return nil
-	}
-	wanted := s.want
-	s.want = nil
 	if g := s.host.supportsArtColor; g == nil || !g() {
+		s.want = nil
 		return nil
 	}
+	n := min(stageCoverMax-s.inflight, len(s.want))
+	if n <= 0 {
+		return nil
+	}
+	wanted := s.want[:n]
+	s.want = s.want[n:]
+	s.inflight += n
 	var cmds []tea.Cmd
 	for _, c := range wanted {
 		key, url := c.key, c.url
@@ -479,6 +499,9 @@ func (s *stageScreen) coverCmds(client *http.Client) tea.Cmd {
 }
 
 // ── ticks ─────────────────────────────────────────────────────────────────
+
+// stageCoverMax is how many cover fetches may be in flight at once.
+const stageCoverMax = 8
 
 type stageTickMsg time.Time
 
