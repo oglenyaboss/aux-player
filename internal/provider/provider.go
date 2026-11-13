@@ -19,6 +19,7 @@ type Track struct {
 	// Zero means unknown.
 	DiscNumber  int
 	TrackNumber int
+	Favorite    bool // in the user's Favorites; set only by library song listings
 }
 
 // RecommendationItem is a single album or playlist entry inside a recommendation group.

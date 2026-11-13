@@ -329,6 +329,7 @@ func toTrack(s songResource) provider.Track {
 		Genres:      provider.CleanAll(slices.Clone(s.Attributes.GenreNames)),
 		DiscNumber:  s.Attributes.DiscNumber,
 		TrackNumber: s.Attributes.TrackNumber,
+		Favorite:    s.Attributes.InFavorites,
 	}
 	if s.Attributes.PlayParams != nil && s.Attributes.PlayParams.CatalogID != "" {
 		t.CatalogID = s.Attributes.PlayParams.CatalogID
@@ -746,15 +747,28 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 }
 
 func (a *AppleProvider) GetLibraryTracks(ctx context.Context) ([]provider.Track, error) {
-	endpoint := "/me/library/songs?limit=100"
-	tracks, err := a.fetchSongsPaginated(ctx, endpoint)
+	resources, err := a.fetchSongResources(ctx, favoritesEndpoint, favoritesPageParams)
 	if err != nil {
 		if strings.Contains(err.Error(), "404 Not Found") {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return tracks, nil
+	return toTracks(resources), nil
+}
+
+// LibrarySongCount returns the total number of songs in the user's library
+// via a single one-item request, so callers can cheaply detect changes.
+func (a *AppleProvider) LibrarySongCount(ctx context.Context) (int, error) {
+	req, err := a.newRequest(ctx, http.MethodGet, "/me/library/songs?limit=1")
+	if err != nil {
+		return 0, err
+	}
+	var resp paginatedSongs
+	if err := a.do(req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Meta.Total, nil
 }
 
 func (a *AppleProvider) fetchPlaylistsPaginated(ctx context.Context, baseEndpoint string) ([]provider.Playlist, error) {

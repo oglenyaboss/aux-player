@@ -1763,6 +1763,76 @@ func recordingProvider(t *testing.T, handle func(http.ResponseWriter, *http.Requ
 	}
 }
 
+// --- LibrarySongCount ---
+
+func TestGetLibraryTracks_ReportsFavorites(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/songs" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(t, w, map[string]any{"data": []any{
+			favoriteSongJSON("i.one", "cat1", "Loved", true),
+			favoriteSongJSON("i.two", "cat2", "Plain", false),
+		}, "next": ""})
+	})
+
+	tracks, err := p.GetLibraryTracks(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryTracks: %v", err)
+	}
+	if len(tracks) != 2 || !tracks[0].Favorite || tracks[1].Favorite {
+		t.Fatalf("favorites flags = %+v, want [true false]", tracks)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if extend := got[0].query.Get("extend"); extend != "inFavorites" {
+		t.Errorf("extend = %q, want inFavorites", extend)
+	}
+}
+
+func TestLibrarySongCount(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/songs" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(t, w, map[string]any{"data": []any{}, "meta": map[string]any{"total": 137}})
+	})
+
+	n, err := p.LibrarySongCount(context.Background())
+	if err != nil {
+		t.Fatalf("LibrarySongCount: %v", err)
+	}
+	if n != 137 {
+		t.Errorf("count = %d, want 137", n)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if limit := got[0].query.Get("limit"); limit != "1" {
+		t.Errorf("limit = %q, want 1", limit)
+	}
+}
+
+func TestLibrarySongCount_ZeroTotal(t *testing.T) {
+	p, _ := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"data": []any{}, "meta": map[string]any{"total": 0}})
+	})
+	n, err := p.LibrarySongCount(context.Background())
+	if err != nil {
+		t.Fatalf("LibrarySongCount: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("count = %d, want 0 with no error", n)
+	}
+}
+
 func TestAddToLibrary_PostsCatalogID(t *testing.T) {
 	p, calls := recordingProvider(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
