@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/oglenyaboss/aux-player/internal/config"
 )
 
 func TestSegKeyIgnoresSignedQueryAndCoversRangeKidAndBase(t *testing.T) {
@@ -246,5 +248,35 @@ func TestDiskCacheHoldsOnlyCiphertext(t *testing.T) {
 	}
 	if bytes.Contains(disk, []byte("PLAINTEXT|")) {
 		t.Error("cached entry contains decrypted output")
+	}
+}
+
+func TestUndecryptableSegmentIsNotKept(t *testing.T) {
+	f := newSegCacheFixture(t)
+	f.s.decrypt = func([]byte, *trackStream) ([]byte, error) { return nil, errors.New("bad segment") }
+
+	if _, _, err := f.s.fetchAndDecryptSegment(context.Background(), f.upstream.Client(), f.st, f.seg); err == nil {
+		t.Fatal("want the decrypt error")
+	}
+	if _, err := os.Stat(f.cache.filePath(f.key())); !os.IsNotExist(err) {
+		t.Errorf("a segment that failed to decrypt stayed on disk: %v", err)
+	}
+}
+
+func TestSegCacheFromConfig(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LocalAppData", t.TempDir())
+	for _, tc := range []struct {
+		mb   int
+		want int64
+	}{{0, 2048 << 20}, {512, 512 << 20}, {-1, 0}} {
+		c := newSegCacheFromConfig(&config.Config{AudioCacheMB: tc.mb})
+		switch {
+		case tc.want == 0 && c != nil:
+			t.Errorf("audio_cache_mb %d: cache on, want off", tc.mb)
+		case tc.want != 0 && (c == nil || c.max != tc.want):
+			t.Errorf("audio_cache_mb %d: cache %+v, want max %d", tc.mb, c, tc.want)
+		}
 	}
 }

@@ -541,6 +541,9 @@ func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.
 		aacData, err = s.decryptSeg(segData, st)
 	}
 	if err != nil {
+		if !errors.Is(err, cdm.ErrNoKey) {
+			s.segs.drop(key)
+		}
 		return nil, "decrypt", err
 	}
 	return aacData, "", nil
