@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"sort"
+	"strings"
 )
 
 // hashStr is the FNV-1a of the track key: seeds the procedural covers and the cover cache names.
@@ -71,6 +72,51 @@ func procedural(key string, w, h int) *pixgrid {
 	return g
 }
 
+// coverCap is how many covers the screen holds; the oldest leave, the keys the
+// queue plays stay. pixCap is how many sampled grids the screen holds before a
+// full one redraw rebuilds them all.
+const (
+	coverCap = 300
+	pixCap   = 6000
+)
+
+// evictCovers drops the oldest covers past the cap, queue keys excepted; the
+// grid cache and the ask marker of an evicted key go with it, so the next draw
+// asks for the cover again.
+func (m *Model) evictCovers() {
+	for len(m.coverOrder) > coverCap {
+		victim := -1
+		for i, k := range m.coverOrder {
+			if !m.queuedKey(k) {
+				victim = i
+				break
+			}
+		}
+		if victim < 0 {
+			return
+		}
+		k := m.coverOrder[victim]
+		m.coverOrder = append(m.coverOrder[:victim], m.coverOrder[victim+1:]...)
+		delete(m.covers, k)
+		for pk := range m.pix {
+			if pk == k || strings.HasPrefix(pk, k+"|") {
+				delete(m.pix, pk)
+			}
+		}
+		delete(m.coverAsked, k)
+	}
+}
+
+// queuedKey reports whether a track in the queue carries the key.
+func (m *Model) queuedKey(k string) bool {
+	for _, t := range m.queue {
+		if t.Key() == k {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) cover(key string, w, h int) *pixgrid {
 	ck := fmt.Sprintf("%s|%dx%d", key, w, h)
 	if g, ok := m.pix[ck]; ok {
@@ -80,7 +126,14 @@ func (m *Model) cover(key string, w, h int) *pixgrid {
 	if img, ok := m.covers[key]; ok {
 		g = sample(img, w, h)
 	} else {
+		if key != "" && !m.coverAsked[key] {
+			m.coverAsked[key] = true
+			m.coverWant = append(m.coverWant, key)
+		}
 		g = procedural(key, w, h)
+	}
+	if len(m.pix) > pixCap {
+		m.pix = map[string]*pixgrid{}
 	}
 	m.pix[ck] = g
 	return g

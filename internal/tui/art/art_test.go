@@ -73,3 +73,18 @@ func TestDecodeBounded_RejectsOversizedDimensions(t *testing.T) {
 		t.Fatalf("decodeBounded(oversized) error = %v, want exceed max", err)
 	}
 }
+
+func TestShrink(t *testing.T) {
+	square := image.NewNRGBA(image.Rect(0, 0, 300, 300))
+	if got := Shrink(square, 160); got.Bounds().Dx() != 160 || got.Bounds().Dy() != 160 {
+		t.Fatalf("300×300 shrank to %v, want 160×160", got.Bounds())
+	}
+	wide := image.NewNRGBA(image.Rect(0, 0, 600, 300))
+	if got := Shrink(wide, 160); got.Bounds().Dx() != 160 || got.Bounds().Dy() != 80 {
+		t.Fatalf("600×300 shrank to %v, want 160×80", got.Bounds())
+	}
+	small := image.NewNRGBA(image.Rect(0, 0, 100, 50))
+	if got := Shrink(small, 160); got != image.Image(small) {
+		t.Fatalf("100×50 came back as %T, want the same image", got)
+	}
+}

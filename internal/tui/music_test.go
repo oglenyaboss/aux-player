@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
 )
@@ -18,7 +19,8 @@ import (
 // mock and records every call with its argument.
 type musicProvider struct {
 	mockProvider
-	favTracks  []provider.Track
+	favTracks  []provider.Track // the library's Favorites
+	libOnly    []provider.Track // the rest of the library
 	favErr     error
 	albums     []provider.Album
 	playlists  []provider.Playlist
@@ -54,6 +56,19 @@ func (p *musicProvider) GetPlaylistTracks(_ context.Context, id string) ([]provi
 		return p.favTracks, p.favErr
 	}
 	return p.collTracks[id], nil
+}
+
+func (p *musicProvider) GetLibraryTracks(_ context.Context) ([]provider.Track, error) {
+	p.calls = append(p.calls, "GetLibraryTracks")
+	if p.favErr != nil {
+		return nil, p.favErr
+	}
+	var out []provider.Track
+	for _, t := range p.favTracks {
+		t.Favorite = true
+		out = append(out, t)
+	}
+	return append(out, p.libOnly...), nil
 }
 
 func (p *musicProvider) GetLibraryPlaylists(_ context.Context) ([]provider.Playlist, error) {
@@ -187,13 +202,17 @@ func openSection(t *testing.T, m *Model, downs int) {
 	musicFeed(t, m, press(m, "enter"))
 }
 
-// A1: the palette's favorites entry loads the provider's favorites playlist.
+// A1: the palette's favorites entry shows the library songs flagged as Favorites.
 func TestMusicFavoritesLoad(t *testing.T) {
 	p := newMusicProvider()
+	p.libOnly = []provider.Track{{ID: "i.9", CatalogID: "109", Title: "Not loved", Artist: "X"}}
 	m, _ := musicTestModel(t, p)
 	openFavorites(t, m)
-	if !p.called("GetPlaylistTracks:" + provider.FavoritesPlaylistID) {
-		t.Fatalf("provider calls = %v, want favorites tracks", p.calls)
+	if !p.called("GetLibraryTracks") {
+		t.Fatalf("provider calls = %v, want the library scan", p.calls)
+	}
+	if frame := saveFrame(m); strings.Contains(frame, "Not loved") {
+		t.Errorf("a song outside Favorites is listed:\n%s", frame)
 	}
 	frame := saveFrame(m)
 	for _, want := range []string{"Nikes", "Ivy", "Memo"} {
@@ -373,7 +392,9 @@ func TestMusicCoversThrottled(t *testing.T) {
 		songs[i] = provider.Track{ID: fmt.Sprintf("i.%d", i+1), CatalogID: "c", Title: fmt.Sprintf("T%d", i+1),
 			ArtworkURL: "https://x/{w}x{h}.jpg"}
 	}
-	m.handleMusicMsg(musicRowsMsg{songs: songs})
+	for _, t := range songs {
+		m.vibeAIP.m.wantArt(t.ID, t.ArtworkURL)
+	}
 	if len(m.vibeAIP.m.want) != 20 {
 		t.Fatalf("queued covers = %d, want 20", len(m.vibeAIP.m.want))
 	}
@@ -399,6 +420,38 @@ func TestMusicCoversThrottled(t *testing.T) {
 	}
 }
 
+// A10: the rows alone queue no covers; a frame that draws them puts their keys in
+// the queue, and the queue starts at most a full batch of fetches.
+func TestMusicCoversOnDemand(t *testing.T) {
+	p := newMusicProvider()
+	songs := make([]provider.Track, 20)
+	for i := range songs {
+		songs[i] = provider.Track{ID: fmt.Sprintf("i.%d", i+1), CatalogID: "c", Title: fmt.Sprintf("T%d", i+1),
+			ArtworkURL: fmt.Sprintf("https://x/%d/{w}x{h}.jpg", i+1)}
+	}
+	p.favTracks = songs
+	m, _ := musicTestModel(t, p)
+	m.supportsArtColor = func() bool { return true }
+	openFavorites(t, m)
+	v := m.vibeAIP.m
+	if got := len(v.want); got != 0 {
+		t.Fatalf("covers queued before a draw = %d, want 0", got)
+	}
+	_ = v.Frame(160, 45)
+	_, _ = m.Update(stageTickMsg(time.Now()))
+	if v.inflight == 0 || v.inflight > stageCoverMax {
+		t.Fatalf("covers in flight = %d, want 1..%d", v.inflight, stageCoverMax)
+	}
+	if got := len(v.want) + v.inflight; got > len(songs) {
+		t.Fatalf("covers queued = %d, want at most the %d drawn rows", got, len(songs))
+	}
+	for _, c := range v.want {
+		if c.key == "" || c.key[0] != 'i' {
+			t.Fatalf("a cover was queued for a row the frame did not show: %+v", c)
+		}
+	}
+}
+
 // A12: the agent play path keeps its behavior (covered by the existing tests).
 func TestMusicVibeAIPlayUntouched(t *testing.T) {
 	m := newModel(newMockPlayer())
@@ -419,5 +472,135 @@ func TestMusicVibeAIPlayUntouched(t *testing.T) {
 	_ = cmd()
 	if len(m.queueIDs) != 6 {
 		t.Fatalf("queueIDs = %v, want six after the append", m.queueIDs)
+	}
+}
+
+// B1: a second launch serves the stored favorites even when Apple fails.
+func TestMusicLibraryServedFromDisk(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	openFavorites(t, m)
+
+	p2 := newMusicProvider()
+	p2.favErr = errors.New("offline")
+	m2 := newModel(newMockPlayer())
+	m2.provider = p2
+	m2.stateCh = nil
+	stageIntoPlayer(m2)
+	openFavorites(t, m2)
+	frame := musicFrame(m2, 0.5)
+	for _, want := range []string{"Nikes", "Ivy"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("the stored favorites lack %q:\n%s", want, frame)
+		}
+	}
+	if strings.Contains(frame, "offline") {
+		t.Errorf("a failed background refresh replaced the stored rows:\n%s", frame)
+	}
+}
+
+// B2: the background refresh on the first use swaps in what changed in Apple.
+func TestMusicLibraryBackgroundRefresh(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	openFavorites(t, m)
+
+	p2 := newMusicProvider()
+	p2.favTracks = append(p2.favTracks, provider.Track{ID: "i.4", CatalogID: "104", Title: "Pink + White", Artist: "Frank Ocean"})
+	m2 := newModel(newMockPlayer())
+	m2.provider = p2
+	m2.stateCh = nil
+	stageIntoPlayer(m2)
+	openFavorites(t, m2)
+	if got := p2.callCount("GetLibraryTracks"); got != 1 {
+		t.Fatalf("GetLibraryTracks = %d, want one background refresh", got)
+	}
+	if frame := musicFrame(m2, 0.5); !strings.Contains(frame, "Pink + White") {
+		t.Errorf("the refreshed favorite is missing:\n%s", frame)
+	}
+}
+
+// B3: ctrl+r over a loaded section asks Apple again and shows the fresh rows.
+func TestMusicCtrlRRefreshes(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	openSection(t, m, 3)
+	p.libOnly = []provider.Track{{ID: "i.9", CatalogID: "109", Title: "Fresh one", Artist: "X"}}
+	before := p.callCount("GetLibraryTracks")
+	musicFeed(t, m, press(m, "ctrl+r"))
+	if got := p.callCount("GetLibraryTracks"); got != before+1 {
+		t.Fatalf("GetLibraryTracks = %d, want %d after ctrl+r", got, before+1)
+	}
+	if frame := musicFrame(m, 0.5); !strings.Contains(frame, "Fresh one") {
+		t.Errorf("ctrl+r did not show the fresh row:\n%s", frame)
+	}
+}
+
+// B4: the same search inside ten minutes is answered from memory.
+func TestMusicSearchRemembered(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	musicFeed(t, m, press(m, "ctrl+o"))
+	search := func() {
+		musicFeed(t, m, press(m, "b"))
+		m.vibeAIP.m.st.Step(0.4)
+		musicFeed(t, m, m.vibeAIP.m.flush())
+	}
+	search()
+	musicFeed(t, m, press(m, "backspace"))
+	m.vibeAIP.m.st.Step(0.4)
+	musicFeed(t, m, m.vibeAIP.m.flush())
+	search()
+	if got := p.callCount("Search:b"); got != 1 {
+		t.Fatalf("Search calls = %d, want one: %v", got, p.calls)
+	}
+}
+
+// B5: a song saved to Favorites shows in the stored Favorites without a rescan.
+func TestMusicSaveNotesLibrary(t *testing.T) {
+	p := newMusicProvider()
+	p.libOnly = []provider.Track{{ID: "i.9", CatalogID: "109", Title: "Not loved", Artist: "X"}}
+	m, _ := musicTestModel(t, p)
+	openSection(t, m, 3)
+	musicFeed(t, m, func() tea.Msg { return SaveTrackMsg{Track: p.libOnly[0], Favorite: true} })
+	r, err := m.musicLibrary().Load(context.Background(), library.Songs, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	found := false
+	for _, t := range library.Favorites(r.Songs) {
+		found = found || t.ID == "i.9"
+	}
+	if !found {
+		t.Fatalf("the saved song is not among the stored Favorites")
+	}
+}
+
+// B6: the agent reads the library from the store, catalog IDs first.
+func TestMusicAgentLibraryFromStore(t *testing.T) {
+	p := newMusicProvider()
+	p.libOnly = []provider.Track{{ID: "i.9", CatalogID: "109", Title: "Not loved", Artist: "X"}}
+	m, _ := musicTestModel(t, p)
+	songs, favs, err := m.vibeAILibrary()(context.Background())
+	if err != nil {
+		t.Fatalf("LoadLibrary: %v", err)
+	}
+	if len(songs) != 4 || songs[0].ID != "101" || songs[2].ID != "i.3" {
+		t.Fatalf("songs = %+v, want catalog IDs and the upload's library ID", songs)
+	}
+	if len(favs) != 3 || favs[1].Title != "Ivy" {
+		t.Fatalf("favorites = %+v", favs)
+	}
+}
+
+// B7: a playlist the agent created brings the playlists section up to date.
+func TestMusicAgentPlaylistRefreshes(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	openSection(t, m, 1)
+	p.playlists = append(p.playlists, provider.Playlist{ID: "p.new", Name: "aux mix", TrackCount: 5})
+	musicFeed(t, m, func() tea.Msg { return vibeAISavedMsg{id: "p.new", name: "aux mix", n: 5, created: true} })
+	if frame := musicFrame(m, 0.5); !strings.Contains(frame, "aux mix") {
+		t.Errorf("the new playlist is missing:\n%s", frame)
 	}
 }

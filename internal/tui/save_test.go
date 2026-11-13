@@ -1,18 +1,15 @@
 package tui
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
@@ -196,46 +193,26 @@ func TestSaveLibraryAndFavoritesIndependent(t *testing.T) {
 func TestSaveCache(t *testing.T) {
 	rp := &recordingProvider{}
 	m := saveTestModel(t, rp, newMockPlayer())
-	dir := vibeAIConfig(m.cfg).CacheDir
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	store := m.musicLibrary()
+	ctx := context.Background()
+	if _, err := store.Load(ctx, library.Songs, ""); err != nil {
 		t.Fatal(err)
-	}
-	libraryPath := filepath.Join(dir, "library.json")
-	favoritesPath := filepath.Join(dir, "favorites.json")
-	for _, path := range []string{libraryPath, favoritesPath} {
-		if err := os.WriteFile(path, []byte("[]"), 0o600); err != nil {
-			t.Fatal(err)
-		}
 	}
 	playTrack(t, m, provider.Track{ID: "i.a", CatalogID: "10", Artist: "A", Title: "Alpha", Album: "LP"})
 	pressSave(t, m, "l")
-	data, err := os.ReadFile(libraryPath)
+	r, err := store.Load(ctx, library.Songs, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var songs []vibeai.Song
-	if err := json.Unmarshal(data, &songs); err != nil {
-		t.Fatal(err)
-	}
-	if len(songs) != 1 || songs[0].ID != "10" || songs[0].Title != "Alpha" {
-		t.Fatalf("library cache = %+v, want the accepted song", songs)
+	if len(r.Songs) != 1 || r.Songs[0].CatalogID != "10" || r.Songs[0].Title != "Alpha" {
+		t.Fatalf("stored library = %+v, want the accepted song", r.Songs)
 	}
 
-	beforeLibrary, err := os.ReadFile(libraryPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	beforeFavorites, err := os.ReadFile(favoritesPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	rp.libraryErr = errors.New("denied")
 	playTrack(t, m, provider.Track{ID: "i.c", CatalogID: "30", Artist: "C", Title: "Gamma"})
 	pressSave(t, m, "l")
-	afterLibrary, _ := os.ReadFile(libraryPath)
-	afterFavorites, _ := os.ReadFile(favoritesPath)
-	if !bytes.Equal(beforeLibrary, afterLibrary) || !bytes.Equal(beforeFavorites, afterFavorites) {
-		t.Fatal("a failed save changed the cache files")
+	if r, _ = store.Load(ctx, library.Songs, ""); len(r.Songs) != 1 {
+		t.Fatalf("a failed save changed the stored library: %+v", r.Songs)
 	}
 }
 

@@ -288,9 +288,12 @@ type Model struct {
 	mu   music
 	held []string
 
-	covers map[string]image.Image
-	pix    map[string]*pixgrid
-	themes map[string]theme
+	covers     map[string]image.Image
+	pix        map[string]*pixgrid
+	themes     map[string]theme
+	coverOrder []string        // the covers in the order they arrived, oldest first
+	coverAsked map[string]bool // keys already asked for through WantedCovers
+	coverWant  []string        // keys drawn without a cover since the last WantedCovers
 
 	eggMemo map[string]*egg // eggOf runs the egg rules once per track key
 
@@ -305,7 +308,7 @@ type Model struct {
 func New(o Options) *Model {
 	m := &Model{w: 160, h: 45, th: night, to: night, o: o,
 		covers: map[string]image.Image{}, pix: map[string]*pixgrid{}, themes: map[string]theme{},
-		eggMemo: map[string]*egg{}}
+		coverAsked: map[string]bool{}, eggMemo: map[string]*egg{}}
 	m.dim = spring{x: 1, to: 1}
 	m.reset()
 	if o.Onboard {
@@ -341,7 +344,8 @@ func (m *Model) OnboardAgent() {
 
 func (m *Model) reset() {
 	*m = Model{w: m.w, h: m.h, th: night, to: night, o: m.o, covers: m.covers,
-		recent: m.recent, mu: m.mu, held: m.held, pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
+		recent: m.recent, mu: m.mu, held: m.held, pix: m.pix, themes: m.themes, eggMemo: m.eggMemo,
+		coverOrder: m.coverOrder, coverAsked: m.coverAsked, dim: spring{x: 1, to: 1}, portionNo: 1}
 	m.slots = make([]*slot, m.portionSize())
 	for i := range m.slots {
 		m.slots[i] = &slot{fillAt: -1}
@@ -465,18 +469,30 @@ func (m *Model) Step(dt float64) {
 // ---------- host side ----------
 
 // SetCover stocks a cover for the track key and invalidates its thumbnails and theme;
-// for the track that is playing the theme is derived again at once.
+// for the track that is playing the theme is derived again at once. Past coverCap
+// covers the oldest ones leave, never the keys the queue still plays.
 func (m *Model) SetCover(key string, img image.Image) {
 	m.covers[key] = img
+	if !slices.Contains(m.coverOrder, key) {
+		m.coverOrder = append(m.coverOrder, key)
+	}
 	for k := range m.pix {
 		if k == key || strings.HasPrefix(k, key+"|") {
 			delete(m.pix, k)
 		}
 	}
 	delete(m.themes, key)
+	m.evictCovers()
 	if m.ph == PhPlay && len(m.queue) > 0 && key == m.curTrack().Key() {
 		m.to = m.themeFor(*m.curTrack())
 	}
+}
+
+// WantedCovers returns the keys drawn without a cover since the last call, in draw order.
+func (m *Model) WantedCovers() []string {
+	keys := m.coverWant
+	m.coverWant = nil
+	return keys
 }
 
 // Ask hands over the warm-up cards; the flow asks them when it reaches that point,

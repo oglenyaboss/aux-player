@@ -3,16 +3,37 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
 )
 
-// musicTimeout bounds every Apple Music call the music screen makes.
-const musicTimeout = 30 * time.Second
+const (
+	// musicTimeout bounds every Apple Music call the music screen makes; a refresh
+	// may rescan the whole library, so it gets longer.
+	musicTimeout      = 30 * time.Second
+	musicCheckTimeout = 2 * time.Minute
+
+	musicSearchTTL = 10 * time.Minute
+	musicSearchMax = 50
+)
+
+// musicTarget is the library entry behind a load, as the store keys it.
+type musicTarget struct {
+	kind library.Kind
+	id   string
+}
+
+type musicSearchHit struct {
+	res *provider.SearchResult
+	at  time.Time
+}
 
 type musicLoadMsg struct {
 	gen    int
@@ -29,6 +50,28 @@ type musicRowsMsg struct {
 	albums    []provider.Album
 	playlists []provider.Playlist
 	err       error
+
+	check *musicTarget           // the stored rows are due a background refresh
+	query string                 // the search found, to remember
+	found *provider.SearchResult // nil unless Apple answered a search
+}
+
+// musicRefreshMsg is ctrl+r: check a section, a collection or with all every
+// library section against Apple now.
+type musicRefreshMsg struct {
+	sec    stage.MusicSection
+	parent *stage.MusicItem
+	all    bool
+}
+
+// musicCheckedMsg is a finished library refresh; manual ones were asked for by
+// the user and say how they went.
+type musicCheckedMsg struct {
+	tgt     musicTarget
+	res     library.Result
+	changed bool
+	manual  bool
+	err     error
 }
 
 type musicPlayMsg struct {
@@ -58,75 +101,97 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 	st := m.vibeAIP.m.st
 	switch msg := msg.(type) {
 	case musicLoadMsg:
-		prov := m.provider
-		if prov == nil {
+		store := m.musicLibrary()
+		if store == nil {
 			st.MusicRows(msg.gen, nil, stage.Tr("Apple Music не подключён", "Apple Music is not connected"))
 			return nil
 		}
 		gen, sec, query := msg.gen, msg.sec, msg.query
-		var parent *stage.MusicItem
-		if msg.parent != nil {
-			p := *msg.parent
-			parent = &p
+		tgt, ok := musicTargetFor(sec, msg.parent)
+		switch {
+		case ok:
+			favorites := sec == stage.MusicFavorites && msg.parent == nil
+			return func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
+				defer cancel()
+				r, err := store.Load(ctx, tgt.kind, tgt.id)
+				if err != nil {
+					return musicRowsMsg{gen: gen, err: err}
+				}
+				out := musicRowsMsg{gen: gen, songs: r.Songs, albums: r.Albums, playlists: r.Playlists}
+				if favorites {
+					out.songs = library.Favorites(r.Songs)
+				}
+				if r.Due {
+					out.check = &tgt
+				}
+				return out
+			}
+		case msg.parent != nil:
+			st.MusicRows(gen, nil, msg.parent.Title+stage.Tr(" — не коллекция", " is not a collection"))
+			return nil
 		}
+		if hit, ok := m.musicFound[query]; ok && time.Since(hit.at) < musicSearchTTL {
+			res := hit.res
+			return func() tea.Msg {
+				return musicRowsMsg{gen: gen, songs: res.Tracks, albums: res.Albums, playlists: res.Playlists}
+			}
+		}
+		prov := m.provider
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
 			defer cancel()
-			out := musicRowsMsg{gen: gen}
-			var err error
-			switch {
-			case parent != nil:
-				out.songs, err = musicCollectionTracks(ctx, prov, *parent)
-			case sec == stage.MusicFavorites:
-				out.songs, err = prov.GetPlaylistTracks(ctx, provider.FavoritesPlaylistID)
-			case sec == stage.MusicPlaylists:
-				var pls []provider.Playlist
-				if pls, err = prov.GetLibraryPlaylists(ctx); err == nil {
-					for _, p := range pls {
-						if p.ID != provider.FavoritesPlaylistID {
-							out.playlists = append(out.playlists, p)
-						}
-					}
-				}
-			case sec == stage.MusicAlbums:
-				out.albums, err = prov.GetLibraryAlbums(ctx)
-			case sec == stage.MusicSongs:
-				out.songs, err = prov.GetLibraryTracks(ctx)
-			default:
-				var res *provider.SearchResult
-				if res, err = prov.Search(ctx, query); err == nil && res != nil {
-					out.songs, out.albums, out.playlists = res.Tracks, res.Albums, res.Playlists
-				}
-			}
+			res, err := prov.Search(ctx, query)
 			if err != nil {
 				return musicRowsMsg{gen: gen, err: err}
 			}
-			return out
+			if res == nil {
+				res = &provider.SearchResult{}
+			}
+			return musicRowsMsg{gen: gen, songs: res.Tracks, albums: res.Albums, playlists: res.Playlists, query: query, found: res}
 		}
 	case musicRowsMsg:
 		if msg.err != nil {
 			st.MusicRows(msg.gen, nil, "Apple Music: "+msg.err.Error())
 			return nil
 		}
-		v := m.vibeAIP.m
-		items := make([]stage.MusicItem, 0, len(msg.songs)+len(msg.albums)+len(msg.playlists))
-		for _, t := range msg.songs {
-			it := musicSongItem(t)
-			items = append(items, it)
-			m.musicRemember(t)
-			v.wantArt(it.ID, t.ArtworkURL)
+		if msg.found != nil {
+			m.musicRememberSearch(msg.query, msg.found)
 		}
-		for _, a := range msg.albums {
-			it := musicAlbumItem(a)
-			items = append(items, it)
-			v.wantArt(it.ID, a.ArtworkURL)
+		st.MusicRows(msg.gen, m.musicItems(msg.songs, msg.albums, msg.playlists), "")
+		if msg.check != nil {
+			return m.musicCheck(*msg.check, false)
 		}
-		for _, p := range msg.playlists {
-			it := musicPlaylistItem(p)
-			items = append(items, it)
-			v.wantArt(it.ID, p.ArtworkURL)
+		return nil
+	case musicRefreshMsg:
+		var tgts []musicTarget
+		if msg.all {
+			m.musicFound = nil
+			tgts = []musicTarget{{kind: library.Songs}, {kind: library.Albums}, {kind: library.Playlists}}
+		} else if tgt, ok := musicTargetFor(msg.sec, msg.parent); ok {
+			tgts = []musicTarget{tgt}
 		}
-		st.MusicRows(msg.gen, items, "")
+		cmds := make([]tea.Cmd, 0, len(tgts))
+		for _, tgt := range tgts {
+			cmds = append(cmds, m.musicCheck(tgt, true))
+		}
+		return tea.Batch(cmds...)
+	case musicCheckedMsg:
+		m.musicChecks = max(0, m.musicChecks-1)
+		st.MusicRefreshing(m.musicChecks > 0)
+		if msg.err != nil {
+			m.appendLog(fmt.Sprintf("[music] refresh %s: %v", msg.tgt.kind, msg.err))
+			if msg.manual {
+				st.MusicNotice("Apple Music: " + msg.err.Error())
+			}
+			return nil
+		}
+		if msg.changed || msg.manual {
+			m.musicShow(msg.tgt, msg.res.Songs, msg.res.Albums, msg.res.Playlists)
+		}
+		if msg.manual {
+			st.MusicNotice(stage.Tr("обновлено", "up to date"))
+		}
 		return nil
 	case musicPlayMsg:
 		var tracks []provider.Track
@@ -144,17 +209,22 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		// first ID; queue the whole list and skip to Start once the player can.
 		return m.musicPlayTracks(tracks[start:])
 	case musicPlayAllMsg:
-		prov := m.provider
-		if prov == nil {
+		store := m.musicLibrary()
+		if store == nil {
 			st.MusicNotice(stage.Tr("Apple Music не подключён", "Apple Music is not connected"))
 			return nil
 		}
 		item := msg.item
+		tgt, ok := musicTargetFor(0, &item)
+		if !ok {
+			st.MusicNotice(item.Title + stage.Tr(" — не коллекция", " is not a collection"))
+			return nil
+		}
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
 			defer cancel()
-			tracks, err := musicCollectionTracks(ctx, prov, item)
-			return musicCollectionMsg{item: item, tracks: tracks, err: err}
+			r, err := store.Load(ctx, tgt.kind, tgt.id)
+			return musicCollectionMsg{item: item, tracks: r.Songs, err: err}
 		}
 	case musicCollectionMsg:
 		if msg.err != nil {
@@ -225,20 +295,6 @@ func (m *Model) musicRemember(t provider.Track) {
 	m.musicTracks[PlaybackID(t)] = t
 }
 
-// musicCollectionTracks loads the tracks of a collection the way a load parent goes.
-func musicCollectionTracks(ctx context.Context, prov provider.Provider, it stage.MusicItem) ([]provider.Track, error) {
-	switch it.Kind {
-	case stage.MusicPlaylist:
-		return prov.GetPlaylistTracks(ctx, it.ID)
-	case stage.MusicAlbum:
-		if strings.HasPrefix(it.ID, "l.") {
-			return prov.GetLibraryAlbumTracks(ctx, it.ID)
-		}
-		return prov.GetAlbumTracks(ctx, it.ID)
-	}
-	return nil, fmt.Errorf("%s is not a collection", it.Title)
-}
-
 // musicUploaded reports a library track without a catalog match: it cannot play here.
 func musicUploaded(t provider.Track) bool {
 	return strings.HasPrefix(t.ID, "i.") && t.CatalogID == ""
@@ -265,4 +321,105 @@ func musicAlbumItem(a provider.Album) stage.MusicItem {
 func musicPlaylistItem(p provider.Playlist) stage.MusicItem {
 	return stage.MusicItem{ID: p.ID, Kind: stage.MusicPlaylist, Title: p.Name, Count: p.TrackCount,
 		Sub: stage.Tr("плейлист", "playlist")}
+}
+
+// musicTargetFor is the library entry a load reads: the collection parent, or the
+// tab. Favorites and Songs share the one library scan; search has no entry.
+func musicTargetFor(sec stage.MusicSection, parent *stage.MusicItem) (musicTarget, bool) {
+	if parent != nil {
+		switch parent.Kind {
+		case stage.MusicAlbum:
+			return musicTarget{kind: library.Album, id: parent.ID}, true
+		case stage.MusicPlaylist:
+			return musicTarget{kind: library.Playlist, id: parent.ID}, true
+		}
+		return musicTarget{}, false
+	}
+	switch sec {
+	case stage.MusicFavorites, stage.MusicSongs:
+		return musicTarget{kind: library.Songs}, true
+	case stage.MusicAlbums:
+		return musicTarget{kind: library.Albums}, true
+	case stage.MusicPlaylists:
+		return musicTarget{kind: library.Playlists}, true
+	}
+	return musicTarget{}, false
+}
+
+// musicLibrary is the user's library store, opened on first use for the current
+// provider and token.
+func (m *Model) musicLibrary() *library.Store {
+	if m.library == nil && m.provider != nil {
+		dir, err := os.UserCacheDir()
+		if err != nil {
+			dir = os.TempDir()
+		}
+		m.library = library.Open(filepath.Join(dir, "aux", "library"), m.provider, m.cfg.AppleUserToken)
+	}
+	return m.library
+}
+
+// musicCheck refreshes one library entry in the background; a manual check skips
+// the song count shortcut and reports back in the screen.
+func (m *Model) musicCheck(tgt musicTarget, manual bool) tea.Cmd {
+	store := m.musicLibrary()
+	if store == nil {
+		return nil
+	}
+	m.musicChecks++
+	m.vibeAIP.m.st.MusicRefreshing(true)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), musicCheckTimeout)
+		defer cancel()
+		r, changed, err := store.Refresh(ctx, tgt.kind, tgt.id, manual)
+		return musicCheckedMsg{tgt: tgt, res: r, changed: changed, manual: manual, err: err}
+	}
+}
+
+// musicShow hands fresh library rows to the sections and collections that show them.
+func (m *Model) musicShow(tgt musicTarget, songs []provider.Track, albums []provider.Album, playlists []provider.Playlist) {
+	st := m.vibeAIP.m.st
+	switch tgt.kind {
+	case library.Songs:
+		st.MusicUpdate(stage.MusicSongs, "", m.musicItems(songs, nil, nil))
+		st.MusicUpdate(stage.MusicFavorites, "", m.musicItems(library.Favorites(songs), nil, nil))
+	case library.Albums:
+		st.MusicUpdate(stage.MusicAlbums, "", m.musicItems(nil, albums, nil))
+	case library.Playlists:
+		st.MusicUpdate(stage.MusicPlaylists, "", m.musicItems(nil, nil, playlists))
+	case library.Album, library.Playlist:
+		st.MusicUpdate(stage.MusicFavorites, tgt.id, m.musicItems(songs, nil, nil))
+	}
+}
+
+// musicItems turns provider rows into screen rows, remembering the tracks and
+// where each row's artwork lives.
+func (m *Model) musicItems(songs []provider.Track, albums []provider.Album, playlists []provider.Playlist) []stage.MusicItem {
+	v := m.vibeAIP.m
+	items := make([]stage.MusicItem, 0, len(songs)+len(albums)+len(playlists))
+	for _, t := range songs {
+		it := musicSongItem(t)
+		items = append(items, it)
+		m.musicRemember(t)
+		v.noteArt(it.ID, t.ArtworkURL)
+	}
+	for _, a := range albums {
+		it := musicAlbumItem(a)
+		items = append(items, it)
+		v.noteArt(it.ID, a.ArtworkURL)
+	}
+	for _, p := range playlists {
+		it := musicPlaylistItem(p)
+		items = append(items, it)
+		v.noteArt(it.ID, p.ArtworkURL)
+	}
+	return items
+}
+
+func (m *Model) musicRememberSearch(query string, res *provider.SearchResult) {
+	if m.musicFound == nil || len(m.musicFound) >= musicSearchMax {
+		// ponytail: a full map starts over; keep an LRU if searches repeat past fifty queries.
+		m.musicFound = map[string]musicSearchHit{}
+	}
+	m.musicFound[query] = musicSearchHit{res: res, at: time.Now()}
 }

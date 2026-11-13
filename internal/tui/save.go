@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
@@ -24,7 +25,7 @@ type saveTrackDoneMsg struct {
 	track    provider.Track
 	favorite bool
 	err      error
-	cacheErr error
+	songs    []provider.Track // the stored library after the save; nil when none is stored
 }
 
 type saveState int
@@ -120,7 +121,7 @@ func (m *Model) handleSaveMsg(msg tea.Msg) tea.Cmd {
 		prov := m.provider
 		track := msg.Track
 		favorite := msg.Favorite
-		cacheDir := vibeAIConfig(m.cfg).CacheDir
+		store := m.musicLibrary()
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -134,11 +135,11 @@ func (m *Model) handleSaveMsg(msg tea.Msg) tea.Cmd {
 			} else {
 				err = prov.AddToLibrary(ctx, id)
 			}
-			var cacheErr error
-			if err == nil {
-				cacheErr = vibeai.RememberSaved(cacheDir, vibeai.Song{ID: id, Artist: track.Artist, Title: track.Title, Album: track.Album}, favorite)
+			var songs []provider.Track
+			if err == nil && store != nil {
+				songs = store.NoteSaved(track, favorite)
 			}
-			return saveTrackDoneMsg{key: key, track: track, favorite: favorite, err: err, cacheErr: cacheErr}
+			return saveTrackDoneMsg{key: key, track: track, favorite: favorite, err: err, songs: songs}
 		}
 	case saveTrackDoneMsg:
 		if msg.err != nil {
@@ -152,8 +153,8 @@ func (m *Model) handleSaveMsg(msg tea.Msg) tea.Cmd {
 			song:     vibeai.Song{ID: saveTrackID(msg.track), Artist: msg.track.Artist, Title: msg.track.Title, Album: msg.track.Album},
 			favorite: msg.favorite,
 		})
-		if msg.cacheErr != nil {
-			m.appendLog(fmt.Sprintf("[save] cache: %v", msg.cacheErr))
+		if msg.songs != nil {
+			m.musicShow(musicTarget{kind: library.Songs}, msg.songs, nil, nil)
 		}
 		m.vibeAIP.m.SetNotice(fmt.Sprintf(stage.Tr("%s ✓ Apple принял «%s»", "%s ✓ Apple accepted “%s”"), saveLabel(msg.favorite), msg.track.Title))
 		return nil

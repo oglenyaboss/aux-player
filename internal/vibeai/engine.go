@@ -25,6 +25,9 @@ type Config struct {
 	CacheMaxAge         time.Duration
 	PortionSize         int
 	Lang                string
+	// LoadLibrary, when set, serves the library and Favorites instead of the
+	// agent's own cache in CacheDir.
+	LoadLibrary func(ctx context.Context) (library, favorites []Song, err error)
 }
 
 type Track struct {
@@ -92,7 +95,13 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 	if ui != nil {
 		progress = ui.Progress
 	}
-	library, favs, err := loadCaches(ctx, api, cfg.CacheDir, cfg.CacheMaxAge, progress)
+	var library, favs []Song
+	var err error
+	if cfg.LoadLibrary != nil {
+		library, favs, err = cfg.LoadLibrary(ctx)
+	} else {
+		library, favs, err = loadCaches(ctx, api, cfg.CacheDir, cfg.CacheMaxAge, progress)
+	}
 	if err != nil {
 		return nil, err
 	}

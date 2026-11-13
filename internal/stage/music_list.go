@@ -551,7 +551,8 @@ func (m *Model) mlSearch() {
 	m.send(MusicLoad{Gen: m.mu.gen, Section: MusicSearch, Query: q})
 }
 
-// mlRetry asks again for the rows that failed.
+// mlRetry asks again for the rows that failed, and asks the host to check the rows
+// that loaded.
 func (m *Model) mlRetry() {
 	c := m.mlState()
 	switch {
@@ -561,14 +562,36 @@ func (m *Model) mlRetry() {
 		}
 	case c.coll != nil:
 		col := c.coll
-		if col.err != "" {
+		switch {
+		case col.err != "":
 			col.loading, col.err = true, ""
 			m.mu.reqTab, m.mu.reqColl = col.section, true
 			m.musicSend(col.section, &col.parent)
+		case !col.loading:
+			p := col.parent
+			m.send(MusicRefresh{Section: col.section, Parent: &p})
 		}
 	case !c.root && c.err != "":
 		m.musicLoadTab(m.mu.tab)
+	case c.root:
+		m.send(MusicRefresh{All: true})
+	case !c.loading && m.mu.tabs[m.mu.tab].sent:
+		m.send(MusicRefresh{Section: m.mu.tab})
 	}
+}
+
+// mlReselect puts the highlight back on the row keyed key after the rows changed
+// under it, or settles it when the row left.
+func (m *Model) mlReselect(key string) {
+	if key != "" {
+		for i, l := range m.mlLines() {
+			if mlSelectable(l.kind) && l.it.Key() == key {
+				m.mu.list.sel = i
+				return
+			}
+		}
+	}
+	m.mlSettle()
 }
 
 // mlEnter opens the row under the highlight: a section, a collection, a track, the
@@ -1440,6 +1463,9 @@ func (m *Model) mlBarText() string {
 	}
 	if m.musicNoticeVisible() {
 		return m.mu.notice
+	}
+	if m.mu.refreshing {
+		return "↻ " + tr("обновляю…", "refreshing…")
 	}
 	if m.ph != phPlay || len(m.queue) == 0 {
 		return tr("тишина", "silence")

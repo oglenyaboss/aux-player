@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -30,8 +32,10 @@ type stageScreen struct {
 	query   string
 	ticking bool
 	last    time.Time
-	covers  map[string]bool // keys whose cover was requested
-	want    []stageCover    // covers to fetch on the next tick
+	covers  map[string]bool   // keys whose cover was requested
+	want    []stageCover      // covers to fetch on the next tick
+	art     *art.Cache        // on-disk cover cache; nil fetches uncached
+	artURL  map[string]string // track keys to their raw artwork URLs, for the covers the screen asks for
 
 	initErr  string // launch error the scene shows on the next tick
 	lastErr  string // host error already shown in the player, so a new one toasts once
@@ -42,7 +46,12 @@ type stageScreen struct {
 type stageCover struct{ key, url string }
 
 func newStageScreen(host *Model) *stageScreen {
-	s := &stageScreen{host: host, feed: host.vibeAI.feed, covers: map[string]bool{}}
+	s := &stageScreen{host: host, feed: host.vibeAI.feed, covers: map[string]bool{}, artURL: map[string]string{}}
+	if dir, err := os.UserCacheDir(); err == nil {
+		s.art = art.NewCache(filepath.Join(dir, "aux", "art"), 256<<20)
+		// ponytail: pruned once per launch; a long session can overshoot the cap by its own downloads.
+		go func() { _ = s.art.Prune() }()
+	}
 	if lang := host.cfg.VibeLang; lang != "" {
 		stage.SetLang(lang)
 	} else {
@@ -242,6 +251,8 @@ func (s *stageScreen) act(a stage.Action) {
 		s.out = append(s.out, musicLoadMsg{gen: a.Gen, sec: a.Section, query: a.Query, parent: a.Parent})
 	case stage.MusicPlay:
 		s.out = append(s.out, musicPlayMsg{items: a.Items, start: a.Start})
+	case stage.MusicRefresh:
+		s.out = append(s.out, musicRefreshMsg{sec: a.Section, parent: a.Parent, all: a.All})
 	case stage.MusicPlayAll:
 		s.out = append(s.out, musicPlayAllMsg{item: a.Item})
 	case stage.MusicAppend:
@@ -458,6 +469,16 @@ func thinkingPhrase(rest string) string {
 
 func (s *stageScreen) wantCover(t vibeai.Track) {
 	s.wantArt(t.ID, t.ArtworkURL)
+	s.noteArt(t.ID, t.ArtworkURL)
+}
+
+// noteArt remembers where a key's artwork lives, for the cover the screen asks
+// for once it draws the key.
+func (s *stageScreen) noteArt(key, artworkURL string) {
+	if key == "" || artworkURL == "" {
+		return
+	}
+	s.artURL[key] = artworkURL
 }
 
 // wantArt queues one cover fetch under key, at most once per key.
@@ -466,8 +487,43 @@ func (s *stageScreen) wantArt(key, artworkURL string) {
 		return
 	}
 	s.covers[key] = true
-	url := strings.NewReplacer("{w}", "300", "{h}", "300").Replace(artworkURL)
-	s.want = append(s.want, stageCover{key: key, url: url})
+	s.want = append(s.want, stageCover{key: key, url: coverURL(artworkURL)})
+}
+
+// coverURL is the URL of the full-size artwork behind a template.
+func coverURL(artworkURL string) string {
+	return strings.NewReplacer("{w}", "300", "{h}", "300").Replace(artworkURL)
+}
+
+// drainWanted queues the covers of the keys the screen drew without one, in draw
+// order at the front: the screen asks only for what it shows, and asks again
+// only once it evicted the cover, so the ever-requested set does not apply here.
+func (s *stageScreen) drainWanted() {
+	keys := s.st.WantedCovers()
+	if len(keys) == 0 {
+		return
+	}
+	var fresh []stageCover
+	for _, k := range keys {
+		u, ok := s.artURL[k]
+		if !ok || s.waiting(k) {
+			continue
+		}
+		fresh = append(fresh, stageCover{key: k, url: coverURL(u)})
+	}
+	if len(fresh) > 0 {
+		s.want = append(fresh, s.want...)
+	}
+}
+
+// waiting reports whether a fetch for the key already sits in the queue.
+func (s *stageScreen) waiting(key string) bool {
+	for _, c := range s.want {
+		if c.key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // coverCmds starts the queued cover fetches, at most stageCoverMax in flight; the
@@ -485,13 +541,17 @@ func (s *stageScreen) coverCmds(client *http.Client) tea.Cmd {
 	wanted := s.want[:n]
 	s.want = s.want[n:]
 	s.inflight += n
+	cache := s.art
 	var cmds []tea.Cmd
 	for _, c := range wanted {
 		key, url := c.key, c.url
 		cmds = append(cmds, func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			img, err := art.FetchAndDecode(ctx, client, url, 5<<20)
+			img, err := cache.Fetch(ctx, client, url, 5<<20)
+			if err == nil {
+				img = art.Shrink(img, 160)
+			}
 			return stageCoverMsg{key: key, img: img, err: err}
 		})
 	}

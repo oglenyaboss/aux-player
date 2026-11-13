@@ -82,6 +82,14 @@ type MusicSave struct {
 	Favorites bool
 }
 
+// MusicRefresh asks the host to check rows against Apple now: the collection Parent,
+// the tab Section, or with All every library tab.
+type MusicRefresh struct {
+	Section MusicSection
+	Parent  *MusicItem
+	All     bool
+}
+
 // MusicPlayAll asks the host to play a whole collection; the host expands it, since the
 // rows of a collection are not known before it is opened.
 type MusicPlayAll struct {
@@ -181,6 +189,8 @@ type music struct {
 	cascT     float64                // the rows landed here: they cascade in from this clock
 	peek      map[string][]MusicItem // the tracks of a collection already opened, by its key
 
+	refreshing bool // the host is checking rows against Apple
+
 	playKey string // the row a MusicPlay went out for
 	playT   float64
 
@@ -252,6 +262,50 @@ func (m *Model) MusicRows(gen int, items []MusicItem, err string) {
 	m.mu.selT, m.mu.cascT, m.mu.glideSnap = m.t, m.t, true
 	m.mlAfterRows(had)
 }
+
+// MusicUpdate swaps in fresher rows for the tab sec, or for the collection keyed
+// parentKey, keeping the highlight on the same row. A tab never loaded, a load in
+// flight and a failed load are left alone: their own answer is still to come.
+func (m *Model) MusicUpdate(sec MusicSection, parentKey string, items []MusicItem) {
+	selKey := ""
+	if l, ok := m.mlSelected(); ok && m.mu.open {
+		selKey = l.it.Key()
+	}
+	swapped := false
+	if parentKey != "" {
+		if _, ok := m.mu.peek[parentKey]; ok {
+			m.mu.peek[parentKey] = slices.Clone(items)
+		}
+		if c := m.mu.coll; c != nil && c.parent.Key() == parentKey && !c.loading && c.err == "" {
+			c.sel = musicKeepSel(c.items, c.sel, items)
+			c.items = slices.Clone(items)
+			swapped = true
+		}
+	} else if t := &m.mu.tabs[sec]; t.sent && !t.loading && t.err == "" {
+		t.sel = musicKeepSel(t.items, t.sel, items)
+		t.items = slices.Clone(items)
+		swapped = true
+	}
+	if swapped && m.musicStyle() != musicStyleFull {
+		m.mlReselect(selKey)
+	}
+}
+
+// musicKeepSel is where the row at sel in old sits in fresh, or sel clamped.
+func musicKeepSel(old []MusicItem, sel int, fresh []MusicItem) int {
+	if sel >= 0 && sel < len(old) {
+		key := old[sel].Key()
+		for i, it := range fresh {
+			if it.Key() == key {
+				return i
+			}
+		}
+	}
+	return musicClamp(sel, len(fresh))
+}
+
+// MusicRefreshing tells the screen whether the host is checking rows against Apple.
+func (m *Model) MusicRefreshing(on bool) { m.mu.refreshing = on }
 
 // MusicNotice is the transient line inside the music screen: what the host just did.
 func (m *Model) MusicNotice(s string) {

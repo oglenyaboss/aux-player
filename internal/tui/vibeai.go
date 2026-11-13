@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
@@ -216,6 +218,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	saved := r.savedSongs
 	r.savedSongs = nil
 	cfg := vibeAIConfig(m.cfg)
+	cfg.LoadLibrary = m.vibeAILibrary()
 	if fresh {
 		r.tracks, r.portion = nil, 0
 		r.feed.reset()
@@ -356,6 +359,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			v.st.Now(PlaybackID(*m.playerState.Track), m.playerState.Position.Seconds(), m.playerState.Playing)
 		}
 		v.st.Step(dt.Seconds())
+		v.drainWanted()
 		return tea.Batch(v.flush(), v.coverCmds(m.artHTTP), stageTick())
 
 	case stageCoverMsg:
@@ -526,6 +530,10 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			v.SetNotice(fmt.Sprintf("+%d → ♫ %s", msg.n, msg.name))
 		}
 		m.appendLog(fmt.Sprintf("[vibe] playlist %q +%d", msg.name, msg.n))
+		if store := m.musicLibrary(); store != nil {
+			store.Forget(library.Playlist, msg.id)
+			return m.musicCheck(musicTarget{kind: library.Playlists}, false)
+		}
 	}
 	return nil
 }
@@ -827,4 +835,36 @@ func vibeAIProviderTracks(ts []vibeai.Track) []provider.Track {
 		}
 	}
 	return out
+}
+
+// vibeAILibrary serves the agent the library and Favorites from the store, catalog
+// IDs first; stored data that is due gets refreshed behind the session.
+func (m *Model) vibeAILibrary() func(ctx context.Context) ([]vibeai.Song, []vibeai.Song, error) {
+	store := m.musicLibrary()
+	return func(ctx context.Context) ([]vibeai.Song, []vibeai.Song, error) {
+		if store == nil {
+			return nil, nil, errors.New("vibe: Apple Music is not connected")
+		}
+		r, err := store.Load(ctx, library.Songs, "")
+		if err != nil {
+			return nil, nil, err
+		}
+		if r.Due {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), musicCheckTimeout)
+				defer cancel()
+				_, _, _ = store.Refresh(ctx, library.Songs, "", false)
+			}()
+		}
+		songs := make([]vibeai.Song, 0, len(r.Songs))
+		var favs []vibeai.Song
+		for _, t := range r.Songs {
+			s := vibeai.Song{ID: saveTrackID(t), Artist: t.Artist, Title: t.Title, Album: t.Album}
+			songs = append(songs, s)
+			if t.Favorite {
+				favs = append(favs, s)
+			}
+		}
+		return songs, favs, nil
+	}
 }
