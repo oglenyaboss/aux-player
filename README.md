@@ -105,7 +105,10 @@ Release builds check GitHub for a newer release once a day and update themselves
 - `~/.config/aux/config.json`: settings and tokens, written with `0600` permissions.
 - `~/.config/aux/vibe-signals.jsonl`: your reactions (skips, finishes, ratings) that the agent learns from.
 - `~/.config/aux/vibe-memory.md`: what the agent remembers about your taste.
-- `~/.cache/aux/`: library cache, the developer token, agent session logs under `vibe/runs`, and the Widevine CDM under `cdm`.
+- `~/.cache/aux/`: the developer token, agent session logs under `vibe/runs`, and the Widevine CDM under `cdm`.
+- `~/.cache/aux/library/`: your library, Favorites, albums and playlists, checked against Apple Music in the background.
+- `~/.cache/aux/art/`: cover art, up to 256 MB.
+- `~/.cache/aux/audio/`: encrypted audio segments for replays, up to 2 GB; the license is still requested on every play. Set `"audio_cache_mb"` in `config.json` to change the cap, or to `-1` to turn the cache off.
 
 ## Credits
 
