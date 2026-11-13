@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	// musicTimeout bounds every Apple Music call the music screen makes; a refresh
-	// may rescan the whole library, so it gets longer.
+	// musicTimeout bounds every Apple Music call the music screen makes; a library
+	// load or refresh may scan the whole library, so it gets longer.
 	musicTimeout      = 30 * time.Second
 	musicCheckTimeout = 2 * time.Minute
 
@@ -112,7 +112,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		case ok:
 			favorites := sec == stage.MusicFavorites && msg.parent == nil
 			return func() tea.Msg {
-				ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
+				ctx, cancel := context.WithTimeout(context.Background(), musicCheckTimeout)
 				defer cancel()
 				r, err := store.Load(ctx, tgt.kind, tgt.id)
 				if err != nil {
@@ -189,7 +189,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		if msg.changed || msg.manual {
 			m.musicShow(msg.tgt, msg.res.Songs, msg.res.Albums, msg.res.Playlists)
 		}
-		if msg.manual {
+		if msg.manual && m.musicChecks == 0 {
 			st.MusicNotice(stage.Tr("обновлено", "up to date"))
 		}
 		return nil

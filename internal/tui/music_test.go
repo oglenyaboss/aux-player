@@ -604,3 +604,19 @@ func TestMusicAgentPlaylistRefreshes(t *testing.T) {
 		t.Errorf("the new playlist is missing:\n%s", frame)
 	}
 }
+
+// B8: a manual refresh of several sections says "up to date" once the last one lands.
+func TestMusicRefreshNoticeAfterLast(t *testing.T) {
+	p := newMusicProvider()
+	m, _ := musicTestModel(t, p)
+	musicFeed(t, m, press(m, "ctrl+o"))
+	m.musicChecks = 2
+	m.handleMusicMsg(musicCheckedMsg{tgt: musicTarget{kind: library.Playlists}, manual: true})
+	if frame := musicFrame(m, 0.1); strings.Contains(frame, "up to date") || !strings.Contains(frame, "refreshing") {
+		t.Fatalf("the first of two refreshes ended the hint:\n%s", frame)
+	}
+	m.handleMusicMsg(musicCheckedMsg{tgt: musicTarget{kind: library.Albums}, manual: true})
+	if frame := musicFrame(m, 0.1); !strings.Contains(frame, "up to date") {
+		t.Fatalf("no notice after the last refresh:\n%s", frame)
+	}
+}
