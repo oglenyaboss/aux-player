@@ -1,9 +1,15 @@
 package vibeai
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestParseSimilar(t *testing.T) {
@@ -59,7 +65,7 @@ func TestParseArtistSearch(t *testing.T) {
 }
 
 func TestParseLibraryPage(t *testing.T) {
-	songs, libIDs, next, err := parseLibraryPage([]byte(`{"data":[{"id":"i.abc","attributes":{"artistName":"Artist A","name":"Title A","albumName":"Album A","playParams":{"catalogId":"123"}}},{"id":"i.def","attributes":{"artistName":"Artist B","name":"Title B"}}],"next":"/v1/me/library/songs?offset=100"}`))
+	songs, favorites, next, err := parseLibraryPage([]byte(`{"data":[{"id":"i.abc","attributes":{"artistName":"Artist A","name":"Title A","albumName":"Album A","inFavorites":true,"playParams":{"catalogId":"123"}}},{"id":"i.def","attributes":{"artistName":"Artist B","name":"Title B"}}],"next":"/v1/me/library/songs?offset=100"}`))
 	if err != nil {
 		t.Fatalf("unexpected err %v", err)
 	}
@@ -70,37 +76,98 @@ func TestParseLibraryPage(t *testing.T) {
 	if !reflect.DeepEqual(songs, want) {
 		t.Errorf("songs = %+v, want %+v", songs, want)
 	}
-	wantIDs := []string{"i.abc", "i.def"}
-	if !reflect.DeepEqual(libIDs, wantIDs) {
-		t.Errorf("libIDs = %v, want %v", libIDs, wantIDs)
+	if !reflect.DeepEqual(favorites, want[:1]) {
+		t.Errorf("favorites = %+v, want %+v", favorites, want[:1])
 	}
 	if next != "/v1/me/library/songs?offset=100" {
 		t.Errorf("next = %q, want %q", next, "/v1/me/library/songs?offset=100")
 	}
 
-	_, _, next, err = parseLibraryPage([]byte(`{"data":[]}`))
-	if err != nil || next != "" {
-		t.Errorf("empty page: (%v, %q), want nil err and empty next", err, next)
+	_, favorites, next, err = parseLibraryPage([]byte(`{"data":[]}`))
+	if err != nil || next != "" || len(favorites) != 0 {
+		t.Errorf("empty page: (%v, %v, %q), want nil err, no favorites and empty next", err, favorites, next)
 	}
 }
 
-func TestParseRatings(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want map[string]bool
-	}{
-		{"prefixed id, negative dropped", `{"data":[{"id":"r.1","attributes":{"value":1}},{"id":"2","attributes":{"value":-1}}]}`, map[string]bool{"1": true}},
-		{"library ids", `{"data":[{"id":"i.abc","attributes":{"value":1}}]}`, map[string]bool{"i.abc": true}},
+func TestParseLibraryPageInFavorites(t *testing.T) {
+	songs, favorites, _, err := parseLibraryPage([]byte(`{"data":[{"id":"i.abc","attributes":{"artistName":"Artist A","name":"Title A","inFavorites":true}},{"id":"i.def","attributes":{"artistName":"Artist B","name":"Title B"}}]}`))
+	if err != nil {
+		t.Fatalf("unexpected err %v", err)
 	}
-	for _, tt := range tests {
-		got, err := parseRatings([]byte(tt.body))
-		if err != nil {
-			t.Errorf("%s: unexpected err %v", tt.name, err)
-			continue
+	if len(songs) != 2 {
+		t.Fatalf("songs = %d, want 2", len(songs))
+	}
+	want := []Song{{ID: "i.abc", Artist: "Artist A", Title: "Title A"}}
+	if !reflect.DeepEqual(favorites, want) {
+		t.Errorf("favorites = %+v, want %+v", favorites, want)
+	}
+}
+
+func TestLoadCachesFavoritesAcrossPages(t *testing.T) {
+	const page1 = `{"data":[{"id":"i.a","attributes":{"name":"A","artistName":"AA","albumName":"AlA","inFavorites":true}},{"id":"i.b","attributes":{"name":"B","artistName":"BB","albumName":"AlB"}}],"next":"/v1/me/library/songs?offset=100"}`
+	const page2 = `{"data":[{"id":"i.c","attributes":{"name":"C","artistName":"CC","albumName":"AlC","inFavorites":true}}]}`
+
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		switch {
+		case r.URL.Path == "/me/library/songs" && r.URL.Query().Get("offset") == "":
+			if r.URL.Query().Get("limit") != "100" || r.URL.Query().Get("extend") != "inFavorites" {
+				t.Errorf("first page query = %q, want limit=100&extend=inFavorites", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(page1))
+		case r.URL.Path == "/v1/me/library/songs" && r.URL.Query().Get("offset") == "100":
+			if r.URL.Query().Get("limit") != "100" || r.URL.Query().Get("extend") != "inFavorites" {
+				t.Errorf("offset page query = %q, want limit=100&extend=inFavorites", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(page2))
+		default:
+			t.Errorf("unexpected request %s?%s", r.URL.Path, r.URL.RawQuery)
+			w.WriteHeader(http.StatusNotFound)
 		}
-		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	api := &appleAPI{http: srv.Client(), dev: "dev", user: "user", base: srv.URL}
+	library, favorites, err := loadCaches(context.Background(), api, dir, time.Hour, nil)
+	if err != nil {
+		t.Fatalf("loadCaches: %v", err)
+	}
+	wantLibrary := []Song{
+		{ID: "i.a", Artist: "AA", Title: "A", Album: "AlA"},
+		{ID: "i.b", Artist: "BB", Title: "B", Album: "AlB"},
+		{ID: "i.c", Artist: "CC", Title: "C", Album: "AlC"},
+	}
+	wantFavorites := []Song{wantLibrary[0], wantLibrary[2]}
+	if !reflect.DeepEqual(library, wantLibrary) {
+		t.Errorf("library = %+v, want %+v", library, wantLibrary)
+	}
+	if !reflect.DeepEqual(favorites, wantFavorites) {
+		t.Errorf("favorites = %+v, want %+v", favorites, wantFavorites)
+	}
+	savedLibrary, err := readCache(filepath.Join(dir, libraryCacheName))
+	if err != nil {
+		t.Fatalf("read library cache: %v", err)
+	}
+	savedFavorites, err := readCache(filepath.Join(dir, favoritesCacheName))
+	if err != nil {
+		t.Fatalf("read favorites cache: %v", err)
+	}
+	if !reflect.DeepEqual(savedLibrary, wantLibrary) {
+		t.Errorf("library.json = %+v, want %+v", savedLibrary, wantLibrary)
+	}
+	if !reflect.DeepEqual(savedFavorites, wantFavorites) {
+		t.Errorf("favorites.json = %+v, want %+v", savedFavorites, wantFavorites)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, path := range paths {
+		if strings.Contains(path, "ratings") {
+			t.Errorf("ratings request: %s", path)
 		}
 	}
 }

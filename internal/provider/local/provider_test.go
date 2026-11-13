@@ -143,6 +143,42 @@ func TestProvider_GetLibraryPlaylists_ReturnsNil(t *testing.T) {
 	}
 }
 
+// --- GetLibraryAlbums ---
+
+func TestProvider_GetLibraryAlbums_GroupsScannedTracks(t *testing.T) {
+	p := newTestProvider(t)
+	albums, err := p.GetLibraryAlbums(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryAlbums: %v", err)
+	}
+	if len(albums) == 0 {
+		t.Fatal("GetLibraryAlbums returned no albums for a non-empty library")
+	}
+	seen := map[string]bool{}
+	albumTracks := 0
+	for _, a := range albums {
+		if seen[a.ID] {
+			t.Errorf("album id %q appears more than once", a.ID)
+		}
+		seen[a.ID] = true
+		albumTracks += a.TrackCount
+		tracks, err := p.GetAlbumTracks(context.Background(), a.ID)
+		if err != nil {
+			t.Fatalf("GetAlbumTracks(%q): %v", a.ID, err)
+		}
+		if len(tracks) == 0 {
+			t.Errorf("GetAlbumTracks(%q) returned nothing for a listed album", a.ID)
+		}
+	}
+	libraryTracks, err := p.GetLibraryTracks(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryTracks: %v", err)
+	}
+	if albumTracks != len(libraryTracks) {
+		t.Errorf("albums hold %d tracks, want %d", albumTracks, len(libraryTracks))
+	}
+}
+
 // --- GetAlbumTracks ---
 
 func TestProvider_GetAlbumTracks_UnknownAlbum(t *testing.T) {
@@ -197,5 +233,15 @@ func TestProvider_GetSongRating_ReturnsFalse(t *testing.T) {
 	}
 	if loved {
 		t.Error("GetSongRating() = true, want false")
+	}
+}
+
+func TestProvider_AddToLibraryAndFavorites_Errors(t *testing.T) {
+	p := newTestProvider(t)
+	if err := p.AddToLibrary(context.Background(), "local:test"); err == nil {
+		t.Error("AddToLibrary: expected an error for a local provider")
+	}
+	if err := p.AddToFavorites(context.Background(), "local:test"); err == nil {
+		t.Error("AddToFavorites: expected an error for a local provider")
 	}
 }

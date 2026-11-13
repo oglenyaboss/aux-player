@@ -6,13 +6,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
 const (
 	libraryCacheName   = "library.json"
 	favoritesCacheName = "favorites.json"
+	defaultCacheMaxAge = 24 * time.Hour
 )
+
+var cacheMu sync.Mutex
+
+type rememberedSave struct {
+	dir      string
+	song     Song
+	favorite bool
+}
+
+var remembered []rememberedSave
 
 func readCache(path string) ([]Song, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is a file inside the user cache dir
@@ -51,32 +63,94 @@ func loadCaches(ctx context.Context, api *appleAPI, dir string, maxAge time.Dura
 		if err != nil {
 			return nil, nil, err
 		}
+		cacheMu.Lock()
+		library, favs = mergeRemembered(dir, library, favs)
+		cacheMu.Unlock()
 		return library, favs, nil
 	}
 	if progress != nil {
 		progress("loading the Apple Music library…")
 	}
-	library, libIDs, err := fetchLibrary(ctx, api)
+	library, favs, err = fetchLibrary(ctx, api)
 	if err != nil {
 		return nil, nil, err
 	}
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	library, favs = mergeRemembered(dir, library, favs)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, nil, err
 	}
 	if err := writeCache(filepath.Join(dir, libraryCacheName), library); err != nil {
 		return nil, nil, err
 	}
-	if progress != nil {
-		progress("looking for favorite tracks…")
-	}
-	favs, err = fetchFavorites(ctx, api, library, libIDs)
-	if err != nil {
-		return nil, nil, err
-	}
 	if err := writeCache(filepath.Join(dir, favoritesCacheName), favs); err != nil {
 		return nil, nil, err
 	}
 	return library, favs, nil
+}
+
+func mergeRemembered(dir string, library, favs []Song) ([]Song, []Song) {
+	for _, r := range remembered {
+		if r.dir != dir {
+			continue
+		}
+		if r.favorite {
+			favs = withSong(favs, r.song)
+			continue
+		}
+		library = withSong(library, r.song)
+	}
+	return library, favs
+}
+
+func withSong(songs []Song, song Song) []Song {
+	for _, s := range songs {
+		if s.ID == song.ID {
+			return songs
+		}
+	}
+	return append(songs, song)
+}
+
+func remember(dir string, song Song, favorite bool) {
+	for _, r := range remembered {
+		if r.dir == dir && r.song.ID == song.ID && r.favorite == favorite {
+			return
+		}
+	}
+	remembered = append(remembered, rememberedSave{dir: dir, song: song, favorite: favorite})
+}
+
+func RememberSaved(dir string, song Song, favorite bool) error {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	remember(dir, song, favorite)
+	if !cacheFresh(dir, defaultCacheMaxAge, time.Now()) {
+		return nil
+	}
+	name := libraryCacheName
+	if favorite {
+		name = favoritesCacheName
+	}
+	path := filepath.Join(dir, name)
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	songs, err := readCache(path)
+	if err != nil {
+		return err
+	}
+	for _, s := range songs {
+		if s.ID == song.ID {
+			return nil
+		}
+	}
+	if err := writeCache(path, append(songs, song)); err != nil {
+		return err
+	}
+	return os.Chtimes(path, info.ModTime(), info.ModTime())
 }
 
 func cacheFresh(dir string, maxAge time.Duration, now time.Time) bool {

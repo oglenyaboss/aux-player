@@ -1,6 +1,7 @@
 package vibeai
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 func newTestEngineUI(t *testing.T, ch *fakeChatter, ui UI) *Engine {
@@ -842,4 +844,68 @@ func TestEngineDropLastForgetsLater(t *testing.T) {
 	if user := ch.got[4][1].Content; strings.Contains(user, "убрать хоррор?") {
 		t.Errorf("ход 3: вопрос отброшенной порции остался в заданных:\n%s", user)
 	}
+}
+
+func TestEngineNoteSavedFavoriteUpdatesPromptOnce(t *testing.T) {
+	e := newTestEngine(t, &fakeChatter{})
+	song := Song{ID: "1", Artist: "New Artist", Title: "Saved Song", Album: "Saved Album"}
+	line := "- New Artist — Saved Song (Saved Album)\n"
+	e.NoteSaved(song, true)
+	e.NoteSaved(song, true)
+	msg := e.agent.msgs[0].Content
+	if n := strings.Count(msg, line); n != 1 {
+		t.Errorf("system message contains the line %d times, want 1", n)
+	}
+	e.agent.Reset()
+	if !strings.Contains(e.agent.msgs[0].Content, line) {
+		t.Error("Reset dropped the saved favorite from the system message")
+	}
+}
+
+func TestEngineNoteSavedLibraryLeavesStateAlone(t *testing.T) {
+	dir := t.TempDir()
+	memPath := filepath.Join(dir, "memory.md")
+	mem, err := memory.Open(memPath, memory.DefaultLimit)
+	if err != nil {
+		t.Fatalf("memory.Open: %v", err)
+	}
+	if err := mem.Add("likes long intros", "the listener said so"); err != nil {
+		t.Fatalf("memory.Add: %v", err)
+	}
+	sigPath := filepath.Join(dir, "signals.jsonl")
+	sig, err := OpenSignals(sigPath)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	if err := sig.append(signalRec{Time: testNow, Session: "s1", Kind: "played", ID: "x"}); err != nil {
+		t.Fatalf("signals append: %v", err)
+	}
+
+	e := newTestEngine(t, &fakeChatter{})
+	e.mem = mem
+	e.sig = sig
+	promptBefore := e.agent.msgs[0].Content
+	memoryBefore := readFileBytes(t, memPath)
+	signalsBefore := readFileBytes(t, sigPath)
+
+	e.NoteSaved(Song{ID: "1", Artist: "New Artist", Title: "Saved Song"}, false)
+
+	if got := e.agent.msgs[0].Content; got != promptBefore {
+		t.Errorf("system message changed:\n%s", got)
+	}
+	if got := readFileBytes(t, memPath); !bytes.Equal(got, memoryBefore) {
+		t.Errorf("memory file changed: %q -> %q", memoryBefore, got)
+	}
+	if got := readFileBytes(t, sigPath); !bytes.Equal(got, signalsBefore) {
+		t.Errorf("signals file changed: %q -> %q", signalsBefore, got)
+	}
+}
+
+func readFileBytes(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file inside the test's temp dir
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return data
 }

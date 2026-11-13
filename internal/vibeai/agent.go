@@ -332,6 +332,10 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 
 func (a *Agent) Reset() { a.msgs = a.msgs[:1] }
 
+func (a *Agent) noteFavorite(song Song) {
+	a.msgs[0].Content += fmt.Sprintf("- %s — %s (%s)\n", song.Artist, song.Title, song.Album)
+}
+
 func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 	switch call.Name {
 	case "ask_user":

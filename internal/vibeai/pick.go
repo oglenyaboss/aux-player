@@ -18,21 +18,25 @@ type Library struct {
 func NewLibrary(songs []Song) *Library {
 	l := &Library{songs: make(map[string]map[string]bool)}
 	for _, s := range songs {
-		t := normTitle(s.Title)
-		arts := splitArtists(s.Artist)
-		if t == "" && len(arts) == 0 {
-			continue
-		}
-		m := l.songs[t]
-		if m == nil {
-			m = make(map[string]bool)
-			l.songs[t] = m
-		}
-		for _, a := range arts {
-			m[a] = true
-		}
+		l.add(s)
 	}
 	return l
+}
+
+func (l *Library) add(s Song) {
+	t := normTitle(s.Title)
+	arts := splitArtists(s.Artist)
+	if t == "" && len(arts) == 0 {
+		return
+	}
+	m := l.songs[t]
+	if m == nil {
+		m = make(map[string]bool)
+		l.songs[t] = m
+	}
+	for _, a := range arts {
+		m[a] = true
+	}
 }
 
 func (l *Library) Has(s Song) bool {

@@ -79,6 +79,8 @@ type Provider interface {
 	Search(ctx context.Context, query string) (*SearchResult, error)
 	GetLibraryTracks(ctx context.Context) ([]Track, error)
 	GetLibraryPlaylists(ctx context.Context) ([]Playlist, error)
+	// GetLibraryAlbums lists the albums in the user's library ("l." IDs), in Apple's order.
+	GetLibraryAlbums(ctx context.Context) ([]Album, error)
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]Track, error)
 	GetAlbumTracks(ctx context.Context, albumID string) ([]Track, error)
 	// GetLibraryAlbumTracks fetches tracks for an album in the user's library.
@@ -104,6 +106,15 @@ type Provider interface {
 	// in the user's Apple Music account. Returns false (no error) when the song
 	// is not rated or the provider does not support ratings.
 	GetSongRating(ctx context.Context, catalogID string) (bool, error)
+	// AddToLibrary adds a single song to the user's Apple Music library.
+	// songID is a catalog song ID or a library ID ("i.XXXXX"); a library ID is
+	// resolved to its catalog ID first.
+	AddToLibrary(ctx context.Context, songID string) error
+	// AddToFavorites adds a single song to Apple Music Favorites. Whether that
+	// also adds it to the library depends on the account's settings, not on AUX.
+	// songID is a catalog song ID or a library ID ("i.XXXXX"); a library ID is
+	// resolved to its catalog ID first.
+	AddToFavorites(ctx context.Context, songID string) error
 	// GetRecommendations returns personalised recommendation groups (albums and
 	// playlists) from Apple Music based on the user's library and history.
 	GetRecommendations(ctx context.Context) ([]RecommendationGroup, error)

@@ -82,7 +82,7 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		cfg.Storefront = "us"
 	}
 	if cfg.CacheMaxAge == 0 {
-		cfg.CacheMaxAge = 24 * time.Hour
+		cfg.CacheMaxAge = defaultCacheMaxAge
 	}
 	if cfg.PortionSize == 0 {
 		cfg.PortionSize = 5
@@ -210,6 +210,14 @@ func (e *Engine) Answer(q Question, raw string) {
 	ans := resolveAnswer(q, raw)
 	e.log.f("## listener answer: \"%s\" → %s", q.Question, ans)
 	e.replies = append(e.replies, reply{after: len(e.portions), text: "to the question \"" + q.Question + "\" — " + ans})
+}
+
+func (e *Engine) NoteSaved(song Song, favorite bool) {
+	alreadyFavorite := favorite && e.session.favs.Has(song)
+	e.session.NoteSaved(song, favorite)
+	if favorite && !alreadyFavorite {
+		e.agent.noteFavorite(song)
+	}
 }
 
 func (e *Engine) history() string {

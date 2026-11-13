@@ -770,3 +770,53 @@ func TestFavoritesModeKnownLeft(t *testing.T) {
 		t.Errorf("KnownLeft = %d, want 4", got)
 	}
 }
+
+func TestSessionNoteSaved(t *testing.T) {
+	song := Song{ID: "1", Artist: "New Artist", Title: "Saved Song"}
+	artist := splitArtists(song.Artist)[0]
+
+	t.Run("library", func(t *testing.T) {
+		s := NewSession(nil, nil, 3)
+		s.NoteSaved(song, false)
+		if !s.lib.Has(song) {
+			t.Error("library save is missing from s.lib")
+		}
+		if s.favs.Has(song) {
+			t.Error("library save leaked into s.favs")
+		}
+		if s.known[artist] {
+			t.Error("library save added the artist to s.known")
+		}
+	})
+
+	t.Run("favorite", func(t *testing.T) {
+		s := NewSession(nil, nil, 3)
+		s.NoteSaved(song, true)
+		if !s.favs.Has(song) {
+			t.Error("favorite save is missing from s.favs")
+		}
+		if s.lib.Has(song) {
+			t.Error("favorite save leaked into s.lib")
+		}
+		if !s.known[artist] {
+			t.Error("favorite save did not add the artist to s.known")
+		}
+	})
+}
+
+// F8/R3: favouriting a track makes its artist known to the tracks already in the
+// portion, so the known budget drops with it.
+func TestNoteSavedFavoriteRecountsKnown(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	if v := s.Offer(Suggestion{Artist: "Z", Title: "TZ"}, Song{ID: "z1", Artist: "Z", Title: "TZ"}, true); !v.Accepted {
+		t.Fatalf("Z — TZ: rejected: %s", v.Reason)
+	}
+	before := s.KnownLeft()
+	if before == 0 {
+		t.Fatalf("KnownLeft = 0, want room for a known artist")
+	}
+	s.NoteSaved(Song{ID: "z9", Artist: "Z", Title: "Other"}, true)
+	if got := s.KnownLeft(); got != before-1 {
+		t.Errorf("KnownLeft = %d, want %d", got, before-1)
+	}
+}

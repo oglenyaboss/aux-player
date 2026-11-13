@@ -113,6 +113,18 @@ func (s *Session) SetSignals(sig *Signals, sessionID string) {
 	s.sessionID = sessionID
 }
 
+func (s *Session) NoteSaved(song Song, favorite bool) {
+	if favorite {
+		s.favs.add(song)
+		for _, a := range splitArtists(song.Artist) {
+			s.known[a] = true
+		}
+		s.recountKnown()
+		return
+	}
+	s.lib.add(song)
+}
+
 func (s *Session) Need() int {
 	return max(s.Size-len(s.portion), 0)
 }
