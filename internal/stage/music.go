@@ -90,6 +90,12 @@ type MusicRefresh struct {
 	All     bool
 }
 
+// MusicFollow tells the host the agent continuation switch changed: on, the agent
+// picks on after the music the listener chooses.
+type MusicFollow struct {
+	On bool
+}
+
 // MusicPlayAll asks the host to play a whole collection; the host expands it, since the
 // rows of a collection are not known before it is opened.
 type MusicPlayAll struct {
@@ -190,11 +196,40 @@ type music struct {
 	peek      map[string][]MusicItem // the tracks of a collection already opened, by its key
 
 	refreshing bool // the host is checking rows against Apple
+	follow     bool // the agent continues after the chosen music; off at each launch
 
 	playKey string // the row a MusicPlay went out for
 	playT   float64
 
 	prevTo theme // the palette to come back to when the music closes outside the player
+}
+
+// Following reports whether the agent continues after the music the listener chooses.
+func (m *Model) Following() bool { return m.mu.follow }
+
+// mlToggleFollow flips the continuation switch; without an agent it stays off and
+// the agent step of the onboarding opens instead.
+func (m *Model) mlToggleFollow() {
+	if !m.mu.follow && m.o.NoAgent {
+		m.closeMusic()
+		m.OnboardAgent()
+		return
+	}
+	m.mu.follow = !m.mu.follow
+	m.send(MusicFollow{On: m.mu.follow})
+	if m.mu.follow {
+		m.MusicNotice(tr("✦ агент продолжит после выбранной музыки", "✦ the agent continues after the chosen music"))
+	} else {
+		m.MusicNotice(tr("✦ продолжение выключено", "✦ continuation off"))
+	}
+}
+
+// mlFollowLabel names the switch with its state.
+func (m *Model) mlFollowLabel() string {
+	if m.mu.follow {
+		return tr("✦ агент продолжит: вкл", "✦ agent continues: on")
+	}
+	return tr("✦ агент продолжит: выкл", "✦ agent continues: off")
 }
 
 // OpenMusic opens the music screen over whatever the stage draws now.

@@ -91,6 +91,8 @@ type vibeAIRun struct {
 	laterAnswers []vibeaiLaterAnswer
 	stream       bool
 	streamForID  string
+	follow       bool          // the session continues a manual selection: its first portion waits behind it
+	followSongs  []vibeai.Song // the selection, handed to the next fresh session as served
 }
 
 type vibeaiLaterAnswer struct {
@@ -233,6 +235,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.feed.beginPortion()
 	answers := r.laterAnswers
 	r.laterAnswers = nil
+	given := r.followSongs
+	r.followSongs = nil
 	m.appendLog(fmt.Sprintf("[vibe] turn %q (fresh=%v refill=%v)", text, fresh, refill))
 	turn := func() vibeAIDoneMsg {
 		start := time.Now()
@@ -254,6 +258,9 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 				return vibeAIDoneMsg{gen: gen, err: err, refill: refill}
 			}
 			r.engine = e
+		}
+		if len(given) > 0 {
+			r.engine.Served(given)
 		}
 		noteSavedSongs(r.engine, saved)
 		if drop || r.undelivered {
@@ -409,7 +416,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		if msg.gen != r.gen || !r.busy {
 			return waitVibeAI(r.events)
 		}
-		if !r.fresh {
+		if !r.fresh || r.follow {
 			if msg.pick.Accepted {
 				v.NextPick(msg.pick.Track)
 			}
@@ -447,6 +454,9 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 
 	case VibeAISubmitMsg:
+		if msg.Fresh {
+			r.follow = false
+		}
 		if !msg.Fresh && r.staged != nil {
 			r.staged = nil
 			r.dropStaged = true
@@ -555,12 +565,15 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 		r.autoplay = false
 		m.appendLog(fmt.Sprintf("[vibe] error: %v", msg.err))
 		v.SetError(msg.err)
-		if !r.fresh {
+		if !r.fresh || r.follow {
 			v.NextFailed()
+		}
+		if r.fresh && r.follow {
+			v.st.MusicNotice(stage.Tr("✦ агент: ", "✦ agent: ") + msg.err.Error())
 		}
 		return nil
 	}
-	if !r.fresh && (msg.refill || r.stream) {
+	if (r.fresh && r.follow) || (!r.fresh && (msg.refill || r.stream)) {
 		r.staged = &vibeAIStaged{tracks: msg.tracks, note: msg.note, later: msg.later, refill: msg.refill}
 		m.appendLog(fmt.Sprintf("[vibe] portion staged: %d tracks in %s", len(msg.tracks), msg.elapsed.Round(time.Second)))
 		v.NextReady(msg.tracks)
@@ -655,6 +668,9 @@ func (m *Model) vibeAIAhead(s player.State) (int, bool) {
 func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 	r := m.vibeAI
 	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID || r.staged != nil {
+		return nil
+	}
+	if r.follow && !m.vibeAIP.m.st.Following() {
 		return nil
 	}
 	if _, ok := r.served[PlaybackID(*s.Track)]; !ok {
@@ -755,6 +771,7 @@ func (m *Model) setQueue(tracks []provider.Track) tea.Cmd {
 	m.playerState.Playing = false
 	m.playerState.Position = 0
 	m.vibeAI.streamForID = ""
+	m.musicLast = nil
 	if m.player == nil {
 		m.vibeAI.pendingIDs = ids
 		return nil

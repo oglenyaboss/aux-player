@@ -229,6 +229,9 @@ func (e *Engine) NoteSaved(song Song, favorite bool) {
 	}
 }
 
+// Served marks songs the listener already has queued: the picker does not offer them.
+func (e *Engine) Served(songs []Song) { e.session.Give(songs) }
+
 func (e *Engine) history() string {
 	seeds := make([]string, 0, len(e.session.plan.Seeds))
 	for _, sd := range e.session.plan.Seeds {

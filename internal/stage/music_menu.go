@@ -11,6 +11,7 @@ const (
 	mlMenuLibrary
 	mlMenuFavorite
 	mlMenuPlayAll
+	mlMenuFollow
 )
 
 type mlMenuEntry struct {
@@ -36,11 +37,13 @@ func (m *Model) mlMenuItems() []mlMenuEntry {
 			{mlMenuQueue, tr("в очередь", "add to queue")},
 			{mlMenuLibrary, tr("в библиотеку", "add to library")},
 			{mlMenuFavorite, tr("в избранное", "add to favorites")},
+			{mlMenuFollow, m.mlFollowLabel()},
 		}
 	}
 	return []mlMenuEntry{
 		{mlMenuOpen, tr("открыть", "open")},
 		{mlMenuPlayAll, tr("играть всё", "play all")},
+		{mlMenuFollow, m.mlFollowLabel()},
 	}
 }
 
@@ -51,6 +54,8 @@ func mlMenuHint(k mlMenuKind) string {
 		return "↵"
 	case mlMenuQueue:
 		return "ctrl+e"
+	case mlMenuFollow:
+		return "ctrl+n"
 	}
 	return ""
 }
@@ -122,6 +127,8 @@ func (m *Model) mlMenuChoose() {
 		m.send(MusicSave{Item: l.it, Favorites: true})
 	case mlMenuPlayAll:
 		m.send(MusicPlayAll{Item: l.it})
+	case mlMenuFollow:
+		m.mlToggleFollow()
 	}
 }
 

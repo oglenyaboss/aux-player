@@ -909,3 +909,31 @@ func readFileBytes(t *testing.T, path string) []byte {
 	}
 	return data
 }
+
+// Songs the listener queued by hand are never offered again in the session.
+func TestServedSongsAreNotRepeated(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("c1", "set_plan", `{"seeds":[{"artist":"A","mode":"and_similar"}],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"}
+		]}`)),
+		toolResp(call("c3", "submit_candidates", `{"tracks":[
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	e.Served([]Song{{ID: "x1", Artist: "A", Title: "T1"}})
+	p, err := e.Turn(context.Background(), "after the album")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	var got []string
+	for _, tr := range p.Tracks {
+		got = append(got, tr.Artist+" — "+tr.Title)
+	}
+	if want := "B — T2,C — T3,D — T4"; strings.Join(got, ",") != want {
+		t.Fatalf("portion = %v, want %s", got, want)
+	}
+}

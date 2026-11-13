@@ -352,6 +352,13 @@ func (s *Session) ClosePortion() []Entry {
 	return out
 }
 
+// Give counts songs as served without putting them in a portion.
+func (s *Session) Give(songs []Song) {
+	for _, so := range songs {
+		s.given[songKey(so)] = true
+	}
+}
+
 func (s *Session) ResetPortion() {
 	s.portion = nil
 	s.inPortion = make(map[string]bool)

@@ -782,6 +782,8 @@ func (m *Model) musicListKey(k, text string) bool {
 		}
 	case "ctrl+e":
 		m.mlAppend()
+	case "ctrl+n":
+		m.mlToggleFollow()
 	case "right":
 		if !palette {
 			return false
@@ -1395,7 +1397,10 @@ func (m *Model) mlDrawBar(f *fb, x, y, w int) {
 	}
 	caps := m.mlBarCaps()
 	const barText = 16 // the room the now-playing line keeps before a cap goes
-	for _, drop := range []string{"tab", "esc", "ctrl+k", "ctrl+e"} {
+	if m.musicNoticeVisible() && mlCapsWidth(caps) > w-len([]rune(m.mu.notice))-2 {
+		caps = mlDropCap(caps, "ctrl+n")
+	}
+	for _, drop := range []string{"ctrl+n", "tab", "esc", "ctrl+k", "ctrl+e"} {
 		if mlCapsWidth(caps) <= w-barText {
 			break
 		}
@@ -1502,6 +1507,9 @@ func (m *Model) mlBarCaps() [][2]string {
 		caps = append(caps, [2]string{"↵", tr("открыть", "open")})
 	default:
 		caps = append(caps, [2]string{"↵", tr("играть", "play")})
+	}
+	if ok && (l.kind == mlSong || l.kind == mlTile) && l.it.Unplayable == "" {
+		caps = append(caps, [2]string{"ctrl+n", m.mlFollowLabel()})
 	}
 	if m.musicStyle() == musicStylePalette {
 		if ok && l.kind == mlSong && l.it.Kind == MusicSong && l.it.Unplayable == "" {

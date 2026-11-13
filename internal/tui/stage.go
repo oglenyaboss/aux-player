@@ -250,7 +250,9 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.MusicLoad:
 		s.out = append(s.out, musicLoadMsg{gen: a.Gen, sec: a.Section, query: a.Query, parent: a.Parent})
 	case stage.MusicPlay:
-		s.out = append(s.out, musicPlayMsg{items: a.Items, start: a.Start})
+		s.out = append(s.out, musicPlayMsg{items: a.Items, start: a.Start, from: a.From})
+	case stage.MusicFollow:
+		s.out = append(s.out, musicFollowMsg{on: a.On})
 	case stage.MusicRefresh:
 		s.out = append(s.out, musicRefreshMsg{sec: a.Section, parent: a.Parent, all: a.All})
 	case stage.MusicPlayAll:

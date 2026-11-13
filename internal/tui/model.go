@@ -47,6 +47,7 @@ type Model struct {
 	libraryOf    string                    // the provider type and token the store was opened for
 	musicChecks  int                       // background library refreshes in flight
 	musicFound   map[string]musicSearchHit // recent searches by query
+	musicLast    *musicSelection           // the manual selection the queue holds; nil once replaced
 	saves        map[string]saveState
 
 	artHTTP          *http.Client
@@ -200,7 +201,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SaveTrackMsg, saveTrackDoneMsg:
 		cmds = append(cmds, m.handleSaveMsg(msg))
 
-	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg,
+	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicFollowMsg,
 		musicRefreshMsg, musicCheckedMsg:
 		cmds = append(cmds, m.handleMusicMsg(msg))
 

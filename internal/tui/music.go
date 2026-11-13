@@ -12,6 +12,7 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/stage"
+	"github.com/oglenyaboss/aux-player/internal/vibeai"
 )
 
 const (
@@ -77,6 +78,19 @@ type musicCheckedMsg struct {
 type musicPlayMsg struct {
 	items []stage.MusicItem
 	start int
+	from  *stage.MusicItem
+}
+
+// musicFollowMsg is the agent continuation switch of the music screen.
+type musicFollowMsg struct {
+	on bool
+}
+
+// musicSelection is the music the listener chose by hand; from is the collection
+// it came from, nil for a lone track.
+type musicSelection struct {
+	tracks []provider.Track
+	from   *stage.MusicItem
 }
 
 type musicPlayAllMsg struct {
@@ -207,7 +221,18 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		start := max(0, min(msg.start, len(tracks)-1))
 		// ponytail: the rows before Start are not queued because SetQueue starts at the
 		// first ID; queue the whole list and skip to Start once the player can.
-		return m.musicPlayTracks(tracks[start:])
+		return m.musicPlayTracks(tracks[start:], msg.from)
+	case musicFollowMsg:
+		if !msg.on {
+			if m.vibeAI.follow {
+				m.cancelVibeAI()
+			}
+			return nil
+		}
+		if m.musicLast != nil {
+			return m.musicFollowCmd()
+		}
+		return nil
 	case musicPlayAllMsg:
 		store := m.musicLibrary()
 		if store == nil {
@@ -238,7 +263,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			}
 			tracks = append(tracks, t)
 		}
-		return m.musicPlayTracks(tracks)
+		return m.musicPlayTracks(tracks, &msg.item)
 	case musicAppendMsg:
 		if msg.item.Unplayable != "" {
 			return nil
@@ -249,7 +274,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			cmd = m.appendQueue([]provider.Track{t})
 			st.PortionDone([]stage.Track{musicStageTrack(t)}, "")
 		} else {
-			cmd = m.musicPlayTracks([]provider.Track{t})
+			cmd = m.musicPlayTracks([]provider.Track{t}, nil)
 		}
 		st.MusicNotice(stage.Tr("в очереди: ", "queued: ") + msg.item.Title)
 		return cmd
@@ -257,13 +282,15 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// musicPlayTracks replaces the queue with tracks and opens the player on the first.
-func (m *Model) musicPlayTracks(tracks []provider.Track) tea.Cmd {
+// musicPlayTracks replaces the queue with tracks and opens the player on the first;
+// with the continuation switch on the agent starts picking what follows them.
+func (m *Model) musicPlayTracks(tracks []provider.Track, from *stage.MusicItem) tea.Cmd {
 	if len(tracks) == 0 {
 		return nil
 	}
 	m.cancelVibeAI()
 	cmd := m.setQueue(tracks)
+	m.musicLast = &musicSelection{tracks: tracks, from: from}
 	cards := make([]stage.Track, len(tracks))
 	for i, t := range tracks {
 		cards[i] = musicStageTrack(t)
@@ -271,7 +298,64 @@ func (m *Model) musicPlayTracks(tracks []provider.Track) tea.Cmd {
 	st := m.vibeAIP.m.st
 	st.JumpPlay(cards, 0, 0)
 	st.MusicNotice(stage.Tr("играет: ", "playing: ") + tracks[0].Title)
+	if st.Following() {
+		return tea.Batch(cmd, m.musicFollowCmd())
+	}
 	return cmd
+}
+
+// musicFollowCmd starts an agent session over the manual selection: the selection
+// is its request, its tracks count as served, and the first portion stages behind
+// the selected queue instead of playing.
+func (m *Model) musicFollowCmd() tea.Cmd {
+	sel := m.musicLast
+	r := m.vibeAI
+	r.follow = true
+	r.followSongs = make([]vibeai.Song, len(sel.tracks))
+	for i, t := range sel.tracks {
+		r.followSongs[i] = vibeai.Song{ID: PlaybackID(t), Artist: t.Artist, Title: t.Title, Album: t.Album}
+	}
+	v := m.vibeAIP.m
+	v.query = sel.tracks[0].Artist + " — " + sel.tracks[0].Title
+	if sel.from != nil {
+		v.query = sel.from.Title
+	}
+	v.NextGathering("")
+	m.appendLog(fmt.Sprintf("[music] the agent continues after %q (%d tracks)", v.query, len(sel.tracks)))
+	return m.vibeAITurnCmd(musicFollowText(sel.tracks, sel.from), true, false)
+}
+
+// musicFollowList is how many selected tracks the request names; all of them count
+// as served regardless.
+const musicFollowList = 25
+
+// musicFollowText is the agent request a manual selection turns into.
+func musicFollowText(tracks []provider.Track, from *stage.MusicItem) string {
+	var b strings.Builder
+	switch {
+	case from != nil && from.Kind == stage.MusicAlbum:
+		fmt.Fprintf(&b, "The listener put on the album \"%s\" by %s.", from.Title, from.Artist)
+	case from != nil:
+		fmt.Fprintf(&b, "The listener put on the playlist \"%s\".", from.Title)
+	case len(tracks) == 1:
+		t := tracks[0]
+		fmt.Fprintf(&b, "The listener put on the track %s — %s", t.Artist, t.Title)
+		if t.Album != "" {
+			fmt.Fprintf(&b, " (album \"%s\")", t.Album)
+		}
+		b.WriteString(".")
+	default:
+		b.WriteString("The listener put on these tracks.")
+	}
+	b.WriteString(" Queued in this order:")
+	for i, t := range tracks[:min(len(tracks), musicFollowList)] {
+		fmt.Fprintf(&b, "\n%d. %s — %s", i+1, t.Artist, t.Title)
+	}
+	if n := len(tracks) - musicFollowList; n > 0 {
+		fmt.Fprintf(&b, "\n… and %d more", n)
+	}
+	b.WriteString("\n\nContinue after it in the same direction: keep its sound, mood and era, and do not offer these tracks again. This choice is context for this session only, not a lasting preference.")
+	return b.String()
 }
 
 func musicStageTrack(t provider.Track) stage.Track {
