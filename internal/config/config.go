@@ -25,6 +25,8 @@ type Config struct {
 	Provider            string `json:"provider"`
 	Theme               string `json:"theme"`
 	AudioQuality        string `json:"audio_quality,omitempty"`
+	// on-disk cache of encrypted audio segments in MB; 0 = 2048, negative = off
+	AudioCacheMB int `json:"audio_cache_mb,omitempty"`
 	// Volume is the last user-set playback volume (0.0–1.0). nil means
 	// "not yet saved" and the player default (1.0) is used on startup.
 	Volume *float64 `json:"volume,omitempty"`

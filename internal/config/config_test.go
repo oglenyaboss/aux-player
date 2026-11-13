@@ -376,6 +376,30 @@ func TestAudioQualityInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestAudioCacheMBRoundTrips(t *testing.T) {
+	path := writeCfg(t, map[string]any{"audio_cache_mb": 512})
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AudioCacheMB != 512 {
+		t.Errorf("AudioCacheMB = %d, want 512", cfg.AudioCacheMB)
+	}
+
+	cfg.AudioCacheMB = -1
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load after Save: %v", err)
+	}
+	if loaded.AudioCacheMB != -1 {
+		t.Errorf("AudioCacheMB after round trip = %d, want -1", loaded.AudioCacheMB)
+	}
+}
+
 func testConfigWithDefaults() *config.Config {
 	return &config.Config{AuthPort: 7777, Provider: "apple", Theme: "default"}
 }
