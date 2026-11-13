@@ -179,9 +179,13 @@ func TestMusicFollowText(t *testing.T) {
 			t.Errorf("album text lacks %q:\n%s", want, txt)
 		}
 	}
-	pl := &stage.MusicItem{Kind: stage.MusicPlaylist, Title: "Chill"}
+	pl := &stage.MusicItem{ID: "p.1", Kind: stage.MusicPlaylist, Title: "Chill"}
 	if txt := musicFollowText(tracks, pl); !strings.Contains(txt, `playlist "Chill"`) {
 		t.Errorf("playlist text:\n%s", txt)
+	}
+	favs := &stage.MusicItem{Kind: stage.MusicPlaylist, Title: "favorites"}
+	if txt := musicFollowText(tracks, favs); !strings.Contains(txt, "from their Favorites") {
+		t.Errorf("favorites text:\n%s", txt)
 	}
 	one := []provider.Track{tracks[1]}
 	if txt := musicFollowText(one, nil); !strings.Contains(txt, `track Frank Ocean — Ivy (album "Blonde")`) {
@@ -193,5 +197,77 @@ func TestMusicFollowText(t *testing.T) {
 	}
 	if txt := musicFollowText(long, pl); !strings.Contains(txt, "… and 15 more") {
 		t.Errorf("a long list is not cut:\n%s", txt)
+	}
+}
+
+// Flipping the switch off and on after the handoff keeps the running stream instead
+// of restarting the finished selection.
+func TestMusicFollowOffOnAfterHandoff(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	followOn(t, m)
+	playBlonde(t, m)
+	m.Update(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks()})
+	playing(t, m, "i.b2")
+	toggleFollow(t, m)
+	toggleFollow(t, m)
+	if r := m.vibeAI; r.busy || r.portion != 1 || len(r.feed.tracks) != 3 {
+		t.Fatalf("busy=%v portion=%d feed=%d, want the handed-off stream kept", r.busy, r.portion, len(r.feed.tracks))
+	}
+}
+
+// A track queued with ctrl+e during a follow is not served twice.
+func TestMusicFollowAppendNotRepeated(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	followOn(t, m)
+	playBlonde(t, m)
+	shutMusic(t, m)
+	openFavorites(t, m)
+	musicFeed(t, m, press(m, "down"))
+	musicFeed(t, m, press(m, "ctrl+e"))
+	ivy := vibeai.Track{ID: "102", Artist: "Frank Ocean", Title: "Ivy"}
+	m.Update(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: append([]vibeai.Track{ivy}, vibeTracks()...)})
+	playing(t, m, "i.2")
+	if got := strings.Join(m.queueIDs, ","); got != "i.b1,i.b2,i.2,1,2,3" {
+		t.Fatalf("queue = %s, want Ivy once", got)
+	}
+	if s := m.vibeAI.followSongs; len(s) != 1 || s[0].Title != "Ivy" {
+		t.Fatalf("followSongs = %+v, want Ivy for the next turn", s)
+	}
+}
+
+// With the switch off a manual queue never tops up, even on a track the agent served.
+func TestMusicManualQueueNoTopUp(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	m.vibeAI.served["i.2"] = vibeai.Track{ID: "i.2"}
+	openFavorites(t, m)
+	musicFeed(t, m, press(m, "down"))
+	musicFeed(t, m, press(m, "enter"))
+	playing(t, m, "i.2")
+	if m.vibeAI.busy {
+		t.Fatal("a manual queue started an agent turn")
+	}
+}
+
+// An empty follow portion is said on screen.
+func TestMusicFollowEmptyPortion(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	followOn(t, m)
+	playBlonde(t, m)
+	m.Update(vibeAIDoneMsg{gen: m.vibeAI.gen})
+	if frame := musicFrame(m, 0.5); !strings.Contains(frame, "found nothing") {
+		t.Fatalf("the empty portion is silent:\n%s", frame)
+	}
+}
+
+// Turning the switch on leaves a typed request in flight alone.
+func TestMusicFollowOnKeepsTypedTurn(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	playBlonde(t, m)
+	shutMusic(t, m)
+	m.handleVibeAIMsg(VibeAISubmitMsg{Text: "rage", Fresh: true})
+	gen := m.vibeAI.gen
+	toggleFollow(t, m)
+	if m.vibeAI.gen != gen || m.vibeAI.follow {
+		t.Fatal("the switch replaced the typed request")
 	}
 }

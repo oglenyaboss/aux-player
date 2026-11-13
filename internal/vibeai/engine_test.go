@@ -937,3 +937,30 @@ func TestServedSongsAreNotRepeated(t *testing.T) {
 		t.Fatalf("portion = %v, want %s", got, want)
 	}
 }
+
+// A named session stores its name, not the request text, with each signal.
+func TestLabelNamesSignals(t *testing.T) {
+	ch := &fakeChatter{}
+	e := newTestEngine(t, ch)
+	e.Label("Blonde")
+	ch.resps = append(ch.resps,
+		toolResp(call("c1", "set_plan", `{"seeds":[{"artist":"A","mode":"and_similar"}],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"},
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+	)
+	if _, err := e.Turn(context.Background(), "The listener put on the album \"Blonde\".\n1. A — T1"); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if err := e.Record([]Outcome{{ID: "x", Artist: "B", Title: "T2", Kind: "played"}}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if got := e.sig.recs[len(e.sig.recs)-1].Query; got != "Blonde" {
+		t.Fatalf("signal query = %q, want Blonde", got)
+	}
+	if !strings.Contains(e.history(), "1. A — T1") {
+		t.Fatal("the history lost the request text")
+	}
+}

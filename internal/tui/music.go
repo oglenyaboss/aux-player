@@ -229,7 +229,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			}
 			return nil
 		}
-		if m.musicLast != nil {
+		if m.musicLast != nil && !m.vibeAI.busy {
 			return m.musicFollowCmd()
 		}
 		return nil
@@ -272,6 +272,9 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		var cmd tea.Cmd
 		if st.Phase() == stage.PhPlay {
 			cmd = m.appendQueue([]provider.Track{t})
+			if m.vibeAI.follow {
+				m.vibeAI.followSongs = append(m.vibeAI.followSongs, vibeai.Song{ID: PlaybackID(t), Artist: t.Artist, Title: t.Title, Album: t.Album})
+			}
 			st.PortionDone([]stage.Track{musicStageTrack(t)}, "")
 		} else {
 			cmd = m.musicPlayTracks([]provider.Track{t}, nil)
@@ -320,6 +323,7 @@ func (m *Model) musicFollowCmd() tea.Cmd {
 	if sel.from != nil {
 		v.query = sel.from.Title
 	}
+	r.followName = v.query
 	v.NextGathering("")
 	m.appendLog(fmt.Sprintf("[music] the agent continues after %q (%d tracks)", v.query, len(sel.tracks)))
 	return m.vibeAITurnCmd(musicFollowText(sel.tracks, sel.from), true, false)
@@ -335,6 +339,8 @@ func musicFollowText(tracks []provider.Track, from *stage.MusicItem) string {
 	switch {
 	case from != nil && from.Kind == stage.MusicAlbum:
 		fmt.Fprintf(&b, "The listener put on the album \"%s\" by %s.", from.Title, from.Artist)
+	case from != nil && from.ID == "":
+		b.WriteString("The listener put on tracks from their Favorites.")
 	case from != nil:
 		fmt.Fprintf(&b, "The listener put on the playlist \"%s\".", from.Title)
 	case len(tracks) == 1:

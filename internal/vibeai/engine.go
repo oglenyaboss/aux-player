@@ -52,6 +52,7 @@ type Engine struct {
 	api        *appleAPI
 	cfg        Config
 	query      string
+	label      string
 	start      time.Time
 	sessionID  string
 	turns      int
@@ -229,6 +230,18 @@ func (e *Engine) NoteSaved(song Song, favorite bool) {
 	}
 }
 
+// Label names the session in signals, playlist descriptions and the run log
+// instead of its first request, which then only goes to the agent.
+func (e *Engine) Label(name string) { e.label = name }
+
+// name is what the session is called outside the agent's prompt.
+func (e *Engine) name() string {
+	if e.label != "" {
+		return e.label
+	}
+	return e.query
+}
+
 // Served marks songs the listener already has queued: the picker does not offer them.
 func (e *Engine) Served(songs []Song) { e.session.Give(songs) }
 
@@ -368,7 +381,7 @@ func (e *Engine) Record(outs []Outcome) error {
 		recs = append(recs, signalRec{
 			Time:    now,
 			Session: e.sessionID,
-			Query:   e.query,
+			Query:   e.name(),
 			Kind:    out.Kind,
 			ID:      out.ID,
 			Artist:  out.Artist,
@@ -393,7 +406,7 @@ func trackIDs(tracks []Track) []string {
 }
 
 func (e *Engine) SavePlaylist(ctx context.Context, name string, tracks []Track) (playlistID string, err error) {
-	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.query+"»", trackIDs(tracks))
+	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.name()+"»", trackIDs(tracks))
 	if err != nil {
 		return "", err
 	}
@@ -414,7 +427,7 @@ func (e *Engine) Close() (logPath string, err error) {
 	if e.cfg.RunsDir == "" {
 		return "", nil
 	}
-	return e.log.save(e.cfg.RunsDir, e.query, e.start)
+	return e.log.save(e.cfg.RunsDir, e.name(), e.start)
 }
 
 func toTrack(en Entry) Track {

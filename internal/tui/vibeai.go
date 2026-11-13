@@ -93,6 +93,7 @@ type vibeAIRun struct {
 	streamForID  string
 	follow       bool          // the session continues a manual selection: its first portion waits behind it
 	followSongs  []vibeai.Song // the selection, handed to the next fresh session as served
+	followName   string        // the selection's title, naming the next fresh session
 }
 
 type vibeaiLaterAnswer struct {
@@ -237,6 +238,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.laterAnswers = nil
 	given := r.followSongs
 	r.followSongs = nil
+	name := r.followName
+	r.followName = ""
 	m.appendLog(fmt.Sprintf("[vibe] turn %q (fresh=%v refill=%v)", text, fresh, refill))
 	turn := func() vibeAIDoneMsg {
 		start := time.Now()
@@ -258,6 +261,9 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 				return vibeAIDoneMsg{gen: gen, err: err, refill: refill}
 			}
 			r.engine = e
+		}
+		if name != "" {
+			r.engine.Label(name)
 		}
 		if len(given) > 0 {
 			r.engine.Served(given)
@@ -573,6 +579,14 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 		}
 		return nil
 	}
+	if r.fresh && r.follow && len(msg.tracks) == 0 {
+		m.appendLog("[vibe] the follow portion came back empty")
+		v.NextFailed()
+		empty := stage.Tr("✦ агент ничего не подобрал", "✦ the agent found nothing to follow")
+		v.SetNotice(empty)
+		v.st.MusicNotice(empty)
+		return nil
+	}
 	if (r.fresh && r.follow) || (!r.fresh && (msg.refill || r.stream)) {
 		r.staged = &vibeAIStaged{tracks: msg.tracks, note: msg.note, later: msg.later, refill: msg.refill}
 		m.appendLog(fmt.Sprintf("[vibe] portion staged: %d tracks in %s", len(msg.tracks), msg.elapsed.Round(time.Second)))
@@ -621,6 +635,10 @@ func (m *Model) vibeAIHandoff(s player.State) tea.Cmd {
 	}
 	st := r.staged
 	r.staged = nil
+	if m.musicLast != nil {
+		st.tracks = m.vibeAINotQueued(st.tracks)
+		m.musicLast = nil
+	}
 	r.tracks = st.tracks
 	r.portion++
 	for _, t := range st.tracks {
@@ -640,6 +658,22 @@ func (m *Model) vibeAIHandoff(s player.State) tea.Cmd {
 		cmds = append(cmds, m.vibeAISaveCmd())
 	}
 	return tea.Batch(cmds...)
+}
+
+// vibeAINotQueued drops the tracks the player queue already holds, such as a song
+// the listener queued by hand while the portion was gathered.
+func (m *Model) vibeAINotQueued(ts []vibeai.Track) []vibeai.Track {
+	held := make(map[string]bool, 2*len(m.queueTracks))
+	for _, t := range m.queueTracks {
+		held[t.ID], held[t.CatalogID] = true, true
+	}
+	var out []vibeai.Track
+	for _, t := range ts {
+		if !held[t.ID] {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // vibeAIAhead counts the tracks the queue still holds behind the playing one;
@@ -670,7 +704,7 @@ func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID || r.staged != nil {
 		return nil
 	}
-	if r.follow && !m.vibeAIP.m.st.Following() {
+	if m.musicLast != nil || (r.follow && !m.vibeAIP.m.st.Following()) {
 		return nil
 	}
 	if _, ok := r.served[PlaybackID(*s.Track)]; !ok {
