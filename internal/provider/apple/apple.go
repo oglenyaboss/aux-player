@@ -965,6 +965,12 @@ func (a *AppleProvider) GetLibraryAlbums(ctx context.Context) ([]provider.Album,
 			albums = append(albums, toAlbum(r))
 		}
 		endpoint = page.Next
+		if endpoint != "" {
+			// Apple's next link drops limit, which falls back to 25 per page.
+			if endpoint, err = withQueryParams(endpoint, url.Values{"limit": {"100"}}); err != nil {
+				return nil, fmt.Errorf("GetLibraryAlbums: %w", err)
+			}
+		}
 	}
 	return albums, nil
 }

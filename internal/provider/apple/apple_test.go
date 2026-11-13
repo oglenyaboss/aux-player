@@ -772,6 +772,9 @@ func TestGetLibraryAlbums_ReturnsAllPagesInOrder(t *testing.T) {
 				"next": "/v1/me/library/albums?offset=100",
 			})
 		case "100":
+			if got := r.URL.Query().Get("limit"); got != "100" {
+				t.Errorf("next page limit = %q, want 100", got)
+			}
 			writeJSON(t, w, map[string]any{
 				"data": []any{libraryAlbumJSON("l.a3", "Isolation", "Kali Uchis", 15, "")},
 			})
