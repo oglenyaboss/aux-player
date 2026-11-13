@@ -299,7 +299,7 @@ func TestAUXOtherKeysInert(t *testing.T) {
 	stageIntoPlayer(m)
 	m.playerState.Track = &provider.Track{ID: "1", Title: "One"}
 	m.width, m.height = 100, 30
-	for _, k := range []string{"l", "/", ":"} {
+	for _, k := range []string{"x", "/", ":"} {
 		if cmd := auxPress(m, k); cmd != nil {
 			t.Fatalf("%q must do nothing on the scene, got a cmd", k)
 		}

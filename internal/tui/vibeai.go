@@ -76,6 +76,7 @@ type vibeAIRun struct {
 	served       map[string]vibeai.Track
 	pending      []vibeai.Outcome
 	pendingIDs   []string
+	savedSongs   []vibeAISavedSong
 	heardID      string
 	heardPos     time.Duration
 	portion      int
@@ -212,6 +213,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	gen := r.gen
 	pending := r.pending
 	r.pending = nil
+	saved := r.savedSongs
+	r.savedSongs = nil
 	cfg := vibeAIConfig(m.cfg)
 	if fresh {
 		r.tracks, r.portion = nil, 0
@@ -249,6 +252,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 			}
 			r.engine = e
 		}
+		noteSavedSongs(r.engine, saved)
 		if drop || r.undelivered {
 			r.engine.DropLast()
 		}
@@ -271,6 +275,15 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 		case <-ctx.Done():
 		}
 		return nil
+	}
+}
+
+// savedNoter takes a confirmed save into the picker.
+type savedNoter interface{ NoteSaved(vibeai.Song, bool) }
+
+func noteSavedSongs(e savedNoter, saved []vibeAISavedSong) {
+	for _, s := range saved {
+		e.NoteSaved(s.song, s.favorite)
 	}
 }
 

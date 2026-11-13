@@ -64,6 +64,9 @@ Run `aux`. The onboarding walks through four screens:
 | `+` | More like this |
 | `-` | Less like this |
 | `w` | Save the queue as a playlist |
+| `l` | Add the playing track to the Apple Music library |
+| `f` | Add the playing track to Favorites |
+| `h` | Recently played this launch |
 | `r` | Start over |
 | `?` | Toggle the key help |
 | `esc` | Close help / step back |

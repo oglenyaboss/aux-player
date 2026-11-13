@@ -59,12 +59,13 @@ func newStageScreen(host *Model) *stageScreen {
 func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 	apple := !appleLogin || cfg.AppleUserToken != ""
 	return stage.Options{
-		Onboard:       cfg.VibeLLMAPIKey == "" || !apple,
+		Onboard:       !apple || (cfg.VibeLang == "" && cfg.VibeLLMAPIKey == ""),
 		Connected:     [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
 		Slots:         vibeAIPortion,
 		LastfmAskKeys: cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "",
 		LastfmKey:     cfg.LastfmAPIKey,
 		NoEggs:        cfg.VibeEggs != nil && !*cfg.VibeEggs,
+		NoAgent:       cfg.VibeLLMAPIKey == "",
 		Example:       func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
 	}
 }
@@ -157,6 +158,8 @@ func (s *stageScreen) SetError(err error) {
 
 func (s *stageScreen) SetNotice(text string) { s.st.Toast(text) }
 
+func (s *stageScreen) SetRecent(tracks []stage.Track) { s.st.SetRecent(tracks) }
+
 // HandleKey hands the key to the scene first; keys the scene declines reach the
 // AUX globals (pause, next, seek). Actions collected meanwhile ship as a cmd.
 func (s *stageScreen) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
@@ -214,6 +217,26 @@ func (s *stageScreen) act(a stage.Action) {
 		}
 	case stage.Save:
 		s.out = append(s.out, VibeAIActionMsg{Action: VibeAISave})
+	case stage.SaveTrack:
+		if a.ID == "" {
+			if s.host.playerState.Track == nil {
+				s.st.Toast(stage.Tr("сейчас ничего не играет", "nothing is playing"))
+				break
+			}
+			s.out = append(s.out, SaveTrackMsg{Track: *s.host.playerState.Track, Favorite: a.Favorites})
+			break
+		}
+		found := false
+		for _, t := range s.host.recentTracks {
+			if PlaybackID(t) == a.ID {
+				s.out = append(s.out, SaveTrackMsg{Track: t, Favorite: a.Favorites})
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.st.Toast(stage.Tr("трек выпал из списка недавних", "that track left the recent list"))
+		}
 	case stage.Restart:
 		s.out = append(s.out, VibeAICancelMsg{}) // the bridge trims the feed on cancel
 	case stage.Settings:
@@ -285,8 +308,8 @@ func (s *stageScreen) act(a stage.Action) {
 		}
 		if a.Model != "" {
 			cfg.VibeLLMModel = a.Model
+			cfg.VibeLLMEffort = a.Effort
 		}
-		cfg.VibeLLMEffort = a.Effort
 		cfg.VibeLang = a.Lang
 		if err := cfg.Save(""); err != nil {
 			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))

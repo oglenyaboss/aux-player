@@ -6,6 +6,7 @@ import (
 	"image"
 	"math"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -76,6 +77,12 @@ type Rate struct{ Up bool }
 // Save is the w key: the host writes the queue as a playlist and answers via Toast.
 type Save struct{}
 
+// SaveTrack is the l / f key: the host saves the track with ID, or the playing track when ID is empty.
+type SaveTrack struct {
+	ID        string
+	Favorites bool
+}
+
 // ConnectApple is enter on the Apple Music step: the host signs the user in in the browser.
 type ConnectApple struct{}
 
@@ -142,7 +149,9 @@ type Options struct {
 	LastfmAskKeys bool                      // the Last.fm app key or secret is missing: the Last.fm step asks for both
 	LastfmKey     string                    // the Last.fm API key already known, prefilled in that field
 	NoEggs        bool                      // no easter eggs
+	NoAgent       bool                      // no agent key: the intro and the palette open the agent step of the onboarding
 	Slots         int                       // tracks on side A in the scan; 0 means 20
+	MusicStyle    string                    // the look of the music screen: "palette" (default), "drawer" or "full"
 }
 
 type chip struct {
@@ -271,6 +280,14 @@ type Model struct {
 	lastShot *fb
 	help     bool
 
+	recent     []Track
+	recentOpen bool
+	recentRows []Track
+	recentSel  int
+
+	mu   music
+	held []string
+
 	covers map[string]image.Image
 	pix    map[string]*pixgrid
 	themes map[string]theme
@@ -307,14 +324,32 @@ func (m *Model) Onboard(connected [3]bool) {
 	m.ob.eggsAsk, m.ob.eggsOn = true, !m.o.NoEggs
 }
 
+// OnboardAgent opens the onboarding on the agent step over whatever is on screen and
+// returns to it after the needle; the steps before it are already done.
+func (m *Model) OnboardAgent() {
+	m.ob = newOnboard()
+	m.ob.t = obReady - 0.8
+	m.ob.langDone = true
+	m.ob.eggsAsk = false
+	m.ob.step = 1
+	m.ob.done[0] = 0
+	m.ob.agentOnly = true
+	m.ob.back = m.ph
+	m.ob.lfKey = []rune(m.o.LastfmKey)
+	m.ph = PhOnboard
+}
+
 func (m *Model) reset() {
 	*m = Model{w: m.w, h: m.h, th: night, to: night, o: m.o, covers: m.covers,
-		pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
+		recent: m.recent, mu: m.mu, held: m.held, pix: m.pix, themes: m.themes, eggMemo: m.eggMemo, dim: spring{x: 1, to: 1}, portionNo: 1}
 	m.slots = make([]*slot, m.portionSize())
 	for i := range m.slots {
 		m.slots[i] = &slot{fillAt: -1}
 	}
 	m.buildLogo()
+	if m.mu.open && m.musicStyle() == musicStylePalette {
+		m.dim.to = musicPaletteDim
+	}
 }
 
 func (m *Model) portionSize() int {
@@ -340,6 +375,10 @@ func (m *Model) SetSize(w, h int) {
 	}
 	m.w, m.h = w, h
 	m.buildLogo()
+	if m.mu.open && m.musicStyle() != musicStyleFull {
+		m.mlSettle()
+		m.mlClampGrid()
+	}
 }
 
 // Step moves the scene one tick; the host's Hook runs where drive() used to run.
@@ -420,6 +459,7 @@ func (m *Model) Step(dt float64) {
 	case PhPlay:
 		m.playStep(dt)
 	}
+	m.musicStep()
 }
 
 // ---------- host side ----------
@@ -738,6 +778,10 @@ func (m *Model) wordChips(query string) []Chip {
 }
 
 func (m *Model) launch() {
+	if m.o.NoAgent {
+		m.OnboardAgent()
+		return
+	}
 	m.query = strings.TrimSpace(string(m.input))
 	if m.query == "" && m.o.Example != nil {
 		if x := m.o.Example(); x != "" {
@@ -924,6 +968,10 @@ func (m *Model) toPlay() bool {
 		}
 	}
 	m.setPhase(PhPlay)
+	for _, s := range m.held {
+		m.say(s)
+	}
+	m.held = nil
 	m.startTrack(start)
 	if found {
 		m.pos = m.nowPos
@@ -1048,11 +1096,18 @@ func (m *Model) Fail(msg string) {
 	m.err = msg
 }
 
-// Toast shows a host line; only the player draws it.
+// Toast shows a host line in the player; outside it the line waits for the next play.
 func (m *Model) Toast(s string) {
 	if m.ph == PhPlay {
 		m.say(s)
+		return
 	}
+	m.held = append(m.held, s)
+}
+
+// SetRecent replaces the tracks offered by the recent list; an open list keeps the rows it opened with.
+func (m *Model) SetRecent(tracks []Track) {
+	m.recent = slices.Clone(tracks)
 }
 
 // ---------- input ----------
@@ -1078,6 +1133,23 @@ func (m *Model) Paste(text string) {
 // own player passes the untaken keys through. Quitting became OnAction(Quit{}); esc
 // never quits, it steps back or clears.
 func (m *Model) Key(k, text string) bool {
+	if m.ph != phOnboard {
+		if m.mu.open {
+			return m.musicKey(k, text)
+		}
+		if k == "ctrl+o" && m.ph == phIntro {
+			m.OpenMusic()
+			return true
+		}
+		if m.ph == phPlay && (k == "ctrl+o" || k == "m") {
+			m.OpenMusic()
+			return true
+		}
+		if m.ph == phPlay && k == "/" && m.musicStyle() == musicStylePalette {
+			m.openMusic(mlModeAgent)
+			return true
+		}
+	}
 	switch m.ph {
 	case PhOnboard:
 		m.onboardKey(k, text)
@@ -1185,27 +1257,35 @@ func (m *Model) Key(k, text string) bool {
 	}
 }
 
-// playKey is the player phase: the input after "/", toast answers and the rest of the
-// keys; n/right/left/]/[ belong to the real player and pass through when it is there.
+// playKey is the player phase: toast answers and the rest of the keys; n/right/left/]/[
+// belong to the real player and pass through when it is there.
 func (m *Model) playKey(k, text string) bool {
-	if m.typing {
+	if m.recentOpen {
 		switch k {
-		case "esc":
-			m.typing, m.reply = false, nil
-		case "enter":
-			if s := strings.TrimSpace(string(m.reply)); s != "" {
-				m.say(tr("понял: «"+s+"», перестраиваю дальше", "got it: \""+s+"\", rebuilding the queue"))
-				m.send(Say{Text: s})
+		case "up", "k":
+			if m.recentSel > 0 {
+				m.recentSel--
 			}
-			m.typing, m.reply = false, nil
-		case "backspace":
-			if len(m.reply) > 0 {
-				m.reply = m.reply[:len(m.reply)-1]
+			return true
+		case "down", "j":
+			if m.recentSel+1 < len(m.recentRows) {
+				m.recentSel++
 			}
-		default:
-			m.reply = append(m.reply, []rune(text)...)
+			return true
+		case "l":
+			m.saveRecent(false)
+			return true
+		case "f":
+			m.saveRecent(true)
+			return true
+		case "esc", "h":
+			m.recentOpen = false
+			return true
+		case "?":
+			m.recentOpen = false
+			m.help = true
+			return true
 		}
-		return true
 	}
 	if t := m.laterToast(); t != nil {
 		if n, err := strconv.Atoi(k); err == nil && n >= 1 && n <= len(t.q.Options) && t.picked < 0 {
@@ -1246,16 +1326,30 @@ func (m *Model) playKey(k, text string) bool {
 		m.send(Rate{Up: true})
 	case "-":
 		m.like(false)
-	case "/":
-		m.typing = true
 	case "?":
 		m.help = !m.help
 	case "w":
 		m.send(Save{})
+	case "l":
+		m.send(SaveTrack{})
+	case "f":
+		m.send(SaveTrack{Favorites: true})
+	case "h":
+		m.recentRows = slices.Clone(m.recent)
+		m.recentSel = 0
+		m.recentOpen = true
+		m.help = false
 	default:
 		return false
 	}
 	return true
+}
+
+func (m *Model) saveRecent(favorite bool) {
+	if m.recentSel < 0 || m.recentSel >= len(m.recentRows) {
+		return
+	}
+	m.send(SaveTrack{ID: m.recentRows[m.recentSel].ID, Favorites: favorite})
 }
 
 func (m *Model) laterToast() *toast {

@@ -6,6 +6,9 @@
 //	go run ./lab/scene -shots 3,6.5 -size 160x45   renders frames of the demo to /tmp/scene-*.png
 //	go run ./lab/scene -demo -wait 45   the agent thinks as long as the real one
 //	go run ./lab/scene -egg "Playboi Carti Stop Breathing@20"   opens the player on any catalog track to look at its egg; [ ] seek
+//	go run ./lab/scene -music   the player and the music screen on the demo crate
+//	go run ./lab/scene -music -musicstyle drawer|full   the other looks of that screen
+//	go run ./lab/scene -music -script "1:right,2:enter" -shots 3   keys fed at simulated seconds
 package main
 
 import (
@@ -13,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,8 +34,10 @@ func tick() tea.Cmd {
 
 // sceneUI is the thin tea model around the screen: it feeds the tick and the keys.
 type sceneUI struct {
-	s    *scene
-	last time.Time
+	s      *scene
+	last   time.Time
+	start  time.Time
+	script []scriptKey
 }
 
 func (u *sceneUI) Init() tea.Cmd { return tick() }
@@ -44,6 +50,13 @@ func (u *sceneUI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		now := time.Time(msg)
 		dt := now.Sub(u.last).Seconds()
 		u.last = now
+		if len(u.script) > 0 {
+			el := now.Sub(u.start).Seconds()
+			for len(u.script) > 0 && u.script[0].at <= el {
+				u.s.m.Key(u.script[0].k, u.script[0].text)
+				u.script = u.script[1:]
+			}
+		}
 		u.s.m.Step(min(dt, 0.1))
 		return u, tick()
 	case tea.KeyPressMsg:
@@ -71,6 +84,9 @@ func main() {
 	size := flag.String("size", "160x45", "frame size for -shots")
 	firstRun := flag.Bool("onboard", true, "start with the first-run onboarding")
 	eggAt := flag.String("egg", "", `open the player on "artist title[@seconds]" to look at its egg`)
+	musicFlag := flag.Bool("music", false, "open the player and the music screen on the demo crate")
+	musicStyle := flag.String("musicstyle", "palette", "the look of the music screen: palette, drawer or full")
+	scriptFlag := flag.String("script", "", `keys fed at simulated seconds: "1:right,2:enter"`)
 	langFlag := flag.String("lang", "", "interface language: en or ru, empty picks from the environment")
 	wait := flag.Float64("wait", 9, "seconds the fake agent thinks before its batch; the real one takes 40–70")
 	flag.Parse()
@@ -85,17 +101,26 @@ func main() {
 	}
 
 	fmt.Fprint(os.Stderr, stage.Tr("обложки…", "covers…"))
-	covers := loadCovers(demoTracks())
-	fmt.Fprintf(os.Stderr, " %d\n", len(covers))
-
-	s := newScene(*firstRun, *demo && *eggAt == "")
+	s := newScene(*firstRun && !*musicFlag, *demo && *eggAt == "", *musicStyle)
 	s.wait = *wait
+	coverTracks := demoTracks()
+	if *musicFlag {
+		coverTracks = append(coverTracks, s.mus.crate.coverTracks()...)
+	}
+	covers := loadCovers(coverTracks)
+	fmt.Fprintf(os.Stderr, " %d\n", len(covers))
 	for key, img := range covers {
 		s.m.SetCover(key, img)
 	}
 	if *eggAt != "" {
 		playEgg(s, *eggAt)
 	}
+	if *musicFlag {
+		s.m.JumpPlay(demoTracks(), 0, 0)
+		s.m.SetRecent(demoTracks())
+		s.m.OpenMusic()
+	}
+	script := parseScript(*scriptFlag)
 
 	if *shots != "" {
 		var w, h int
@@ -110,9 +135,17 @@ func main() {
 		var t float64
 		for _, at := range times {
 			for t+dt <= at {
+				for len(script) > 0 && script[0].at <= t {
+					s.m.Key(script[0].k, script[0].text)
+					script = script[1:]
+				}
 				s.m.Step(dt)
 				s.m.View()
 				t += dt
+			}
+			for len(script) > 0 && script[0].at <= at {
+				s.m.Key(script[0].k, script[0].text)
+				script = script[1:]
 			}
 			p := fmt.Sprintf("%s-%08.3f.png", *out, at)
 			if err := s.m.PNG(p); err != nil {
@@ -123,10 +156,41 @@ func main() {
 		}
 		return
 	}
-	if _, err := tea.NewProgram(&sceneUI{s: s, last: time.Now()}).Run(); err != nil {
+	if _, err := tea.NewProgram(&sceneUI{s: s, last: time.Now(), start: time.Now(), script: script}).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// scriptKey is one key fed at a simulated second: a name the stage knows and the text
+// a single-rune key types.
+type scriptKey struct {
+	at   float64
+	k    string
+	text string
+}
+
+// parseScript reads "1.5:down,2:enter,2.5:a" in time order.
+func parseScript(s string) []scriptKey {
+	var out []scriptKey
+	for _, part := range strings.Split(s, ",") {
+		at, name, ok := strings.Cut(strings.TrimSpace(part), ":")
+		if !ok {
+			continue
+		}
+		sec, err := strconv.ParseFloat(strings.TrimSpace(at), 64)
+		if err != nil {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		k := scriptKey{at: sec, k: name}
+		if len([]rune(name)) == 1 {
+			k.text = name
+		}
+		out = append(out, k)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].at < out[j].at })
+	return out
 }
 
 // playEgg opens the player: the named term searched in the Apple catalog as the

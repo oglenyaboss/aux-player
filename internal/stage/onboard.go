@@ -37,6 +37,11 @@ type onboard struct {
 	spin    float64
 	spinV   float64
 
+	agentAsk  bool  // the skip confirmation is on screen
+	agentSkip bool  // the agent step was skipped
+	agentOnly bool  // the agent step alone: the agent opened the onboarding
+	back      Phase // the phase the needle returns to
+
 	sub      agentSub
 	subT     float64
 	prov     int
@@ -135,9 +140,12 @@ func (m *Model) onboardStep(dt float64) {
 		m.bloom = 0.5
 	}
 	if o.needleT >= 0 && o.t > o.needleT+obDive+obDiveLen {
+		back := o.back
 		m.ob = nil
-		m.setPhase(phIntro)
-		m.pt = 2.0
+		m.setPhase(back)
+		if back == phIntro {
+			m.pt = 2.0
+		}
 	}
 }
 
@@ -145,11 +153,18 @@ func (m *Model) completeStep() {
 	o := m.ob
 	o.done[o.step] = o.t
 	o.step++
+	if o.agentOnly && o.step == 2 {
+		o.step++
+	}
 	o.stepT = o.t
 	o.replied, o.errMsg = false, ""
 	m.bloom = 0.3
 	if o.step == 3 {
-		m.send(o.setup())
+		s := o.setup()
+		if s.Model != "" {
+			m.o.NoAgent = false
+		}
+		m.send(s)
 	}
 }
 
@@ -246,6 +261,20 @@ func (m *Model) onboardKey(k, text string) {
 
 func (m *Model) agentKey(k, text string) {
 	o := m.ob
+	if o.agentAsk {
+		switch k {
+		case "tab":
+			o.agentAsk, o.agentSkip = false, true
+			m.completeStep()
+		case "enter", "esc":
+			o.agentAsk = false
+		}
+		return
+	}
+	if k == "tab" && o.sub != SubLoading {
+		o.agentAsk = true
+		return
+	}
 	edit := func(buf *[]rune) {
 		switch {
 		case k == "backspace":
@@ -964,6 +993,8 @@ func (m *Model) drawPanel(f *fb) {
 		mark, mc, nc := "·", m.th.dim, m.th.dim
 		status := ""
 		switch {
+		case i == 1 && o.done[i] >= 0 && o.agentSkip:
+			status = tr("пропущено · только ручной выбор", "skipped · manual only")
 		case o.done[i] >= 0 && i == 2 && o.skipped:
 			status = tr("пропущено", "skipped")
 		case o.done[i] >= 0:
@@ -980,6 +1011,9 @@ func (m *Model) drawPanel(f *fb) {
 		}
 		f.fade(x, y, mark, mc, a, true)
 		f.fade(x+2, y, name, nc, a, i == o.step && o.prefsDone())
+		if i == 1 && o.done[i] < 0 {
+			f.fade(x+4+len([]rune(name)), y, tr("главное", "the core"), m.th.a1, a, false)
+		}
 		if status != "" {
 			f.fade(x+pw-len([]rune(status)), y, status, m.th.dim, a*0.8, false)
 		}
@@ -1106,28 +1140,38 @@ func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {
 
 func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 	o := m.ob
-	key := func(x, y int, k, label string) int {
-		n := f.fade(x, y, k, m.th.a1, a, true)
-		return n + 1 + f.fade(x+n+1, y, label, m.th.dim, a, false) + 3
+	key := func(x, y int, k, label string, al float64) int {
+		n := f.fade(x, y, k, m.th.a1, al, true)
+		return n + 1 + f.fade(x+n+1, y, label, m.th.dim, al, false) + 3
 	}
 	p := providers[o.prov]
+	if o.agentAsk {
+		ask := tr("без агента останется только ручной выбор музыки", "without the agent only manual music picking is left")
+		f.fade(x, y, trunc(ask, w), m.th.text, a, false)
+		dx := key(x, y+1, "enter", tr("подключить", "connect"), a)
+		key(x+dx, y+1, "tab", tr("всё равно пропустить", "skip anyway"), a)
+		return 3
+	}
 	switch o.sub {
 	case SubProvider:
-		f.fade(x, y, tr("откуда брать модель", "where the model comes from"), m.th.dim, a, false)
+		f.fade(x, y, trunc(tr("агент — сердце AUX: подбирает музыку под настроение,", "the agent is the heart of AUX: it picks music for your mood,"), w), m.th.text, a, false)
+		f.fade(x, y+1, trunc(tr("учится на твоих + и − и ведёт поток дальше", "learns from your + and − and keeps the stream going"), w), m.th.text, a, false)
+		f.fade(x, y+3, tr("откуда брать модель", "where the model comes from"), m.th.dim, a, false)
 		for i, pr := range providers {
 			if i == o.prov {
-				f.fade(x, y+1+i, "›", m.th.a1, a, true)
-				f.fade(x+2, y+1+i, pr.name, m.th.text, a, false)
+				f.fade(x, y+4+i, "›", m.th.a1, a, true)
+				f.fade(x+2, y+4+i, pr.name, m.th.text, a, false)
 			} else {
-				f.fade(x+2, y+1+i, pr.name, m.th.dim, a, false)
+				f.fade(x+2, y+4+i, pr.name, m.th.dim, a, false)
 			}
 			if len([]rune(pr.name))+len([]rune(pr.host))+4 <= w {
-				f.fade(x+w-len([]rune(pr.host)), y+1+i, pr.host, m.th.dim, a*0.7, false)
+				f.fade(x+w-len([]rune(pr.host)), y+4+i, pr.host, m.th.dim, a*0.7, false)
 			}
 		}
-		dx := key(x, y+1+len(providers), "↑↓", tr("выбрать", "choose"))
-		key(x+dx, y+1+len(providers), "enter", tr("дальше", "continue"))
-		return len(providers) + 3
+		dx := key(x, y+4+len(providers), "↑↓", tr("выбрать", "choose"), a)
+		dx += key(x+dx, y+4+len(providers), "enter", tr("дальше", "continue"), a)
+		key(x+dx, y+4+len(providers), "tab", tr("без агента", "skip the agent"), a*0.5)
+		return len(providers) + 6
 	case SubURL:
 		f.fade(x, y, tr("адрес OpenAI-совместимого API", "OpenAI-compatible API address"), m.th.dim, a, false)
 		f.fade(x, y+1, "›", m.th.a1, a, true)
@@ -1141,8 +1185,8 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 			need := tr("нужен адрес", "address needed")
 			f.fade(x+w-len([]rune(need)), y+1, need, m.th.bad, a, false)
 		}
-		dx := key(x, y+2, "enter", tr("дальше", "continue"))
-		key(x+dx, y+2, "esc", tr("назад", "back"))
+		dx := key(x, y+2, "enter", tr("дальше", "continue"), a)
+		key(x+dx, y+2, "esc", tr("назад", "back"), a)
 		return 4
 	case SubKey:
 		title, right := tr("ключ ", "key ")+p.name, p.keys
@@ -1167,8 +1211,8 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 			need := tr("нужен ключ", "key needed")
 			f.fade(x+w-len([]rune(need)), y+1, need, m.th.bad, a, false)
 		}
-		dx := key(x, y+2, "enter", tr("проверить", "verify"))
-		key(x+dx, y+2, "esc", tr("назад", "back"))
+		dx := key(x, y+2, "enter", tr("проверить", "verify"), a)
+		key(x+dx, y+2, "esc", tr("назад", "back"), a)
 		return 4
 	case SubLoading:
 		m.wave(f, x, y, tr("спрашиваю список моделей", "fetching models"), m.th.a1)
@@ -1203,8 +1247,8 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 			}
 			f.fade(x+2, y+2+k, id, idc, a, false)
 		}
-		dx := key(x, y+2+rows, "enter", tr("выбрать", "choose"))
-		key(x+dx, y+2+rows, "esc", tr("назад", "back"))
+		dx := key(x, y+2+rows, "enter", tr("выбрать", "choose"), a)
+		key(x+dx, y+2+rows, "esc", tr("назад", "back"), a)
 		return rows + 4
 	case SubEffort:
 		short := o.picked
@@ -1230,8 +1274,8 @@ func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 			tr("точнее, но дольше", "sharper, but slower"),
 		}[o.effort]
 		f.fade(x, y+3, ex, m.th.dim, a, false)
-		dx := key(x, y+4, "←→", tr("выбрать", "choose"))
-		key(x+dx, y+4, "enter", tr("готово", "done"))
+		dx := key(x, y+4, "←→", tr("выбрать", "choose"), a)
+		key(x+dx, y+4, "enter", tr("готово", "done"), a)
 		return 6
 	}
 	return 0

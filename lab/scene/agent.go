@@ -11,6 +11,8 @@ type scene struct {
 	m    *stage.Model
 	quit bool
 
+	mus *musicHost // the crate behind the music screen
+
 	pilot bool // old drive(): the demo walks its own flow, only with -demo
 
 	// the fake agent paced like the real one: a long think with progress lines, then one
@@ -25,18 +27,20 @@ type scene struct {
 	filterTyped int // how many filter runes the onboarding autopilot typed in
 }
 
-func newScene(firstRun, pilot bool) *scene {
+func newScene(firstRun, pilot bool, musicStyle string) *scene {
 	s := &scene{pilot: pilot, r: rand.New(rand.NewSource(7))} //nolint:gosec // G404: the demo narrates the same takes on every run
 	s.m = stage.New(stage.Options{
-		Onboard:  firstRun,
-		SelfPlay: true,
-		Hook:     s.hook,
-		OnAction: s.onAction,
-		Example:  demoQuery,
-		Chips:    demoChips,
-		Slots:    portionSize,
+		Onboard:    firstRun,
+		SelfPlay:   true,
+		Hook:       s.hook,
+		OnAction:   s.onAction,
+		Example:    demoQuery,
+		Chips:      demoChips,
+		Slots:      portionSize,
+		MusicStyle: musicStyle,
 	})
 	s.wait = 9
+	s.mus = newMusicHost(s)
 	return s
 }
 
@@ -46,10 +50,11 @@ func (s *scene) hook(dt float64) {
 		s.drive()
 	}
 	s.stream(dt)
+	s.mus.step(dt)
 }
 
 func (s *scene) onAction(a stage.Action) {
-	switch a.(type) {
+	switch a := a.(type) {
 	case stage.Query:
 		s.m.Ask(questions())
 	case stage.Answers:
@@ -68,6 +73,16 @@ func (s *scene) onAction(a stage.Action) {
 		// the demo backend has nothing to add once the needle drops
 	case stage.Quit:
 		s.quit = true
+	case stage.MusicLoad:
+		s.mus.load(a)
+	case stage.MusicPlay:
+		s.mus.play(a)
+	case stage.MusicAppend:
+		s.mus.append(a)
+	case stage.MusicSave:
+		s.mus.save(a)
+	case stage.MusicPlayAll:
+		s.mus.playAll(a)
 	case stage.Restart:
 		s.clock, s.said, s.emit = 0, 0, false
 		s.r = rand.New(rand.NewSource(7)) //nolint:gosec // G404: the demo narrates the same takes on every run

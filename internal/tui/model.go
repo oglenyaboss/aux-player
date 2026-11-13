@@ -38,8 +38,10 @@ type Model struct {
 	playerState player.State
 	stateCh     <-chan player.State
 
-	queueIDs    []string         // current playback queue IDs
-	queueTracks []provider.Track // full track objects for the agent's stream top-up
+	queueIDs     []string         // current playback queue IDs
+	queueTracks  []provider.Track // full track objects for the agent's stream top-up
+	recentTracks []provider.Track // tracks played this launch, newest first
+	saves        map[string]saveState
 
 	artHTTP          *http.Client
 	supportsArtColor func() bool
@@ -73,6 +75,7 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		supportsArtColor: art.SupportsColor,
 		appleLogin:       opts.AppleLogin,
 		lastfmConnected:  opts.LastfmConnected,
+		saves:            map[string]saveState{},
 	}
 	if plyr != nil {
 		m.stateCh = plyr.Subscribe()
@@ -188,6 +191,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		VibeAIAnswersMsg, VibeAISubmitMsg, VibeAICancelMsg, VibeAIActionMsg, VibeAILaterMsg, VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
+	case SaveTrackMsg, saveTrackDoneMsg:
+		cmds = append(cmds, m.handleSaveMsg(msg))
+
 	case tickMsg:
 		if m.errMsg != "" && time.Now().After(m.errExpiry) {
 			m.errMsg = ""
@@ -239,6 +245,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.appendLog(pp)
 		}
+		m.noteRecent(s)
 		m.vibeAIOnState(s)
 		cmds = append(cmds, m.vibeAIHandoff(s), m.vibeAIStreamTick(s))
 		m.playerState = s
