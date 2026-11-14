@@ -58,7 +58,7 @@ func TestTrackCardCovers(t *testing.T) {
 		}
 	}
 	if total == 0 || hit*2 < total {
-		t.Fatalf("обложка варианта 2: красных пикселей %d из %d", hit, total)
+		t.Fatalf("cover of option 2: %d red pixels of %d", hit, total)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestTrackCardLabels(t *testing.T) {
 	frame := stripANSI(m.View())
 	for _, s := range []string{"мечтательное", "уютное", "меланхолия", "плавное", "Frank Ocean", "Self Control", "a всё вместе"} {
 		if !strings.Contains(frame, s) {
-			t.Fatalf("кадр без %q:\n%s", s, frame)
+			t.Fatalf("frame without %q:\n%s", s, frame)
 		}
 	}
 }
@@ -85,7 +85,7 @@ func TestTrackCardRightEnter(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"2"}) {
-		t.Fatalf("ждали Raw [2], записано %v", r.acts)
+		t.Fatalf("expected Raw [2], recorded %v", r.acts)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestTrackCardDigit(t *testing.T) {
 	m.Key("3", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"3"}) {
-		t.Fatalf("ждали Raw [3], записано %v", r.acts)
+		t.Fatalf("expected Raw [3], recorded %v", r.acts)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestTrackCardAll(t *testing.T) {
 	m.Key("a", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"all"}) {
-		t.Fatalf("ждали Raw [all], записано %v", r.acts)
+		t.Fatalf("expected Raw [all], recorded %v", r.acts)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestTrackCardDefault(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"3"}) {
-		t.Fatalf("ждали Raw [3], записано %v", r.acts)
+		t.Fatalf("expected Raw [3], recorded %v", r.acts)
 	}
 }
 
@@ -138,18 +138,18 @@ func TestTrackCardNarrow(t *testing.T) {
 	frame := stripANSI(m.View())
 	for _, s := range []string{"мечтательное", "уютное", "меланхолия", "плавное"} {
 		if !strings.Contains(frame, s) {
-			t.Fatalf("кадр без %q:\n%s", s, frame)
+			t.Fatalf("frame without %q:\n%s", s, frame)
 		}
 	}
 	for line := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(line, "←→") && !strings.HasSuffix(strings.TrimRight(line, " "), "│") {
-			t.Fatalf("подсказка рвёт рамку карточки: %q", line)
+			t.Fatalf("the hint tears the card border: %q", line)
 		}
 	}
 	m.Key("2", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"2"}) {
-		t.Fatalf("ждали Raw [2], записано %v", r.acts)
+		t.Fatalf("expected Raw [2], recorded %v", r.acts)
 	}
 }
 
@@ -161,12 +161,12 @@ func TestTextCardIgnoresA(t *testing.T) {
 	m.Key("a", "")
 	steps(m, 2)
 	if n := len(recorded[Answers](r)); n != 0 {
-		t.Fatalf("`a` на текстовом вопросе отправил ответ: %v", r.acts)
+		t.Fatalf("`a` on a text question sent an answer: %v", r.acts)
 	}
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"1"}) {
-		t.Fatalf("ждали Raw [1], записано %v", r.acts)
+		t.Fatalf("expected Raw [1], recorded %v", r.acts)
 	}
 }
 
@@ -188,11 +188,11 @@ func TestLaterTrackToast(t *testing.T) {
 	f := m.render()
 	frame := stripANSI(f.String())
 	if !strings.Contains(frame, "дрим-поп") || !strings.Contains(frame, "соул") {
-		t.Fatalf("кадр без подписей вариантов:\n%s", frame)
+		t.Fatalf("frame without the option labels:\n%s", frame)
 	}
 	tt := m.laterToast()
 	if tt == nil {
-		t.Fatalf("вопрос-тост не найден")
+		t.Fatalf("the toast question is not found")
 	}
 	w := min(46, m.w-6)
 	x := m.w - w - 3 + int(tt.x.x)
@@ -209,12 +209,12 @@ func TestLaterTrackToast(t *testing.T) {
 		}
 	}
 	if total == 0 || hit*2 < total {
-		t.Fatalf("обложки в тосте: пиксельных ячеек %d из %d", hit, total)
+		t.Fatalf("covers in the toast: %d pixel cells of %d", hit, total)
 	}
 	m.Key("2", "")
 	picks := recorded[LaterPick](r)
 	if len(picks) != 1 || picks[0].N != 2 {
-		t.Fatalf("ждём один LaterPick{2}, записано %v", r.acts)
+		t.Fatalf("want one LaterPick{2}, recorded %v", r.acts)
 	}
 }
 
@@ -252,7 +252,7 @@ func TestScanSlotsOption(t *testing.T) {
 		}
 	}
 	if !sawDone || (m.Phase() != PhDone && m.Phase() != PhPlay) {
-		t.Fatalf("sawDone=%v фаза %v; ждём прохождение PhDone", sawDone, m.Phase())
+		t.Fatalf("sawDone=%v phase %v; want a pass through PhDone", sawDone, m.Phase())
 	}
 }
 
@@ -275,7 +275,7 @@ func TestTrackCardEscNone(t *testing.T) {
 	m.Key("esc", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"none"}) {
-		t.Fatalf("ждали Raw [none], записано %v", r.acts)
+		t.Fatalf("expected Raw [none], recorded %v", r.acts)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "мимо") {
 		t.Fatalf("кадр без «мимо»:\n%s", frame)
@@ -293,7 +293,7 @@ func TestTrackCardOwnWords(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"потише"}) {
-		t.Fatalf("ждали Raw [потише], записано %v", r.acts)
+		t.Fatalf("expected Raw [потише], recorded %v", r.acts)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "своё: потише") {
 		t.Fatalf("кадр без «своё: потише»:\n%s", frame)
@@ -311,12 +311,12 @@ func TestTrackCardTypingEscBack(t *testing.T) {
 	m.Key("esc", "")
 	steps(m, 2)
 	if n := len(recorded[Answers](r)); n != 0 {
-		t.Fatalf("esc в вводе ответил: %v", r.acts)
+		t.Fatalf("esc in the input answered: %v", r.acts)
 	}
 	m.Key("2", "2")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"2"}) {
-		t.Fatalf("ждали Raw [2], записано %v", r.acts)
+		t.Fatalf("expected Raw [2], recorded %v", r.acts)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestTrackCardTypingKeysAreText(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"a2"}) {
-		t.Fatalf("ждали Raw [a2], записано %v", r.acts)
+		t.Fatalf("expected Raw [a2], recorded %v", r.acts)
 	}
 }
 
@@ -346,12 +346,12 @@ func TestTrackCardTypingEmptyEnter(t *testing.T) {
 	m.Key("enter", "")
 	steps(m, 2)
 	if n := len(recorded[Answers](r)); n != 0 {
-		t.Fatalf("пустой enter ответил: %v", r.acts)
+		t.Fatalf("an empty enter answered: %v", r.acts)
 	}
 	m.Key("1", "1")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"1"}) {
-		t.Fatalf("ждали Raw [1], записано %v", r.acts)
+		t.Fatalf("expected Raw [1], recorded %v", r.acts)
 	}
 }
 
@@ -366,7 +366,7 @@ func TestTrackCardTypingPaste(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"тише и мягче"}) {
-		t.Fatalf("ждали Raw [тише и мягче], записано %v", r.acts)
+		t.Fatalf("expected Raw [тише и мягче], recorded %v", r.acts)
 	}
 }
 
@@ -381,13 +381,13 @@ func TestTrackCardTwoCardsNone(t *testing.T) {
 		m.Step(eventDT)
 	}
 	if m.qi != 1 {
-		t.Fatalf("вторая карточка не открылась: qi %d", m.qi)
+		t.Fatalf("the second card did not open: qi %d", m.qi)
 	}
 	steps(m, 1)
 	m.Key("1", "1")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[len(ans)-1].Raw, []string{"none", "1"}) {
-		t.Fatalf("ждали Raw [none 1], записано %v", r.acts)
+		t.Fatalf("expected Raw [none 1], recorded %v", r.acts)
 	}
 }
 
@@ -400,7 +400,7 @@ func TestTrackCardHint(t *testing.T) {
 	frame := stripANSI(m.View())
 	for _, s := range []string{"/ своё", "esc мимо"} {
 		if !strings.Contains(frame, s) {
-			t.Fatalf("кадр без %q:\n%s", s, frame)
+			t.Fatalf("frame without %q:\n%s", s, frame)
 		}
 	}
 	m.Key("/", "/")
@@ -410,7 +410,7 @@ func TestTrackCardHint(t *testing.T) {
 		t.Fatalf("кадр без «› тише»:\n%s", frame)
 	}
 	if strings.Contains(frame, "esc мимо") {
-		t.Fatalf("подсказка осталась во время ввода:\n%s", frame)
+		t.Fatalf("the hint stayed during input:\n%s", frame)
 	}
 }
 
@@ -425,13 +425,13 @@ func TestTrackCardNoneNoChosen(t *testing.T) {
 	m.Key("esc", "")
 	steps(m, 0.1)
 	if !m.ansFree {
-		t.Fatalf("мимо не выставил ansFree")
+		t.Fatalf("none did not set ansFree")
 	}
 	for i := 0; i < 300 && m.qi == 0; i++ {
 		m.Step(eventDT)
 	}
 	if m.qi != 1 || m.ansFree || m.cardTyping {
-		t.Fatalf("вторая карточка: qi %d ansFree %v cardTyping %v", m.qi, m.ansFree, m.cardTyping)
+		t.Fatalf("second card: qi %d ansFree %v cardTyping %v", m.qi, m.ansFree, m.cardTyping)
 	}
 }
 
@@ -443,6 +443,6 @@ func TestTrackCardEscTooEarly(t *testing.T) {
 	m.Key("esc", "")
 	steps(m, 2)
 	if n := len(recorded[Answers](r)); n != 0 {
-		t.Fatalf("esc до 0.7с ответил: %v", r.acts)
+		t.Fatalf("esc before 0.7 s answered: %v", r.acts)
 	}
 }

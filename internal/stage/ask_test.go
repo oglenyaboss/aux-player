@@ -15,7 +15,7 @@ func askCard(t *testing.T, m *Model, qs []Question) {
 		m.Step(eventDT)
 	}
 	if m.Phase() != PhAsk {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 }
 
@@ -26,7 +26,7 @@ func untilAnswers(t *testing.T, m *Model, r *recorder) []Answers {
 	}
 	ans := recorded[Answers](r)
 	if len(ans) == 0 {
-		t.Fatalf("Answers не отправлены, записано %v", r.acts)
+		t.Fatalf("Answers not sent, recorded %v", r.acts)
 	}
 	return ans
 }
@@ -41,7 +41,7 @@ func TestAskDefaultOption(t *testing.T) {
 	ans := untilAnswers(t, m, r)
 	last := ans[len(ans)-1]
 	if !eqStrings(last.Raw, []string{"3"}) {
-		t.Fatalf("ждали Raw [3], записано %v", last.Raw)
+		t.Fatalf("expected Raw [3], recorded %v", last.Raw)
 	}
 }
 
@@ -55,7 +55,7 @@ func TestAskDefaultClamp(t *testing.T) {
 	ans := untilAnswers(t, m, r)
 	last := ans[len(ans)-1]
 	if !eqStrings(last.Raw, []string{"3"}) {
-		t.Fatalf("ждали Raw [3], записано %v", last.Raw)
+		t.Fatalf("expected Raw [3], recorded %v", last.Raw)
 	}
 }
 
@@ -76,17 +76,17 @@ func TestAskLongTitle(t *testing.T) {
 		}
 	}
 	if line == "" {
-		t.Fatalf("строка с вопросом не найдена:\n%s", frame)
+		t.Fatalf("the line with the question is not found:\n%s", frame)
 	}
 	last := strings.LastIndex(line, "я")
 	if last < 0 {
-		t.Fatalf("в строке нет вопроса: %q", line)
+		t.Fatalf("there is no question in the line: %q", line)
 	}
 	if !strings.Contains(line[last:], "│") {
-		t.Fatalf("справа от вопроса нет границы карточки: %q", line)
+		t.Fatalf("there is no card border to the right of the question: %q", line)
 	}
 	if n := strings.Count(line, "я"); n > 58 {
-		t.Fatalf("вопрос не обрезан: %d символов я", n)
+		t.Fatalf("the question is not cut: %d characters", n)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestAskSecondRound(t *testing.T) {
 	m.Key("enter", "")
 	ans := untilAnswers(t, m, r)
 	if !eqStrings(ans[0].Raw, []string{"1"}) {
-		t.Fatalf("первый раунд: ждали Raw [1], записано %v", ans[0].Raw)
+		t.Fatalf("first round: expected Raw [1], recorded %v", ans[0].Raw)
 	}
 	m.Ask([]Question{{Title: "q2", Options: []string{"a", "b", "c"}}})
 	steps(m, 1)
@@ -109,11 +109,11 @@ func TestAskSecondRound(t *testing.T) {
 	}
 	ans = recorded[Answers](r)
 	if len(ans) != 2 {
-		t.Fatalf("ждали два Answers, записано %v", r.acts)
+		t.Fatalf("expected two Answers, recorded %v", r.acts)
 	}
 	last := ans[len(ans)-1]
 	if !eqStrings(last.Raw, []string{"3"}) || len(last.Raw) != 1 {
-		t.Fatalf("второй раунд: ждали Raw [3], записано %v", last.Raw)
+		t.Fatalf("second round: expected Raw [3], recorded %v", last.Raw)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestLaterExpires(t *testing.T) {
 	m.AskLater(Question{Title: "first", Options: []string{"x", "y"}})
 	steps(m, 47)
 	if m.laterToast() != nil {
-		t.Fatalf("вопрос-тост всё ещё висит")
+		t.Fatalf("the toast question still hangs")
 	}
 }
 
@@ -138,6 +138,6 @@ func TestLaterReplaces(t *testing.T) {
 	steps(m, 1)
 	m.AskLater(Question{Title: "second", Options: []string{"x", "y"}})
 	if got := m.laterToast(); got == nil || got.q.Title != "second" {
-		t.Fatalf("ждали вопрос second, записано %v", got)
+		t.Fatalf("expected the question second, recorded %v", got)
 	}
 }

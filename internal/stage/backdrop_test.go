@@ -45,7 +45,7 @@ func TestBackdropInPlayUsesCover(t *testing.T) {
 	m.trackT, m.t = 5, 3
 	b := cellCenter(backdropFrame(m))
 	if !(dist(a, b) > 0.02) {
-		t.Errorf("центр при треке 1 совпал с треком 0: dist=%v a=%v b=%v", dist(a, b), a, b)
+		t.Errorf("track 1 center matched track 0: dist=%v a=%v b=%v", dist(a, b), a, b)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestBackdropBrightnessBounded(t *testing.T) {
 	f := backdropFrame(m)
 	for i, c := range f.c {
 		if p := math.Max(c.bg.r, math.Max(c.bg.g, c.bg.b)); p > 0.21 {
-			t.Fatalf("ячейка %d: канал %v > 0.21 (bg %v)", i, p, c.bg)
+			t.Fatalf("cell %d: channel %v > 0.21 (bg %v)", i, p, c.bg)
 		}
 	}
 }
@@ -73,7 +73,7 @@ func TestBackdropDriftsOverTime(t *testing.T) {
 		best = math.Max(best, dist(a.c[i].bg, b.c[i].bg))
 	}
 	if !(best > 0.003) {
-		t.Errorf("фон статичен во времени: лучшая дистанция по ячейкам %v", best)
+		t.Errorf("backdrop is static in time: best per-cell distance %v", best)
 	}
 }
 
@@ -88,12 +88,12 @@ func TestBackdropTrackTransition(t *testing.T) {
 	m.trackT = 0
 	start := cellCenter(backdropFrame(m))
 	if !(dist(a, start) < 1e-6) {
-		t.Errorf("при trackT=0 центр ушёл от фона старого трека: dist=%v", dist(a, start))
+		t.Errorf("at trackT=0 center drifted from the old track backdrop: dist=%v", dist(a, start))
 	}
 	m.trackT = 1.4
 	done := cellCenter(backdropFrame(m))
 	if !(dist(done, end) < 1e-6) {
-		t.Errorf("при trackT=1.4 центр не дошёл до фона нового трека: dist=%v", dist(done, end))
+		t.Errorf("at trackT=1.4 center did not reach the new track backdrop: dist=%v", dist(done, end))
 	}
 }
 
@@ -103,12 +103,12 @@ func TestBackdropOutsidePlay(t *testing.T) {
 	m.SetSize(110, 32)
 	m.setPhase(PhIntro)
 	if m.queue != nil {
-		t.Fatalf("queue != nil до toPlay")
+		t.Fatalf("queue != nil before toPlay")
 	}
 	base := cellCenter(backdropFrame(m))
 	m.cur = 7
 	g := backdropFrame(m)
 	if d := dist(base, cellCenter(g)); d > 1e-12 {
-		t.Errorf("вне плеера фон меняется от m.cur: dist=%v", d)
+		t.Errorf("outside play the backdrop changes with m.cur: dist=%v", d)
 	}
 }

@@ -53,7 +53,7 @@ func TestWave3Rules(t *testing.T) {
 		{Artist: "Tyler, The Creator", Title: "See You Again", Album: "Flower Boy"},
 	} {
 		if e := m.eggOf(tr); e != nil {
-			t.Errorf("%s поймал пасхалку", tr.Album)
+			t.Errorf("%s caught the egg", tr.Album)
 		}
 	}
 }
@@ -66,22 +66,22 @@ func currentsLilac(c col) bool { return c.b > 0.25 && c.b > c.g+0.12 && c.r > c.
 func TestCurrentsStream(t *testing.T) {
 	m, f := wave3Frame(t, Options{}, curLetIt, 60, 0.3)
 	if n := count(m, f, currentsLilac); n > 200 {
-		t.Errorf("на 0.3 с уже %d пикселей потока", n)
+		t.Errorf("at 0.3 s already %d stream pixels", n)
 	}
 	m, f = wave3Frame(t, Options{}, curLetIt, 60, 8)
 	if n := count(m, f, currentsLilac); n < 3000 {
-		t.Errorf("%d пикселей потока, ждём линии по всему фону", n)
+		t.Errorf("%d stream pixels, want lines across the whole backdrop", n)
 	}
 	if n := count(m, f, func(c col) bool { return c.r > 0.85 && c.g < 0.45 && c.b < 0.3 }); n < 30 {
-		t.Errorf("%d пикселей красной линии", n)
+		t.Errorf("%d red line pixels", n)
 	}
 	if s := stripANSI(f.String()); !strings.Contains(s, "Creepin'") {
-		t.Errorf("очередь потеряла трек")
+		t.Errorf("queue lost the track")
 	}
 	a := f.String()
 	steps(m, 1)
 	if m.render().String() == a {
-		t.Errorf("поток стоит")
+		t.Errorf("the stream stands still")
 	}
 }
 
@@ -91,11 +91,11 @@ func igorPinkish(c col) bool { return c.r > 0.45 && c.r > c.g+0.1 && c.b > c.g+0
 func TestIgorDrain(t *testing.T) {
 	m, f := wave3Frame(t, Options{}, igorQuake, 20, 3)
 	if n := count(m, f, igorPinkish); n < 6000 {
-		t.Errorf("EARFQUAKE: %d розовых пикселей", n)
+		t.Errorf("EARFQUAKE: %d pink pixels", n)
 	}
 	m, f = wave3Frame(t, Options{}, igorFriend, 20, 3)
 	if n := count(m, f, igorPinkish); n > 500 {
-		t.Errorf("ARE WE STILL FRIENDS?: %d розовых пикселей, ждём выцветший", n)
+		t.Errorf("ARE WE STILL FRIENDS?: %d pink pixels, want it faded", n)
 	}
 }
 
@@ -103,13 +103,13 @@ func TestIgorDrain(t *testing.T) {
 func TestIgorCredit(t *testing.T) {
 	_, f := wave3Frame(t, Options{}, igorQuake, 20, 1.6)
 	if strings.Contains(stripANSI(f.String()), "ALL SONGS") {
-		t.Errorf("строка появилась целиком сразу")
+		t.Errorf("the line appeared all at once")
 	}
 	_, f = wave3Frame(t, Options{}, igorQuake, 20, 8)
 	s := stripANSI(f.String())
 	for _, w := range igorCredit {
 		if !strings.Contains(s, w) {
-			t.Errorf("нет %q", w)
+			t.Errorf("missing %q", w)
 		}
 	}
 }
@@ -121,7 +121,7 @@ func TestWave3NoEggs(t *testing.T) {
 	}
 	_, f = wave3Frame(t, Options{NoEggs: true}, igorQuake, 20, 8)
 	if strings.Contains(stripANSI(f.String()), "TYLER OKONMA") {
-		t.Errorf("IGOR NoEggs печатает строку")
+		t.Errorf("IGOR NoEggs prints the line")
 	}
 }
 

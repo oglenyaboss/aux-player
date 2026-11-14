@@ -45,12 +45,12 @@ func TestOnboardAppleAction(t *testing.T) {
 	m := liveOnboard(t, Options{}, r)
 	m.Key("enter", "")
 	if got := recorded[ConnectApple](r); len(got) != 1 {
-		t.Fatalf("ждём один ConnectApple, записано %v", r.acts)
+		t.Fatalf("want one ConnectApple, recorded %v", r.acts)
 	}
 	steps(m, 3)
 	step, _, _, ok := m.Onboarding()
 	if !ok || step != 0 {
-		t.Fatalf("без ответа хоста шаг не должен менять: step=%d ok=%v", step, ok)
+		t.Fatalf("without a host reply the step must not change: step=%d ok=%v", step, ok)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestOnboardAppleDone(t *testing.T) {
 	m.StepDone(0, "")
 	steps(m, 2)
 	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
-		t.Fatalf("после StepDone шаг %d (ok=%v), ждём 1", step, ok)
+		t.Fatalf("after StepDone step %d (ok=%v), want 1", step, ok)
 	}
 }
 
@@ -72,14 +72,14 @@ func TestOnboardAppleFail(t *testing.T) {
 	m.StepDone(0, "отказано")
 	steps(m, 0.5)
 	if step, _, _, ok := m.Onboarding(); !ok || step != 0 {
-		t.Fatalf("после ошибки шаг %d (ok=%v), ждём 0", step, ok)
+		t.Fatalf("after the error step %d (ok=%v), want 0", step, ok)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "отказано") {
-		t.Errorf("кадр без ошибки хоста:\n%s", frame)
+		t.Errorf("frame without the host error:\n%s", frame)
 	}
 	m.Key("x", "")
 	if frame := stripANSI(m.View()); strings.Contains(frame, "отказано") {
-		t.Errorf("ошибка осталась после клавиши:\n%s", frame)
+		t.Errorf("the error stayed after a key:\n%s", frame)
 	}
 }
 
@@ -97,11 +97,11 @@ func TestOnboardLoadModels(t *testing.T) {
 	m := liveOnboard(t, Options{}, r)
 	modelsStep(t, m)
 	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://openrouter.ai/api/v1", Key: "k1"}) {
-		t.Fatalf("ждём LoadModels{https://openrouter.ai/api/v1, k1}, записано %v", r.acts)
+		t.Fatalf("want LoadModels{https://openrouter.ai/api/v1, k1}, recorded %v", r.acts)
 	}
 	steps(m, 3)
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubLoading {
-		t.Fatalf("без ответа подшаг %d (ok=%v), ждём загрузку", sub, ok)
+		t.Fatalf("without a reply substep %d (ok=%v), want loading", sub, ok)
 	}
 }
 
@@ -113,14 +113,14 @@ func TestOnboardModelsReply(t *testing.T) {
 	steps(m, 1.5)
 	frame := stripANSI(m.View())
 	if !strings.Contains(frame, "a/x") {
-		t.Errorf("кадр без a/x:\n%s", frame)
+		t.Errorf("frame without a/x:\n%s", frame)
 	}
 	cnt := frameRow(frame, "с инструментами")
 	if cnt == "" {
-		t.Fatalf("кадр без строки счётчика:\n%s", frame)
+		t.Fatalf("frame without the counter row:\n%s", frame)
 	}
 	if !strings.Contains(cnt, "2") || !strings.Contains(cnt, "50") {
-		t.Errorf("счётчик без двух моделей из 50: %q", cnt)
+		t.Errorf("the counter without two models of 50: %q", cnt)
 	}
 }
 
@@ -130,10 +130,10 @@ func TestOnboardModelsFail(t *testing.T) {
 	modelsStep(t, m)
 	m.Models(nil, 0, "ключ не подошёл")
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
-		t.Fatalf("после ошибки подшаг %d (ok=%v), ждём ключ", sub, ok)
+		t.Fatalf("after the error substep %d (ok=%v), want the key", sub, ok)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "ключ не подошёл") {
-		t.Errorf("кадр без ошибки:\n%s", frame)
+		t.Errorf("frame without the error:\n%s", frame)
 	}
 }
 
@@ -147,14 +147,14 @@ func TestOnboardCustomURL(t *testing.T) {
 		m.Key("down", "")
 	}
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubProvider {
-		t.Fatalf("подшаг %d (ok=%v), ждём провайдера", sub, ok)
+		t.Fatalf("substep %d (ok=%v), want the provider", sub, ok)
 	}
 	m.Key("enter", "")
 	m.Key("", "localhost:8080/v1")
 	m.Key("enter", "")
 	m.Key("enter", "")
 	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://localhost:8080/v1"}) {
-		t.Fatalf("ждём LoadModels{https://localhost:8080/v1}, записано %v", r.acts)
+		t.Fatalf("want LoadModels{https://localhost:8080/v1}, recorded %v", r.acts)
 	}
 }
 
@@ -170,17 +170,17 @@ func TestOnboardSetup(t *testing.T) {
 	m.Key("tab", "")
 	setups := recorded[Setup](r)
 	if len(setups) != 1 {
-		t.Fatalf("ждём ровно один Setup, записано %v", r.acts)
+		t.Fatalf("want exactly one Setup, recorded %v", r.acts)
 	}
 	want := Setup{Lang: "ru", URL: "https://openrouter.ai/api/v1", Key: "k1", Model: "a/x", Effort: "high", Lastfm: false}
 	if setups[0] != want {
-		t.Fatalf("Setup %+v, ждём %+v", setups[0], want)
+		t.Fatalf("Setup %+v, want %+v", setups[0], want)
 	}
 	for i := 0; i < 600 && m.Phase() != PhIntro; i++ {
 		m.Step(eventDT)
 	}
 	if m.Phase() != PhIntro {
-		t.Fatalf("после иглы фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("after the needle phase %v, want PhIntro", m.Phase())
 	}
 }
 
@@ -189,10 +189,10 @@ func TestOnboardConnectedCascade(t *testing.T) {
 	m := liveOnboard(t, Options{Connected: [3]bool{true, false, true}}, r)
 	steps(m, 0.6)
 	if got := recorded[ConnectApple](r); len(got) != 0 {
-		t.Fatalf("от подключённого шага действия не ждём, записано %v", r.acts)
+		t.Fatalf("no action is expected from a connected step, recorded %v", r.acts)
 	}
 	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
-		t.Fatalf("текущий шаг %d (ok=%v), ждём 1", step, ok)
+		t.Fatalf("current step %d (ok=%v), want 1", step, ok)
 	}
 }
 
@@ -207,14 +207,14 @@ func TestOnboardConnectedAll(t *testing.T) {
 		m.Step(eventDT)
 	}
 	if m.Phase() != PhIntro {
-		t.Fatalf("без клавиш онбординг не вышел: фаза %v", m.Phase())
+		t.Fatalf("the onboarding did not finish without keys: phase %v", m.Phase())
 	}
 	setups := recorded[Setup](r)
 	if len(setups) != 1 {
-		t.Fatalf("ждём один Setup, записано %v", r.acts)
+		t.Fatalf("want one Setup, recorded %v", r.acts)
 	}
 	if setups[0].URL != "" || setups[0].Key != "" || setups[0].Model != "" {
-		t.Fatalf("Setup %+v, ждём пустые URL/Key/Model", setups[0])
+		t.Fatalf("Setup %+v, want empty URL/Key/Model", setups[0])
 	}
 }
 
@@ -225,14 +225,14 @@ func TestNoEggs(t *testing.T) {
 	m.JumpPlay(sky, 0, 0)
 	steps(m, 8)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "†") {
-		t.Errorf("кадр пасхалки без ползунка †:\n%s", frame)
+		t.Errorf("egg frame without the † knob:\n%s", frame)
 	}
 	m = New(Options{NoEggs: true})
 	m.SetSize(110, 32)
 	m.JumpPlay(sky, 0, 0)
 	steps(m, 8)
 	if frame := stripANSI(m.View()); strings.Contains(frame, "†") {
-		t.Errorf("кадр без пасхалок с ползунком †:\n%s", frame)
+		t.Errorf("frame without eggs with the † knob:\n%s", frame)
 	}
 }
 
@@ -241,12 +241,12 @@ func TestOnboardConnectedWaitsLang(t *testing.T) {
 	m.SetSize(110, 32)
 	steps(m, obReady+2)
 	if step, _, _, _ := m.Onboarding(); step != 0 {
-		t.Fatalf("шаг %d до выбора языка, ждём 0", step)
+		t.Fatalf("step %d before the language choice, want 0", step)
 	}
 	m.Key("enter", "")
 	steps(m, 0.6)
 	if step, _, _, _ := m.Onboarding(); step != 1 {
-		t.Fatalf("шаг %d после выбора языка, ждём 1", step)
+		t.Fatalf("step %d after the language choice, want 1", step)
 	}
 }
 
@@ -256,14 +256,14 @@ func TestOnboardLastfmSkipWhileWaiting(t *testing.T) {
 	steps(m, 1.5)
 	m.Key("enter", "")
 	if got := recorded[ConnectLastfm](r); len(got) != 1 {
-		t.Fatalf("ждём ConnectLastfm, записано %v", r.acts)
+		t.Fatalf("want ConnectLastfm, recorded %v", r.acts)
 	}
 	m.Key("tab", "")
 	m.StepDone(2, "")
 	steps(m, 0.2)
 	setups := recorded[Setup](r)
 	if len(setups) != 1 || setups[0].Lastfm {
-		t.Fatalf("ждём один Setup без Last.fm, записано %v", r.acts)
+		t.Fatalf("want one Setup without Last.fm, recorded %v", r.acts)
 	}
 }
 
@@ -275,7 +275,7 @@ func TestOnboardModelsCursorOnRec(t *testing.T) {
 	steps(m, 1.5)
 	m.Key("enter", "")
 	if m.ob.picked != "b/y" {
-		t.Fatalf("выбрана %q, ждём рекомендуемую b/y", m.ob.picked)
+		t.Fatalf("picked %q, want the recommended b/y", m.ob.picked)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestOnboardNarrowNoPanic(t *testing.T) {
 		toAgent(m)
 		m.Key("enter", "")
 		if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
-			t.Fatalf("%dx%d: подшаг %d (ok=%v), ждём ключ", sz[0], sz[1], sub, ok)
+			t.Fatalf("%dx%d: substep %d (ok=%v), want the key", sz[0], sz[1], sub, ok)
 		}
 		m.SetSize(sz[0], sz[1])
 		m.View()
@@ -299,7 +299,7 @@ func TestOnboardNarrowNoPanic(t *testing.T) {
 		}
 		m.Key("enter", "")
 		if _, sub, _, ok := m.Onboarding(); !ok || sub != SubURL {
-			t.Fatalf("%dx%d: подшаг %d (ok=%v), ждём адрес", sz[0], sz[1], sub, ok)
+			t.Fatalf("%dx%d: substep %d (ok=%v), want the address", sz[0], sz[1], sub, ok)
 		}
 		m.SetSize(sz[0], sz[1])
 		m.View()
@@ -315,7 +315,7 @@ func TestOnboardFilterCase(t *testing.T) {
 		steps(m, 1.5)
 		m.Key("", q)
 		if frame := stripANSI(m.View()); !strings.Contains(frame, "Meta-Llama/Llama-3.1-70B") {
-			t.Errorf("фильтр %q: кадр без Meta-Llama/Llama-3.1-70B:\n%s", q, frame)
+			t.Errorf("filter %q: frame without Meta-Llama/Llama-3.1-70B:\n%s", q, frame)
 		}
 	}
 }
@@ -328,11 +328,11 @@ func TestOnboardLoadingEsc(t *testing.T) {
 	steps(m, 1)
 	m.Key("esc", "")
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
-		t.Fatalf("после esc подшаг %d (ok=%v), ждём ключ", sub, ok)
+		t.Fatalf("after esc substep %d (ok=%v), want the key", sub, ok)
 	}
 	m.Key("enter", "")
 	if got := recorded[LoadModels](r); len(got) != 2 {
-		t.Fatalf("ждём два LoadModels, записано %v", r.acts)
+		t.Fatalf("want two LoadModels, recorded %v", r.acts)
 	}
 }
 
@@ -345,7 +345,7 @@ func TestOnboardLoadingEscLateReply(t *testing.T) {
 	m.Models([]ModelInfo{{ID: "a/x"}}, 1, "")
 	steps(m, 2)
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubKey {
-		t.Fatalf("запоздалый ответ: подшаг %d (ok=%v), ждём ключ", sub, ok)
+		t.Fatalf("late reply: substep %d (ok=%v), want the key", sub, ok)
 	}
 }
 
@@ -355,14 +355,14 @@ func TestIntroTabSettings(t *testing.T) {
 	m := New(Options{OnAction: r.on})
 	m.SetSize(110, 32)
 	if !runTo(m, PhIntro, 300) {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	m.Key("tab", "")
 	if got := recorded[Settings](r); len(got) != 1 {
-		t.Fatalf("ждём один Settings, записано %v", r.acts)
+		t.Fatalf("want one Settings, recorded %v", r.acts)
 	}
 	if m.Input() != "" {
-		t.Fatalf("Input()=%q, ждём пустое поле", m.Input())
+		t.Fatalf("Input()=%q, want an empty field", m.Input())
 	}
 }
 
@@ -373,11 +373,11 @@ func TestOnboardReopen(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
 	if !runTo(m, PhIntro, 300) {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	m.Onboard([3]bool{true, false, false})
 	if m.Phase() != PhOnboard {
-		t.Fatalf("фаза %v, ждём PhOnboard", m.Phase())
+		t.Fatalf("phase %v, want PhOnboard", m.Phase())
 	}
 	for i := 0; i < 400 && m.ob.t < obReady; i++ {
 		m.Step(eventDT)
@@ -386,7 +386,7 @@ func TestOnboardReopen(t *testing.T) {
 	m.Key("enter", "") // the eggs switch
 	steps(m, 3)
 	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
-		t.Fatalf("после настроек шаг %d (ok=%v), ждём 1", step, ok)
+		t.Fatalf("after the settings step %d (ok=%v), want 1", step, ok)
 	}
 }
 
@@ -397,7 +397,7 @@ func TestIntroSettingsHint(t *testing.T) {
 	m.SetSize(110, 32)
 	steps(m, 3)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "tab settings") {
-		t.Errorf("кадр без подсказки tab settings:\n%s", frame)
+		t.Errorf("frame without the tab settings hint:\n%s", frame)
 	}
 }
 
@@ -409,7 +409,7 @@ func TestOnboardPasteKey(t *testing.T) {
 	m.Paste("  sk-or-v1-abc\n")
 	m.Key("enter", "")
 	if got := recorded[LoadModels](r); len(got) != 1 || got[0].Key != "sk-or-v1-abc" {
-		t.Fatalf("ждём LoadModels с ключом sk-or-v1-abc, записано %v", r.acts)
+		t.Fatalf("want LoadModels with the key sk-or-v1-abc, recorded %v", r.acts)
 	}
 }
 
@@ -417,11 +417,11 @@ func TestIntroPaste(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(110, 32)
 	if !runTo(m, PhIntro, 300) {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	m.Paste("lofi\nна вечер\t")
 	if m.Input() != "lofi на вечер" {
-		t.Fatalf("Input()=%q, ждём «lofi на вечер»", m.Input())
+		t.Fatalf("Input()=%q, want «lofi на вечер»", m.Input())
 	}
 }
 
@@ -432,7 +432,7 @@ func TestOnboardPasteFilter(t *testing.T) {
 	steps(m, 1.5)
 	m.Paste("llama\n")
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "Meta-Llama/Llama-3.1-70B") || strings.Contains(frame, "a/x") {
-		t.Fatalf("вставка в фильтр не сработала:\n%s", frame)
+		t.Fatalf("the paste into the filter did not work:\n%s", frame)
 	}
 }
 
@@ -450,25 +450,25 @@ func TestLastfmAskKeys(t *testing.T) {
 	frame := stripANSI(m.View())
 	for _, want := range []string{"API key", "secret", "k1"} {
 		if !strings.Contains(frame, want) {
-			t.Fatalf("кадр без %q:\n%s", want, frame)
+			t.Fatalf("frame without %q:\n%s", want, frame)
 		}
 	}
 	m.Key("enter", "")
 	if got := recorded[ConnectLastfm](r); len(got) != 0 {
-		t.Fatalf("enter на ключе не должен подключать, записано %v", r.acts)
+		t.Fatalf("enter on the key must not connect, recorded %v", r.acts)
 	}
 	m.Paste("s3cret\n")
 	frame = stripANSI(m.View())
 	if strings.Contains(frame, "s3cret") {
-		t.Fatalf("secret виден открытым текстом:\n%s", frame)
+		t.Fatalf("the secret is visible in plain text:\n%s", frame)
 	}
 	if !strings.Contains(frame, "••••••") {
-		t.Fatalf("secret не замаскирован:\n%s", frame)
+		t.Fatalf("the secret is not masked:\n%s", frame)
 	}
 	m.Key("enter", "")
 	want := []ConnectLastfm{{Key: "k1", Secret: "s3cret"}}
 	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
-		t.Fatalf("записано %v, ждём %v", got, want)
+		t.Fatalf("recorded %v, want %v", got, want)
 	}
 }
 
@@ -477,19 +477,19 @@ func TestLastfmAskKeysEmpty(t *testing.T) {
 	m := lastfmKeys(t, "", r)
 	m.Key("enter", "")
 	if got := recorded[ConnectLastfm](r); len(got) != 0 {
-		t.Fatalf("пустой key не должен подключать, записано %v", r.acts)
+		t.Fatalf("an empty key must not connect, recorded %v", r.acts)
 	}
 	m.Key("", "k")
 	m.Key("enter", "")
 	m.Key("enter", "")
 	if got := recorded[ConnectLastfm](r); len(got) != 0 {
-		t.Fatalf("пустой secret не должен подключать, записано %v", r.acts)
+		t.Fatalf("an empty secret must not connect, recorded %v", r.acts)
 	}
 	m.Key("", "s")
 	m.Key("enter", "")
 	want := []ConnectLastfm{{Key: "k", Secret: "s"}}
 	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
-		t.Fatalf("записано %v, ждём %v", got, want)
+		t.Fatalf("recorded %v, want %v", got, want)
 	}
 }
 
@@ -499,7 +499,7 @@ func TestLastfmAskKeysEsc(t *testing.T) {
 	m.Key("enter", "")
 	m.Key("esc", "")
 	if got := recorded[Quit](r); len(got) != 0 {
-		t.Fatalf("esc на secret не должен выходить, записано %v", r.acts)
+		t.Fatalf("esc on the secret must not quit, recorded %v", r.acts)
 	}
 	m.Key("backspace", "")
 	m.Key("", "2")
@@ -508,7 +508,7 @@ func TestLastfmAskKeysEsc(t *testing.T) {
 	m.Key("enter", "")
 	want := []ConnectLastfm{{Key: "k2", Secret: "s"}}
 	if got := recorded[ConnectLastfm](r); !reflect.DeepEqual(got, want) {
-		t.Fatalf("записано %v, ждём %v", got, want)
+		t.Fatalf("recorded %v, want %v", got, want)
 	}
 }
 
@@ -520,17 +520,17 @@ func TestLastfmAskKeysRetry(t *testing.T) {
 	m.Key("enter", "")
 	first := recorded[ConnectLastfm](r)
 	if len(first) != 1 {
-		t.Fatalf("ждём один ConnectLastfm, записано %v", r.acts)
+		t.Fatalf("want one ConnectLastfm, recorded %v", r.acts)
 	}
 	m.StepDone(2, "bad key")
 	steps(m, 0.2)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "bad key") {
-		t.Fatalf("кадр без ошибки:\n%s", frame)
+		t.Fatalf("frame without the error:\n%s", frame)
 	}
 	m.Key("enter", "")
 	got := recorded[ConnectLastfm](r)
 	if len(got) != 2 || got[1] != got[0] {
-		t.Fatalf("записано %v, ждём повтор %v", got, first[0])
+		t.Fatalf("recorded %v, want a retry %v", got, first[0])
 	}
 }
 
@@ -541,7 +541,7 @@ func TestLastfmAskKeysSkip(t *testing.T) {
 	steps(m, 1)
 	setups := recorded[Setup](r)
 	if len(setups) != 1 || setups[0].Lastfm {
-		t.Fatalf("ждём один Setup без Last.fm, записано %v", r.acts)
+		t.Fatalf("want one Setup without Last.fm, recorded %v", r.acts)
 	}
 }
 
@@ -553,7 +553,7 @@ func liveSettings(t *testing.T, o Options, r *recorder) *Model {
 	m := New(o)
 	m.SetSize(110, 32)
 	if !runTo(m, PhIntro, 300) {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	m.Onboard([3]bool{true, false, false})
 	for i := 0; i < 400 && m.ob.t < obReady; i++ {
@@ -570,12 +570,12 @@ func TestSettingsEggsRow(t *testing.T) {
 	r := &recorder{}
 	m := liveSettings(t, Options{}, r)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "Пасхалки") {
-		t.Errorf("кадр настроек без «Пасхалки»:\n%s", frame)
+		t.Errorf("settings frame without «Пасхалки»:\n%s", frame)
 	}
 
 	m = liveOnboard(t, Options{}, r)
 	if frame := stripANSI(m.View()); strings.Contains(frame, "Пасхалки") || strings.Contains(frame, "Easter eggs") {
-		t.Errorf("кадр первого запуска с пасхалками:\n%s", frame)
+		t.Errorf("first-run frame with eggs:\n%s", frame)
 	}
 }
 
@@ -586,12 +586,12 @@ func TestSettingsEggsOff(t *testing.T) {
 	m.Key("right", "")
 	m.Key("enter", "")
 	if eggs := recorded[Eggs](r); len(eggs) != 1 || eggs[0] != (Eggs{On: false}) {
-		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+		t.Fatalf("want Eggs{On: false}, recorded %v", r.acts)
 	}
 	m.JumpPlay(wlrSky, 0, 0)
 	steps(m, 8)
 	if frame := stripANSI(m.View()); strings.Contains(frame, "†") {
-		t.Errorf("кадр с пасхалкой после выключения:\n%s", frame)
+		t.Errorf("frame with an egg after switching off:\n%s", frame)
 	}
 }
 
@@ -601,7 +601,7 @@ func TestSettingsEggsOn(t *testing.T) {
 	m := liveSettings(t, Options{NoEggs: true}, r)
 	m.Key("enter", "")
 	if eggs := recorded[Eggs](r); len(eggs) != 1 || eggs[0] != (Eggs{On: false}) {
-		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+		t.Fatalf("want Eggs{On: false}, recorded %v", r.acts)
 	}
 
 	m.Onboard([3]bool{true, false, false})
@@ -612,12 +612,12 @@ func TestSettingsEggsOn(t *testing.T) {
 	m.Key("left", "")
 	m.Key("enter", "")
 	if eggs := recorded[Eggs](r); len(eggs) != 2 || eggs[1] != (Eggs{On: true}) {
-		t.Fatalf("ждём второй Eggs{On: true}, записано %v", r.acts)
+		t.Fatalf("want a second Eggs{On: true}, recorded %v", r.acts)
 	}
 	m.JumpPlay(wlrSky, 0, 0)
 	steps(m, 8)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "†") {
-		t.Errorf("кадр без пасхалки после включения:\n%s", frame)
+		t.Errorf("frame without an egg after switching on:\n%s", frame)
 	}
 }
 
@@ -627,21 +627,21 @@ func TestSettingsEggsGate(t *testing.T) {
 	m := liveSettings(t, Options{}, r)
 	steps(m, 1)
 	if got := recorded[ConnectApple](r); len(got) != 0 {
-		t.Fatalf("Apple Music подключился сам: %v", r.acts)
+		t.Fatalf("Apple Music connected by itself: %v", r.acts)
 	}
 	if step, _, _, ok := m.Onboarding(); !ok || step != 0 {
-		t.Fatalf("шаг %d (ok=%v) до выбора пасхалок, ждём 0", step, ok)
+		t.Fatalf("step %d (ok=%v) before the eggs choice, want 0", step, ok)
 	}
 	if frame := stripANSI(m.View()); strings.Contains(frame, "подключено") {
-		t.Fatalf("Apple Music закрылся сам:\n%s", frame)
+		t.Fatalf("Apple Music closed by itself:\n%s", frame)
 	}
 	m.Key("enter", "")
 	steps(m, 1)
 	if step, _, _, ok := m.Onboarding(); !ok || step != 1 {
-		t.Fatalf("шаг %d (ok=%v) после пасхалок, ждём 1", step, ok)
+		t.Fatalf("step %d (ok=%v) after the eggs, want 1", step, ok)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "подключено") {
-		t.Fatalf("кадр без «подключено»:\n%s", frame)
+		t.Fatalf("frame without «подключено»:\n%s", frame)
 	}
 }
 
@@ -652,10 +652,10 @@ func TestSettingsEggsStatus(t *testing.T) {
 	m.Key("enter", "")
 	frame := stripANSI(m.View())
 	if got := recorded[ConnectApple](r); len(got) != 0 {
-		t.Fatalf("enter на пасхалках не должен открывать Apple Music: %v", r.acts)
+		t.Fatalf("enter on the eggs must not open Apple Music: %v", r.acts)
 	}
 	if !strings.Contains(frame, "Пасхалки") || !strings.Contains(frame, "вкл") {
-		t.Fatalf("кадр без «Пасхалки»/«вкл»:\n%s", frame)
+		t.Fatalf("frame without «Пасхалки»/«вкл»:\n%s", frame)
 	}
 }
 
@@ -667,7 +667,7 @@ func TestSettingsEggsTheme(t *testing.T) {
 	m.JumpPlay(wlrSky, 0, 0)
 	steps(m, 2)
 	if m.to.a1 != hex(0xe3242b) {
-		t.Fatalf("a1=%v, ждём пасхальную #e3242b", m.to.a1)
+		t.Fatalf("a1=%v, want the egg colour #e3242b", m.to.a1)
 	}
 	m.Onboard([3]bool{true, false, false})
 	for i := 0; i < 400 && m.ob.t < obReady; i++ {
@@ -677,10 +677,10 @@ func TestSettingsEggsTheme(t *testing.T) {
 	m.Key("right", "")
 	m.Key("enter", "")
 	if got := recorded[Eggs](r); len(got) != 1 || got[0] != (Eggs{On: false}) {
-		t.Fatalf("ждём Eggs{On: false}, записано %v", r.acts)
+		t.Fatalf("want Eggs{On: false}, recorded %v", r.acts)
 	}
 	m.JumpPlay(wlrSky, 0, 0)
 	if m.to.a1 == hex(0xe3242b) {
-		t.Fatalf("a1=%v, тема пасхалки вернулась из кэша", m.to.a1)
+		t.Fatalf("a1=%v, the egg theme came back from the cache", m.to.a1)
 	}
 }

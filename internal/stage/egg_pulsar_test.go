@@ -24,7 +24,7 @@ func TestPulsarRule(t *testing.T) {
 	m := New(Options{})
 	e := m.eggOf(Track{ID: "jd-up", Artist: "Joy Division", Title: "Disorder", Album: "Unknown Pleasures (2019 Digital Master)", Dur: 209})
 	if e == nil {
-		t.Fatal("egg nil на треке альбома")
+		t.Fatal("egg is nil on the album track")
 	}
 	if e.theme != &pulsarTheme {
 		t.Errorf("theme %v, want &pulsarTheme", e.theme)
@@ -33,7 +33,7 @@ func TestPulsarRule(t *testing.T) {
 		t.Error("over nil")
 	}
 	if e.theme == nil || e.theme.bg != hex(0x03070c) || e.theme.a1 != hex(0xf0f0f0) {
-		t.Error("цвета темы не из брифа")
+		t.Error("the theme colours are not from the brief")
 	}
 	if e := m.eggOf(Track{ID: "jd-closer", Artist: "Joy Division", Title: "Disorder", Album: "Closer", Dur: 209}); e != nil {
 		t.Errorf("Closer: egg %+v, want nil", *e)
@@ -58,7 +58,7 @@ func TestPulsarTrace(t *testing.T) {
 				continue
 			}
 			if c.ch == '━' || c.ch == '─' || c.ch == '●' {
-				t.Errorf("(%d, %d): %q обычный бар не стёрт", x, row, c.ch)
+				t.Errorf("(%d, %d): %q the plain bar is not erased", x, row, c.ch)
 			}
 			if isDot && row == b.Min.Y {
 				dots++
@@ -66,7 +66,7 @@ func TestPulsarTrace(t *testing.T) {
 		}
 	}
 	if dots < bw/2 {
-		t.Errorf("в строке бара %d ячеек с точками, нужно не меньше %d", dots, bw/2)
+		t.Errorf("%d cells with dots in the bar row, at least %d needed", dots, bw/2)
 	}
 	up1, up2 := false, false
 	for x := b.Min.X; x < b.Max.X; x++ {
@@ -78,22 +78,22 @@ func TestPulsarTrace(t *testing.T) {
 		}
 	}
 	if !up1 {
-		t.Error("в строке Min.Y-1 нет точек")
+		t.Error("there are no dots in the Min.Y-1 row")
 	}
 	if !up2 {
-		t.Error("в строке Min.Y-2 нет точек")
+		t.Error("there are no dots in the Min.Y-2 row")
 	}
 	if x := f.at(b.Min.X, b.Min.Y); x == nil || x.fg.lum() <= 0.8 {
 		t.Errorf("(Min.X, Min.Y) fg %+v lum %v, want lum > 0.8", x.fg, x.fg.lum())
 	}
 	c, dot := pulsarCell(f, b.Max.X-1, b.Min.Y)
 	if !dot {
-		t.Error("(Max.X-1, Min.Y) нет точек")
+		t.Error("(Max.X-1, Min.Y) has no dots")
 	}
 	have, want := c.fg.q(), hex(0x7d868f).q()
 	for i, d := range have {
 		if d2 := d - want[i]; d2 < -3 || d2 > 3 {
-			t.Errorf("(Max.X-1, Min.Y) fg %v от #%02x по каналу %d, want в пределах 0.03", have, 0x7d868f, i)
+			t.Errorf("(Max.X-1, Min.Y) fg %v of #%02x in channel %d, want within 0.03", have, 0x7d868f, i)
 		}
 	}
 }
@@ -104,7 +104,7 @@ func TestPulsarFlat(t *testing.T) {
 	for _, row := range []int{b.Min.Y - 2, b.Min.Y - 1} {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			if c, dot := pulsarCell(f, x, row); c != nil && dot {
-				t.Errorf("(%d, %d): точка %04X над ровной линией", x, row, c.ch)
+				t.Errorf("(%d, %d): dot %04X above a flat line", x, row, c.ch)
 			}
 		}
 	}
@@ -113,7 +113,7 @@ func TestPulsarFlat(t *testing.T) {
 		_, dots = pulsarCell(f, x, b.Min.Y)
 	}
 	if !dots {
-		t.Error("в строке бара нет точек")
+		t.Error("there are no dots in the bar row")
 	}
 }
 
@@ -142,10 +142,10 @@ func TestPulsarBeat(t *testing.T) {
 		}
 	}
 	if trough < 0 {
-		t.Fatal("не дошагал до фазы в [0.65, 0.75]")
+		t.Fatal("did not reach the phase within [0.65, 0.75]")
 	}
 	if !(peak > trough+0.1) {
-		t.Errorf("peak %v, trough %v, нужно peak > trough + 0.1", peak, trough)
+		t.Errorf("peak %v, trough %v, peak > trough + 0.1 needed", peak, trough)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestPulsarNewPulse(t *testing.T) {
 	m2, f2 := pulsarFrame(t, Options{}, 67, 10)
 	b1, b2 := m1.barBox, m2.barBox
 	if b1.Min.Y != b2.Min.Y || b1.Dx() != b2.Dx() {
-		t.Fatalf("разная геометрия бара: %v и %v", b1, b2)
+		t.Fatalf("different bar geometry: %v and %v", b1, b2)
 	}
 	same := true
 	for x := b1.Min.X; x < b1.Max.X && same; x++ {
@@ -165,7 +165,7 @@ func TestPulsarNewPulse(t *testing.T) {
 		}
 	}
 	if same {
-		t.Errorf("профиль строки бара не изменился: pos %#v -> %#v", m1.pos, m2.pos)
+		t.Errorf("the bar row profile did not change: pos %#v -> %#v", m1.pos, m2.pos)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestPulsarBeforeReveal(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("до раскрытия в строке бара нет обычного бара")
+		t.Error("before the reveal there is no plain bar in the bar row")
 	}
 }
 
@@ -190,7 +190,7 @@ func TestPulsarMini(t *testing.T) {
 	m.JumpPlay([]Track{disorder}, 0, 50)
 	steps(m, 10)
 	if !m.geom().mini {
-		t.Fatal("60x12 не мини-раскладка")
+		t.Fatal("60x12 is not the mini layout")
 	}
 	f := m.render()
 	b := m.barBox
@@ -201,12 +201,12 @@ func TestPulsarMini(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("в мини в строке бара нет обычного бара")
+		t.Error("in the mini layout there is no plain bar in the bar row")
 	}
 	for row := b.Min.Y - 1; row <= b.Min.Y; row++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			if c, dot := pulsarCell(f, x, row); c != nil && dot {
-				t.Errorf("mini (%d, %d): точка брайля %04X", x, row, c.ch)
+				t.Errorf("mini (%d, %d): Braille dot %04X", x, row, c.ch)
 			}
 		}
 	}
@@ -222,12 +222,12 @@ func TestPulsarNoEggs(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("NoEggs: в строке бара нет ━/─")
+		t.Error("NoEggs: there is no ━/─ in the bar row")
 	}
 	for row := b.Min.Y - 2; row <= b.Min.Y; row++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			if c, dot := pulsarCell(f, x, row); c != nil && dot {
-				t.Errorf("NoEggs (%d, %d): точка брайля %04X", x, row, c.ch)
+				t.Errorf("NoEggs (%d, %d): Braille dot %04X", x, row, c.ch)
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func TestPulsarSizes(t *testing.T) {
 				func() {
 					defer func() {
 						if p := recover(); p != nil {
-							t.Errorf("%dx%d pos %v secs %v: паника %v", size[0], size[1], pos, secs, p)
+							t.Errorf("%dx%d pos %v secs %v: panic %v", size[0], size[1], pos, secs, p)
 						}
 					}()
 					m := New(Options{SelfPlay: true})

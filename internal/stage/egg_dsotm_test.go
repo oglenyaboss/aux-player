@@ -29,7 +29,7 @@ func dsotmPulse(t *testing.T, m *Model, hit func() bool) float64 {
 		steps(m, 1.0/30)
 	}
 	if !hit() {
-		t.Fatal("фаза кардиограммы не наступила за 120 кадров")
+		t.Fatal("the cardiogram phase did not arrive within 120 frames")
 	}
 	f := m.render()
 	hx := m.barBox.Min.X + int(m.pos/m.curTrack().Dur*float64(m.barBox.Dx()))
@@ -54,20 +54,20 @@ func TestDsotmTriggers(t *testing.T) {
 	m := New(Options{})
 	e := m.eggOf(dsotmMoney)
 	if e == nil {
-		t.Fatal("egg nil на альбомном правиле")
+		t.Fatal("egg is nil on the album rule")
 	}
 	if e.theme != &dsotmTheme || e.over == nil {
-		t.Errorf("theme is d sotm прошивка: %p over present %v", e.theme, e.over != nil)
+		t.Errorf("theme is the dsotm one: %p over present %v", e.theme, e.over != nil)
 	}
 	if e := m.eggOf(Track{Artist: "Pink Floyd", Title: "Time", Album: "Animals", Dur: 300}); e != nil {
-		t.Errorf("трек с другого альбома: egg %+v, want nil", e)
+		t.Errorf("a track from another album: egg %+v, want nil", e)
 	}
 	if e := m.eggOf(Track{Artist: "Roger Waters", Title: "Money", Album: "The Dark Side of the Moon", Dur: 380}); e != nil {
-		t.Errorf("другой артист, тот же альбом: egg %+v, want nil", e)
+		t.Errorf("another artist, the same album: egg %+v, want nil", e)
 	}
 	e = m.eggOf(Track{Artist: "Pink Floyd", Title: "Speak to Me", Album: "Pulse", Dur: 250})
 	if e == nil || e.over == nil || e.theme != nil {
-		t.Errorf("Speak to Me на другом альбоме: over %v theme %v", e != nil && e.over != nil, e != nil && e.theme != nil)
+		t.Errorf("Speak to Me on another album: over %v theme %v", e != nil && e.over != nil, e != nil && e.theme != nil)
 	}
 }
 
@@ -83,10 +83,10 @@ func TestDsotmSteady(t *testing.T) {
 	for b, rg := range ranges {
 		h, s, v := toHSV(f.pixelAt(m.barBox.Min.X+1, dsotmPrRow(m, b)))
 		if v <= 0.1 {
-			t.Errorf("полоса %d: h %.1f s %.2f v %.2f — пиксель пуст", b, h, s, v)
+			t.Errorf("band %d: h %.1f s %.2f v %.2f — the pixel is empty", b, h, s, v)
 		}
 		if !(h >= rg[0] && h < rg[1] || b == 0 && h >= 0 && h <= 10) {
-			t.Errorf("полоса %d: h %.1f, want %.0f…%.0f", b, h, rg[0], rg[1])
+			t.Errorf("band %d: h %.1f, want %.0f…%.0f", b, h, rg[0], rg[1])
 		}
 	}
 	// 3. unplayed columns keep the single dim pixel in the middle band.
@@ -94,28 +94,28 @@ func TestDsotmSteady(t *testing.T) {
 	dim := float64(0x33) / 255
 	c := f.pixelAt(x, dsotmPrRow(m, 2))
 	if math.Abs(c.r-dim) > 0.03 || math.Abs(c.g-dim) > 0.03 || math.Abs(c.b-dim) > 0.03 {
-		t.Errorf("несыгранная середина: %+v", c)
+		t.Errorf("unplayed middle: %+v", c)
 	}
 	if c := f.pixelAt(x, dsotmPrRow(m, 0)); c.lum() >= 0.1 {
-		t.Errorf("сверху несыгранной колонки полоса светит: lum %.2f", c.lum())
+		t.Errorf("above the unplayed column the band glows: lum %.2f", c.lum())
 	}
 	// 4. the plain bar glyphs and the knob are gone from the bar row.
 	for x := m.barBox.Min.X; x < m.barBox.Max.X; x++ {
 		if c := f.at(x, m.barBox.Min.Y); c != nil {
 			switch c.ch {
 			case '━', '─', '●':
-				t.Errorf("обычный бар продрался в колонке %d: %q", x, c.ch)
+				t.Errorf("the plain bar broke through in column %d: %q", x, c.ch)
 			}
 		}
 	}
 	// 5. the prism: white edge on top, dark inside below.
 	hx := m.barBox.Min.X + int(m.pos/380*float64(m.barBox.Dx()))
 	if c := f.pixelAt(hx, dsotmPrRow(m, 0)); c.lum() <= 0.85 {
-		t.Errorf("верх призмы тёмный: lum %.2f", c.lum())
+		t.Errorf("the top of the prism is dark: lum %.2f", c.lum())
 	}
 	for dx := -1; dx <= 1; dx++ {
 		if c := f.pixelAt(hx+dx, dsotmPrRow(m, 3)); c.lum() >= 0.05 {
-			t.Errorf("внутри призмы светло: lum %.2f", c.lum())
+			t.Errorf("it is bright inside the prism: lum %.2f", c.lum())
 		}
 	}
 	// 7. after the reveal the beam runs from the screen edge to the cover.
@@ -123,7 +123,7 @@ func TestDsotmSteady(t *testing.T) {
 	by := g.cy*2 + int(0.49*float64(g.ch*2))
 	for _, x := range []int{2, g.cx - 1} {
 		if c := f.pixelAt(x, by); c.lum() <= 0.9 {
-			t.Errorf("луч в x=%d не дошёл: lum %.2f", x, c.lum())
+			t.Errorf("the beam did not reach x=%d: lum %.2f", x, c.lum())
 		}
 	}
 	// 8. the bridge colours the gap next to the cover only after 6.8 s.
@@ -134,15 +134,15 @@ func TestDsotmSteady(t *testing.T) {
 		}
 	}
 	if hits < 4 {
-		t.Errorf("мост: %d цветных пикселей, want ≥ 4", hits)
+		t.Errorf("bridge: %d coloured pixels, want ≥ 4", hits)
 	}
 	_, f3 := eggTrackFrame(t, Options{}, dsotmMoney, 100, 3)
 	// 6. before the reveal the beam is out and the plain bar is still there.
 	if !dsotmBarPlain(f3, m) {
-		t.Errorf("до раскрытия на баре нет ━ или ─")
+		t.Errorf("before the reveal the bar has no ━ or ─")
 	}
 	if c := f3.pixelAt(2, by); c.lum() >= 0.5 {
-		t.Errorf("луч до 6 с: lum %.2f", c.lum())
+		t.Errorf("beam before 6 s: lum %.2f", c.lum())
 	}
 	// 8. the bridge colours the gap next to the cover only after 6.8 s.
 	hits = 0
@@ -152,7 +152,7 @@ func TestDsotmSteady(t *testing.T) {
 		}
 	}
 	if hits != 0 {
-		t.Errorf("мост до 6.8 с: %d цветных пикселей", hits)
+		t.Errorf("bridge before 6.8 s: %d coloured pixels", hits)
 	}
 	// 9. the title is near-white light: nothing saturated stays bright.
 	for py := m.titleBox.Min.Y; py < m.titleBox.Max.Y; py++ {
@@ -160,7 +160,7 @@ func TestDsotmSteady(t *testing.T) {
 			c := f.pixelAt(px, py)
 			if c.lum() > 0.3 {
 				if _, s, _ := toHSV(c); s >= 0.15 {
-					t.Errorf("заголовок цветной в %d,%d: s %.2f", px, py, s)
+					t.Errorf("the title is coloured at %d,%d: s %.2f", px, py, s)
 				}
 			}
 		}
@@ -187,7 +187,7 @@ func TestDsotmSpeakHeart(t *testing.T) {
 	peak := dsotmPulse(t, m, func() bool { return dsotmPeak(m) })
 	trough := dsotmPulse(t, m, func() bool { return dsotmTrough(m) })
 	if peak <= trough+1.0 {
-		t.Errorf("сердце молчит: peak %.2f, trough %.2f + 1.0", peak, trough)
+		t.Errorf("the heart is silent: peak %.2f, trough %.2f + 1.0", peak, trough)
 	}
 }
 
@@ -198,14 +198,14 @@ func TestDsotmEclipseHeart(t *testing.T) {
 	peak := dsotmPulse(t, m, func() bool { return dsotmPeak(m) })
 	trough := dsotmPulse(t, m, func() bool { return dsotmTrough(m) })
 	if peak-trough >= 0.3 {
-		t.Errorf("до тридцати секунд сердце стучит: peak %.2f − trough %.2f ≥ 0.3", peak, trough)
+		t.Errorf("before thirty seconds the heart beats: peak %.2f − trough %.2f ≥ 0.3", peak, trough)
 	}
 
 	m, _ = eggTrackFrame(t, Options{}, ec, 100, 10)
 	peak = dsotmPulse(t, m, func() bool { return dsotmPeak(m) })
 	trough = dsotmPulse(t, m, func() bool { return dsotmTrough(m) })
 	if peak <= trough+1.0 {
-		t.Errorf("финальное сердце молчит: peak %.2f, trough %.2f + 1.0", peak, trough)
+		t.Errorf("the final heart is silent: peak %.2f, trough %.2f + 1.0", peak, trough)
 	}
 }
 
@@ -217,10 +217,10 @@ func TestDsotmMini(t *testing.T) {
 	steps(m, 10)
 	f := m.render()
 	if !m.geom().mini {
-		t.Fatal("мини-раскладка не включилась в 60x12")
+		t.Fatal("the mini layout did not turn on at 60x12")
 	}
 	if !dsotmBarPlain(f, m) {
-		t.Errorf("в мини-раскладке лента съела обычный бар")
+		t.Errorf("in the mini layout the ribbon ate the plain bar")
 	}
 }
 
@@ -230,10 +230,10 @@ func TestDsotmNoEggs(t *testing.T) {
 	g := m.geom()
 	by := g.cy*2 + int(0.49*float64(g.ch*2))
 	if !dsotmBarPlain(f, m) {
-		t.Errorf("без пасхалок бар скрыт")
+		t.Errorf("without eggs the bar is hidden")
 	}
 	if c := f.pixelAt(2, by); c.lum() >= 0.5 {
-		t.Errorf("без пасхалок луч светится: lum %.2f", c.lum())
+		t.Errorf("without eggs the beam glows: lum %.2f", c.lum())
 	}
 }
 
@@ -268,6 +268,6 @@ func TestDsotmPrismOverQueue(t *testing.T) {
 	f := m.render()
 	hx := m.barBox.Min.X + int(m.pos/dsotmMoney.Dur*float64(m.barBox.Dx()))
 	if c := f.pixelAt(hx, (m.barBox.Min.Y-1)*2); c.lum() <= 0.85 {
-		t.Errorf("вершина призмы над очередью: lum %.2f, want > 0.85", c.lum())
+		t.Errorf("the top of the prism over the queue: lum %.2f, want > 0.85", c.lum())
 	}
 }

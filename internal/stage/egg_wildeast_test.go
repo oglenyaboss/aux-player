@@ -59,11 +59,11 @@ func TestWERule(t *testing.T) {
 		}
 	}
 	if e := m.eggOf(Track{Artist: "SALUKI", Title: "SORRY I'M WORKING ON THE WILD EA$T", Album: "Sorry I'M Working On the Wild Ea$T - Single"}); e != nil {
-		t.Errorf("сингл поймал пасхалку")
+		t.Errorf("the single caught the egg")
 	}
 }
 
-// Titles fold to the table whatever Apple does with case, commas and ё.
+// Titles fold to the table whatever Apple does with case, commas and the diaeresis on the letter e.
 func TestWEKeys(t *testing.T) {
 	for title, mode := range map[string]weMode{
 		"THE GOOD, THE BAD & THE UGLY":    weBang,
@@ -75,7 +75,7 @@ func TestWEKeys(t *testing.T) {
 		"Wild Ea$T": weStill,
 	} {
 		if got := weTracks[weKey(title)].mode; got != mode {
-			t.Errorf("%q: режим %d, ждём %d", title, got, mode)
+			t.Errorf("%q: mode %d, want %d", title, got, mode)
 		}
 	}
 }
@@ -84,7 +84,7 @@ func TestWEKeys(t *testing.T) {
 func TestWEFilm(t *testing.T) {
 	m, f := weFrame(t, Options{}, weTitle, 40, 6)
 	if n := count(m, f, func(c col) bool { return weChroma(c) > 0.03 }); n > 0 {
-		t.Errorf("%d цветных пикселей на ч/б плёнке", n)
+		t.Errorf("%d coloured pixels on the black-and-white film", n)
 	}
 }
 
@@ -98,14 +98,14 @@ func TestWECamera(t *testing.T) {
 	a := weCamera(m, weNow(m))
 	steps(m, 2)
 	if weCamera(m, weNow(m)) <= a {
-		t.Fatalf("камера стоит во время игры")
+		t.Fatalf("the camera stands still during playback")
 	}
 	m.Now(weTitle.Key(), m.pos, false)
 	steps(m, 0.2)
 	b := weCamera(m, weNow(m))
 	steps(m, 2)
 	if weCamera(m, weNow(m)) != b {
-		t.Errorf("на паузе камера плывёт")
+		t.Errorf("the camera drifts on pause")
 	}
 }
 
@@ -115,14 +115,14 @@ func TestWEBang(t *testing.T) {
 	m, _ := weFrame(t, Options{}, weHaha, 30, 4)
 	phi, amp := weBeat(m, weNow(m))
 	if amp < 0.9 {
-		t.Fatalf("толпа не качает: amp %.2f", amp)
+		t.Fatalf("the crowd does not sway: amp %.2f", amp)
 	}
 	if want := m.pos * 95.3 / 60; phi != want {
-		t.Errorf("бит %.3f, ждём %.3f", phi, want)
+		t.Errorf("beat %.3f, want %.3f", phi, want)
 	}
 	m, _ = weFrame(t, Options{}, weTitle, 30, 4)
 	if _, amp := weBeat(m, weNow(m)); amp != 0 {
-		t.Errorf("на спокойном треке толпа качает")
+		t.Errorf("on a calm track the crowd sways")
 	}
 }
 
@@ -146,7 +146,7 @@ func TestWEStage(t *testing.T) {
 		return dark
 	}
 	if top, bottom := band(0, H/4), band(H*3/4, H); top > 0 || bottom < m.w*(H/4)/3 {
-		t.Errorf("тёмных пикселей вверху %d, внизу %d; ждём силуэты толпы внизу", top, bottom)
+		t.Errorf("dark pixels at the top %d, at the bottom %d; want crowd silhouettes at the bottom", top, bottom)
 	}
 	frame := func() (s float64) {
 		for py := H / 2; py < H; py++ {
@@ -159,24 +159,24 @@ func TestWEStage(t *testing.T) {
 	a := frame()
 	m.pos += 30 / tr.bpm
 	if frame() == a {
-		t.Errorf("толпа не прыгает")
+		t.Errorf("the crowd does not jump")
 	}
 	m = New(Options{})
 	m.JumpPlay([]Track{weTitle}, 0, 30)
 	if weStanding(weNow(m)) {
-		t.Errorf("на спокойном треке толпа стоит")
+		t.Errorf("on a calm track the crowd stands")
 	}
 }
 
-// Lighters on Огней: flames on the raised hands, the only colour on the film.
+// Lighters on weOgney: flames on the raised hands, the only colour on the film.
 func TestWELighters(t *testing.T) {
 	m, f := weFrame(t, Options{}, weOgney, 60, 4)
 	if warm := count(m, f, func(c col) bool { return c.r > c.b+0.25 && c.r > 0.4 }); warm < 20 {
-		t.Errorf("%d пикселей огоньков", warm)
+		t.Errorf("%d lighter pixels", warm)
 	}
 	m, f = weFrame(t, Options{}, weHaha, 60, 4)
 	if n := count(m, f, func(c col) bool { return weChroma(c) > 0.03 }); n > 0 {
-		t.Errorf("на HAHAHA %d цветных пикселей", n)
+		t.Errorf("%d coloured pixels on HAHAHA", n)
 	}
 }
 
@@ -197,7 +197,7 @@ func TestWEWake(t *testing.T) {
 	early := dark()
 	m.JumpPlay([]Track{weKreem}, 0, 70)
 	if late := dark(); early > 0 || late < m.w/4 {
-		t.Errorf("силуэтов внизу: в начале %d, к концу %d", early, late)
+		t.Errorf("silhouettes at the bottom: %d at the start, %d by the end", early, late)
 	}
 }
 
@@ -221,13 +221,13 @@ func TestWESnow(t *testing.T) {
 	}
 	f, n := flakes()
 	if n < 60 {
-		t.Errorf("%d снежинок", n)
+		t.Errorf("%d snowflakes", n)
 	}
 	if s := stripANSI(f.String()); !strings.Contains(s, "буквы") {
-		t.Errorf("снег лёг на буквы")
+		t.Errorf("snow landed on the letters")
 	}
 	if mode := weNow(m).mode; mode != weSnow {
-		t.Errorf("режим %d, ждём снег", mode)
+		t.Errorf("mode %d, want snow", mode)
 	}
 }
 
@@ -235,24 +235,24 @@ func TestWESnow(t *testing.T) {
 func TestWEGlugicir(t *testing.T) {
 	_, f := weFrame(t, Options{}, weGlugi, 150, 3)
 	if s := stripANSI(f.String()); strings.Contains(s, "Д И К О Й") {
-		t.Errorf("мантра до 2:41")
+		t.Errorf("mantra before 2:41")
 	}
 	_, f = weFrame(t, Options{}, weGlugi, 165, 3)
 	if s := stripANSI(f.String()); !strings.Contains(s, "О С Т А В А Й С Я   Д И К О Й") {
-		t.Errorf("нет мантры на 2:48")
+		t.Errorf("no mantra at 2:48")
 	}
 	_, f = weFrame(t, Options{}, weGlugi, 195, 2)
 	if s := stripANSI(f.String()); !strings.Contains(s, "Д И К И Й   В О С Т О К") {
-		t.Errorf("нет последних слов на 3:17")
+		t.Errorf("no last words at 3:17")
 	}
 	m, _ := weFrame(t, Options{}, weGlugi, 140, 3)
 	if g := weGrain(m, weNow(m)); g > 0.2 {
-		t.Errorf("после бриджа зерно не улеглось: %.2f", g)
+		t.Errorf("the grain has not settled after the bridge: %.2f", g)
 	}
 	a := weCamera(m, weNow(m))
 	steps(m, 3)
 	if weCamera(m, weNow(m)) != a {
-		t.Errorf("после бриджа камера плывёт")
+		t.Errorf("the camera drifts after the bridge")
 	}
 }
 
@@ -260,11 +260,11 @@ func TestWEGlugicir(t *testing.T) {
 func TestWEFinale(t *testing.T) {
 	m, f := weFrame(t, Options{}, weWitchT, 40, 6)
 	if n := count(m, f, func(c col) bool { return c.b > c.r+0.02 }); n < 4000 {
-		t.Errorf("Ведьма: %d холодных пикселей", n)
+		t.Errorf("The witch: %d cold pixels", n)
 	}
 	m, f = weFrame(t, Options{}, weHomeT, 40, 8)
 	if n := count(m, f, func(c col) bool { return c.r > c.b+0.05 }); n < 6000 {
-		t.Errorf("Home: %d тёплых пикселей", n)
+		t.Errorf("Home: %d warm pixels", n)
 	}
 	m = New(Options{})
 	m.SetSize(160, 45)
@@ -276,21 +276,21 @@ func TestWEFinale(t *testing.T) {
 		}
 	}
 	if lit < 10 || lit > m.w/2 {
-		t.Errorf("Moskvichka: фары освещают %d столбцов", lit)
+		t.Errorf("Moskvichka: the headlights light %d columns", lit)
 	}
 }
 
 func TestWEReadable(t *testing.T) {
 	_, f := weFrame(t, Options{}, weHaha, 30, 6)
 	if !strings.Contains(stripANSI(f.String()), "Creepin'") {
-		t.Errorf("очередь потеряла трек")
+		t.Errorf("queue lost the track")
 	}
 }
 
 func TestWENoEggs(t *testing.T) {
 	_, f := weFrame(t, Options{NoEggs: true}, weGlugi, 165, 3)
 	if strings.Contains(stripANSI(f.String()), "Д И К О Й") {
-		t.Errorf("NoEggs печатает мантру")
+		t.Errorf("NoEggs prints the mantra")
 	}
 }
 

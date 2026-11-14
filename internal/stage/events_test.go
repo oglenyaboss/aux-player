@@ -57,11 +57,11 @@ func TestQueryAction(t *testing.T) {
 	m.Key("enter", "")
 	qs := recorded[Query](r)
 	if len(qs) != 1 || qs[0].Text != "abc" {
-		t.Fatalf("ждём один Query{Text:\"abc\"}, записано %v", r.acts)
+		t.Fatalf("want one Query{Text:\"abc\"}, recorded %v", r.acts)
 	}
 }
 
-// #3: while the agent says nothing, the orb stays up with "агент думает".
+// #3: while the agent says nothing, the orb stays up with the agent-thinking line.
 func TestOrbHoldsUntilAgentSpeaks(t *testing.T) {
 	t.Cleanup(func() { SetLang("ru") })
 	SetLang("ru")
@@ -71,11 +71,11 @@ func TestOrbHoldsUntilAgentSpeaks(t *testing.T) {
 	m.Key("enter", "")
 	steps(m, 10)
 	if p := m.Phase(); p != PhLaunch {
-		t.Fatalf("фаза %v, ждём PhLaunch", p)
+		t.Fatalf("phase %v, want PhLaunch", p)
 	}
 	frame := stripANSI(m.View())
 	if !strings.Contains(frame, "агент думает") || strings.Contains(frame, "Порция 1") {
-		t.Errorf("ждём орб «агент думает» без сетки скана:\n%s", frame)
+		t.Errorf("want the «агент думает» orb without the scan grid:\n%s", frame)
 	}
 }
 
@@ -89,10 +89,10 @@ func TestOrbShowsProgress(t *testing.T) {
 	m.Progress("читаю про Blonde")
 	steps(m, 0.5)
 	if p := m.Phase(); p != PhLaunch {
-		t.Fatalf("фаза %v, ждём PhLaunch", p)
+		t.Fatalf("phase %v, want PhLaunch", p)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "читаю про Blonde") {
-		t.Errorf("кадр без статуса:\n%s", frame)
+		t.Errorf("frame without the status:\n%s", frame)
 	}
 }
 
@@ -106,10 +106,10 @@ func TestOrbLeavesForQuestion(t *testing.T) {
 	m.Ask([]Question{{Title: "q1", Options: []string{"a", "b"}}})
 	steps(m, 0.15)
 	if p := m.Phase(); p != PhLaunch {
-		t.Fatalf("фаза %v, ждём PhLaunch, пока орб гаснет", p)
+		t.Fatalf("phase %v, want PhLaunch while the orb fades", p)
 	}
 	if !runTo(m, PhAsk, 15) {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 }
 
@@ -122,10 +122,10 @@ func TestOrbKeepsIntroForEarlyQuestion(t *testing.T) {
 	m.Ask([]Question{{Title: "q1", Options: []string{"a", "b"}}})
 	steps(m, 1.8)
 	if p := m.Phase(); p != PhLaunch {
-		t.Fatalf("фаза %v, ждём PhLaunch до конца вступления", p)
+		t.Fatalf("phase %v, want PhLaunch until the intro ends", p)
 	}
 	if !runTo(m, PhAsk, 30) {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 }
 
@@ -138,7 +138,7 @@ func TestOrbLeavesForPick(t *testing.T) {
 	steps(m, 3)
 	m.Candidate(Track{Artist: "Solo", Title: "One"}, true, "")
 	if !runTo(m, PhScan, 15) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
+		t.Fatalf("phase %v, want PhScan", m.Phase())
 	}
 }
 
@@ -156,7 +156,7 @@ func TestAnswersRaw(t *testing.T) {
 		m.Step(eventDT)
 	}
 	if m.Phase() != PhAsk {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 	steps(m, 0.8)
 	m.Key("down", "")
@@ -175,10 +175,10 @@ func TestAnswersRaw(t *testing.T) {
 	}
 	ans := recorded[Answers](r)
 	if len(ans) != 1 || len(ans[0].Raw) != 2 || ans[0].Raw[0] != "2" || ans[0].Raw[1] != "4" {
-		t.Fatalf("ждём Answers{Raw:[2 4]}, записано %v", r.acts)
+		t.Fatalf("want Answers{Raw:[2 4]}, recorded %v", r.acts)
 	}
 	if p := m.Phase(); p != PhScan {
-		t.Fatalf("фаза %v, ждём PhScan", p)
+		t.Fatalf("phase %v, want PhScan", p)
 	}
 }
 
@@ -201,7 +201,7 @@ func TestPortionShrinks(t *testing.T) {
 		}
 	}
 	if !sawDone || (m.Phase() != PhDone && m.Phase() != PhPlay) {
-		t.Fatalf("sawDone=%v, фаза %v; ждём прохождение PhDone и финиш в PhDone или PhPlay", sawDone, m.Phase())
+		t.Fatalf("sawDone=%v, phase %v; want a pass through PhDone and a finish in PhDone or PhPlay", sawDone, m.Phase())
 	}
 }
 
@@ -215,14 +215,14 @@ func TestNoSelfPlayPassesThrough(t *testing.T) {
 	m.JumpPlay(tracks, 0, 0)
 	m.Step(eventDT)
 	if m.Key("n", "") {
-		t.Errorf("n без SelfPlay отдан хосту, а экран его взял")
+		t.Errorf("n without SelfPlay went to the host, but the screen took it")
 	}
 	if len(r.acts) != 0 {
-		t.Fatalf("ждём пустой набор действий, записано %v", r.acts)
+		t.Fatalf("want an empty action set, recorded %v", r.acts)
 	}
 	want := []string{tracks[1].Key(), tracks[2].Key()}
 	if got := m.Ahead(); !eqStrings(got, want) {
-		t.Fatalf("Ahead()=%v, ждём %v (трек не должен смениться)", got, want)
+		t.Fatalf("Ahead()=%v, want %v (the track must not change)", got, want)
 	}
 }
 
@@ -237,16 +237,16 @@ func TestRateDownAfterGesture(t *testing.T) {
 	m.Key("-", "")
 	steps(m, 0.2)
 	if rs := recorded[Rate](r); len(rs) != 0 {
-		t.Fatalf("через 0.2с уже есть Rate: %v", r.acts)
+		t.Fatalf("Rate is already there after 0.2 s: %v", r.acts)
 	}
 	steps(m, 0.3)
 	rs := recorded[Rate](r)
 	if len(rs) != 1 || rs[0].Up {
-		t.Fatalf("через 0.5с ждём Rate{Up:false}, записано %v", r.acts)
+		t.Fatalf("after 0.5 s want Rate{Up:false}, recorded %v", r.acts)
 	}
 	want := []string{tracks[1].Key(), tracks[2].Key()}
 	if got := m.Ahead(); !eqStrings(got, want) {
-		t.Fatalf("Ahead()=%v, ждём %v (трек не должен смениться)", got, want)
+		t.Fatalf("Ahead()=%v, want %v (the track must not change)", got, want)
 	}
 }
 
@@ -259,11 +259,11 @@ func TestSelfPlaySkip(t *testing.T) {
 	m.JumpPlay(tracks, 0, 0)
 	m.Key("n", "")
 	if len(r.acts) != 0 {
-		t.Fatalf("при SelfPlay действий не ждём: %v", r.acts)
+		t.Fatalf("with SelfPlay no actions are expected: %v", r.acts)
 	}
 	want := []string{tracks[2].Key()}
 	if got := m.Ahead(); !eqStrings(got, want) {
-		t.Fatalf("Ahead()=%v, ждём %v", got, want)
+		t.Fatalf("Ahead()=%v, want %v", got, want)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestSetAheadOrder(t *testing.T) {
 	m.SetAhead([]string{tracks[2].Key(), tracks[1].Key()})
 	want := []string{tracks[2].Key(), tracks[1].Key()}
 	if got := m.Ahead(); !eqStrings(got, want) {
-		t.Fatalf("Ahead()=%v, ждём %v", got, want)
+		t.Fatalf("Ahead()=%v, want %v", got, want)
 	}
 }
 
@@ -292,7 +292,7 @@ func TestSayAction(t *testing.T) {
 	m.Key("enter", "")
 	says := recorded[Say](r)
 	if len(says) != 1 || says[0].Text != "x" {
-		t.Fatalf(" ждём Say{Text:\"x\"}, записано %v", r.acts)
+		t.Fatalf(" want Say{Text:\"x\"}, recorded %v", r.acts)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestLaterPick(t *testing.T) {
 	m.Key("2", "")
 	picks := recorded[LaterPick](r)
 	if len(picks) != 1 || picks[0].N != 2 {
-		t.Fatalf("ждём один LaterPick{2}, записано %v", r.acts)
+		t.Fatalf("want one LaterPick{2}, recorded %v", r.acts)
 	}
 }
 
@@ -326,7 +326,7 @@ func TestArrowsDoNotRate(t *testing.T) {
 	}
 	steps(m, 1)
 	if rs := recorded[Rate](r); len(rs) != 0 {
-		t.Fatalf("стрелки оценили трек: %v", r.acts)
+		t.Fatalf("the arrows rated the track: %v", r.acts)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestPasteReply(t *testing.T) {
 	m.Paste("без вокала\n")
 	m.Key("enter", "")
 	if got := recorded[Say](r); len(got) != 1 || got[0].Text != "без вокала" {
-		t.Fatalf("ждём один Say «без вокала», записано %v", r.acts)
+		t.Fatalf("want one Say «без вокала», recorded %v", r.acts)
 	}
 }
 
@@ -350,18 +350,18 @@ func TestEscNeverQuits(t *testing.T) {
 	m := liveOnboard(t, Options{}, r)
 	m.Key("esc", "")
 	if _, _, _, ok := m.Onboarding(); !ok {
-		t.Fatal("esc закрыл онбординг")
+		t.Fatal("esc closed the onboarding")
 	}
 
 	m = New(Options{OnAction: r.on})
 	m.SetSize(110, 32)
 	if !runTo(m, PhIntro, 300) {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	m.Key("", "lofi")
 	m.Key("esc", "")
 	if m.Input() != "" {
-		t.Fatalf("esc на стартовом экране не очистил поле: %q", m.Input())
+		t.Fatalf("esc on the start screen did not clear the field: %q", m.Input())
 	}
 
 	m.JumpPlay(threeTracks(), 0, 0)
@@ -369,13 +369,13 @@ func TestEscNeverQuits(t *testing.T) {
 	m.Key("?", "?")
 	m.Key("esc", "")
 	if m.help {
-		t.Fatal("esc в плеере не закрыл подсказку")
+		t.Fatal("esc in the player did not close the hint")
 	}
 	if q := recorded[Quit](r); len(q) != 0 {
-		t.Fatalf("esc вышел из приложения: %v", r.acts)
+		t.Fatalf("esc quit the app: %v", r.acts)
 	}
 	m.Key("q", "q")
 	if q := recorded[Quit](r); len(q) != 1 {
-		t.Fatalf("q в плеере должен выходить: %v", r.acts)
+		t.Fatalf("q in the player must quit: %v", r.acts)
 	}
 }
