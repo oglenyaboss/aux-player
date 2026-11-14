@@ -81,6 +81,9 @@ func NewSession(library, favorites []Song, size int) *Session {
 }
 
 func (s *Session) SetPlan(p Plan) {
+	if p.Playlist == nil && s.plan.Playlist != nil {
+		p.Playlist = s.plan.Playlist
+	}
 	s.plan = p
 	if p.Playlist != nil {
 		s.Size = p.Playlist.Size

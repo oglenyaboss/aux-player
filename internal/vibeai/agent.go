@@ -145,7 +145,7 @@ const setPlanSchema = `{
     },
     "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Artist names that must not be in the selection. Artists only, not albums and not tracks."},
     "from_favorites": {"type": "boolean", "description": "Favorites mode: the listener asks for their own favorite, familiar music. Only tracks from Favorites and from the library of Favorites artists."},
-    "playlist": {"type": "object", "description": "Playlist mode: the listener wants one finished playlist to save or download, not a stream. Omit for a normal stream.", "properties": {"size": {"type": "integer", "minimum": 10, "maximum": 60}, "name": {"type": "string", "description": "Playlist name in the listener's language, up to 60 characters."}, "description": {"type": "string", "description": "One line about the sound, up to 200 characters."}}, "required": ["size", "name"]}
+    "playlist": {"type": "object", "description": "Playlist mode: the listener wants one finished playlist to save or download, not a stream. Omit for a normal stream.", "properties": {"size": {"type": "integer", "minimum": 5, "maximum": 60}, "name": {"type": "string", "description": "Playlist name in the listener's language, up to 60 characters."}, "description": {"type": "string", "description": "One line about the sound, up to 200 characters."}}, "required": ["size", "name"]}
   },
   "required": ["seeds", "exclusions"]
 }`
@@ -710,8 +710,8 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites 
 		}
 	}
 	if playlist != nil {
-		if playlist.Size < 10 || playlist.Size > 60 {
-			return "error: playlist size must be 10–60"
+		if playlist.Size < 5 || playlist.Size > 60 {
+			return "error: playlist size must be 5–60"
 		}
 		playlist.Name = strings.TrimSpace(playlist.Name)
 		if playlist.Name == "" {

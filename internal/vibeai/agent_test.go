@@ -1426,8 +1426,11 @@ func TestDispatchSetPlanPlaylist(t *testing.T) {
 	if p := a.Session.Playlist(); p == nil || p.Name != "Дым и лупы" {
 		t.Fatalf("playlist: %+v, want name \"Дым и лупы\"", p)
 	}
-	if res := a.dispatch(ctx, call("p2", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":5,"name":"P"}}`)); res != "error: playlist size must be 10–60" {
-		t.Errorf("size 5: got %q", res)
+	if res := a.dispatch(ctx, call("p2", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":4,"name":"P"}}`)); res != "error: playlist size must be 5–60" {
+		t.Errorf("size 4: got %q", res)
+	}
+	if res := a.dispatch(ctx, call("p2b", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":5,"name":"P"}}`)); res != "plan accepted: referents 0, exclusions 0, playlist of 5" {
+		t.Errorf("size 5: got %q, want \"plan accepted: referents 0, exclusions 0, playlist of 5\"", res)
 	}
 	if res := a.dispatch(ctx, call("p3", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":30,"name":"  "}}`)); res != "error: playlist name is required" {
 		t.Errorf("blank name: got %q", res)
@@ -1481,11 +1484,22 @@ func TestPromptRulesPlaylistMode(t *testing.T) {
 	for _, want := range []string{
 		"you serve portions of tracks (5 in a stream)",
 		"6. Playlist mode.",
-		"size = the number they named, 30 if none (10–60)",
+		"size = the number they named, 30 if none (5–60)",
 		"name — short, in the listener's language, about the sound, not a copy of the request",
 		"The whole playlist is one portion: keep calling submit_candidates until it is full.",
 		"Artists the listener named are and_similar or want_it seeds.",
 		"- In playlist mode the limits scale to the playlist size: about 10% per artist, the and_similar referents are capped at 15%, known artists at 20%.",
+	} {
+		if !strings.Contains(promptRules, want) {
+			t.Errorf("promptRules does not contain %q", want)
+		}
+	}
+}
+
+func TestPromptPlaylistSetPlanFirst(t *testing.T) {
+	for _, want := range []string{
+		"Call set_plan with playlist first, before the card",
+		"(5–60)",
 	} {
 		if !strings.Contains(promptRules, want) {
 			t.Errorf("promptRules does not contain %q", want)

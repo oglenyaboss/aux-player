@@ -288,7 +288,7 @@ func TestVibeAI_SaveTwiceSamePortion(t *testing.T) {
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) != nil {
 		t.Error("saving the same portion twice should be a no-op")
 	}
-	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "AUX · x", n: 3, created: true})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "AUX · x", n: 3, created: true})
 	m.vibeAITurnCmd("", false, false)
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
@@ -1378,7 +1378,7 @@ func TestVibeAIPlaylistSavedShowsOnStage(t *testing.T) {
 	acceptPick(m, gen, "2", "B", "Two")
 	acceptPick(m, gen, "3", "C", "Three")
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
-	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "Haze", n: 3, created: true})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "Haze", n: 3, created: true})
 	st := m.vibeAIP.m.st
 	for i := 0; i < 6000 && st.Phase() != stage.PhDone; i++ {
 		st.Step(1.0 / 30)
@@ -1389,14 +1389,14 @@ func TestVibeAIPlaylistSavedShowsOnStage(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		st.Step(1.0 / 30)
 	}
-	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 tracks") {
+	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {
 		t.Errorf("the done screen is missing the save result:\n%s", frame)
 	}
 }
 
 func TestVibeAIPlaylistSaveErrorAllowsRetry(t *testing.T) {
 	m, _ := playlistPortion(t)
-	m.handleVibeAIMsg(vibeAISavedMsg{err: errors.New("boom")})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
 	if m.vibeAI.savedPortion != 0 {
 		t.Fatalf("savedPortion = %d, want 0 after a failed save", m.vibeAI.savedPortion)
 	}
@@ -1418,8 +1418,65 @@ func TestVibeAIStreamSaveErrorAllowsRetry(t *testing.T) {
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
 		t.Fatal("first save should run")
 	}
-	m.handleVibeAIMsg(vibeAISavedMsg{err: errors.New("boom")})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
 		t.Error("a failed stream save must be retryable")
+	}
+}
+
+func TestVibeAIPlaylistDoesNotTopUp(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+	m.vibeAI.busy = false
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIListen})
+	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) != nil {
+		t.Error("a saved playlist must not top itself up from the stream")
+	}
+	if !m.vibeAI.stream {
+		t.Error("the listener's stream setting must survive a playlist run")
+	}
+	m.vibeAITurnCmd("обычный запрос", true, false)
+	if m.vibeAI.playlist != nil {
+		t.Error("a new request must leave playlist mode")
+	}
+}
+
+func TestVibeAIPlaylistShortSaveSaysSo(t *testing.T) {
+	m := newModel(nil)
+	stage.SetLang("en")
+	t.Cleanup(func() { stage.SetLang("ru") })
+	vibeAITypeText(m, "плейлист")
+	gen := m.vibeAI.gen
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen, plan: plan})
+	acceptPick(m, gen, "1", "A", "One")
+	acceptPick(m, gen, "2", "B", "Two")
+	acceptPick(m, gen, "3", "C", "Three")
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "Haze", n: 3, created: true})
+	st := m.vibeAIP.m.st
+	for i := 0; i < 6000 && st.Phase() != stage.PhDone; i++ {
+		st.Step(1.0 / 30)
+	}
+	if st.Phase() != stage.PhDone {
+		t.Fatalf("phase = %v, want PhDone", st.Phase())
+	}
+	for i := 0; i < 30; i++ {
+		st.Step(1.0 / 30)
+	}
+	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {
+		t.Errorf("the done screen is missing the shortfall:\n%s", frame)
+	}
+}
+
+func TestVibeAIStaleSaveIgnored(t *testing.T) {
+	m := openVibeWithPortion(t)
+	old := m.vibeAI.gen
+	m.vibeAITurnCmd("новый", true, false)
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: old, id: "p.old", name: "Old", n: 3, created: true})
+	if m.vibeAI.playlistID != "" {
+		t.Errorf("playlistID = %q, want a stale save reply ignored", m.vibeAI.playlistID)
 	}
 }

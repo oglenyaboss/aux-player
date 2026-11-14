@@ -938,15 +938,30 @@ func TestPlaylistModeDoneOnlyWhenFull(t *testing.T) {
 	}
 }
 
-func TestSetPlanWithoutPlaylistRestoresStreamSize(t *testing.T) {
+func TestSetPlanKeepsPlaylistWithinSession(t *testing.T) {
 	s := NewSession(nil, nil, 5)
 	s.SetPlan(Plan{Playlist: &PlaylistPlan{Size: 30, Name: "P"}})
 	if s.Need() != 30 {
 		t.Fatalf("playlist: Need = %d, want 30", s.Need())
 	}
 	s.SetPlan(Plan{})
+	if s.Need() != 30 {
+		t.Errorf("second plan: Need = %d, want 30", s.Need())
+	}
+	if p := s.Playlist(); p == nil || p.Size != 30 {
+		t.Errorf("second plan: playlist = %+v, want the 30-track playlist kept", p)
+	}
+}
+
+func TestStreamSessionStaysStream(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{})
+	s.SetPlan(Plan{})
 	if s.Need() != 5 {
 		t.Errorf("stream: Need = %d, want 5", s.Need())
+	}
+	if p := s.Playlist(); p != nil {
+		t.Errorf("stream: playlist = %+v, want nil", p)
 	}
 }
 
