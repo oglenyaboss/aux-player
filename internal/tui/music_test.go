@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -32,12 +33,7 @@ type musicProvider struct {
 }
 
 func (p *musicProvider) called(call string) bool {
-	for _, c := range p.calls {
-		if c == call {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.calls, call)
 }
 
 func (p *musicProvider) callCount(call string) int {

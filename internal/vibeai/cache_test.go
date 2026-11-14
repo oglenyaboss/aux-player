@@ -176,14 +176,12 @@ func TestRememberSavedConcurrent(t *testing.T) {
 	const n = 20
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			song := Song{ID: fmt.Sprintf("s%d", i), Artist: fmt.Sprintf("a%d", i), Title: fmt.Sprintf("t%d", i)}
 			if err := RememberSaved(dir, song, false); err != nil {
 				t.Errorf("RememberSaved: %v", err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	got, err := readCache(filepath.Join(dir, libraryCacheName))

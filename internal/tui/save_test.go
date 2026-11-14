@@ -315,7 +315,7 @@ func TestNoteRecent(t *testing.T) {
 		t.Fatalf("recent = %+v, want one row for the filled track", m.recentTracks)
 	}
 
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		tr := provider.Track{ID: fmt.Sprintf("i.%d", i), CatalogID: fmt.Sprintf("%d", i), Artist: "A", Title: fmt.Sprintf("T%d", i)}
 		m.noteRecent(player.State{Track: &tr})
 	}

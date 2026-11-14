@@ -124,7 +124,7 @@ func TestPaletteDrill(t *testing.T) {
 		t.Errorf("the section rows are not drawn:\n%s", frame)
 	}
 	input := ""
-	for _, line := range strings.Split(frame, "\n") {
+	for line := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(line, "search tracks") {
 			input = line
 		}
@@ -982,14 +982,15 @@ func TestPaletteFramesAllSizes(t *testing.T) {
 				if !intro {
 					m.JumpPlay(threeTracks(), 0, 0)
 				}
-				if intro {
+				switch {
+				case intro:
 					m.Key("ctrl+o", "")
 					if agent {
 						m.Key("tab", "")
 					}
-				} else if agent {
+				case agent:
 					m.Key("/", "/")
-				} else {
+				default:
 					m.Key("m", "m")
 				}
 				steps(m, 0.3)

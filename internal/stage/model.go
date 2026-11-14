@@ -276,7 +276,6 @@ type Model struct {
 	queueT   float64
 	toasts   []*toast
 	typing   bool
-	reply    []rune
 	lastShot *fb
 	help     bool
 

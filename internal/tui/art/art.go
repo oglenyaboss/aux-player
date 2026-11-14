@@ -119,7 +119,7 @@ func Shrink(img image.Image, side int) image.Image {
 					r, g, bl, a, n = r+uint64(cr), g+uint64(cg), bl+uint64(cb), a+uint64(ca), n+1
 				}
 			}
-			out.SetRGBA64(x, y, color.RGBA64{R: uint16(r / n), G: uint16(g / n), B: uint16(bl / n), A: uint16(a / n)})
+			out.SetRGBA64(x, y, color.RGBA64{R: uint16(r / n), G: uint16(g / n), B: uint16(bl / n), A: uint16(a / n)}) //nolint:gosec // G115: means of 16-bit channels fit in 16 bits
 		}
 	}
 	return out

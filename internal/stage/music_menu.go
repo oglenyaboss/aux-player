@@ -150,8 +150,7 @@ func (m *Model) mlDrawMenu(f *fb) {
 	}
 	w = min(w, max(8, f.w-2))
 	h := len(items) + 2
-	x := m.mu.rowX + 1
-	y := m.mu.rowY
+	var x, y int
 	if m.mlGridShown() {
 		x, y = m.mu.tileX, m.mu.tileY+mlTileH+2
 		if y+h > f.h-2 {

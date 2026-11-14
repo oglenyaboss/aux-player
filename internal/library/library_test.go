@@ -382,11 +382,9 @@ func TestRefresh_SingleFlight(t *testing.T) {
 	results := make([]Result, 2)
 	errs := make([]error, 2)
 	refresh := func(i int) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			results[i], _, errs[i] = s.Refresh(context.Background(), Albums, "", true)
-		}()
+		})
 	}
 	refresh(0)
 	<-started
@@ -584,7 +582,7 @@ func TestOwnerIsolation(t *testing.T) {
 	}
 	aDir := filepath.Join(dir, a.owner)
 
-	b := Open(dir, fake, "b")
+	Open(dir, fake, "b")
 	if _, err := os.Stat(aDir); err != nil {
 		t.Fatalf("a recently used owner dir was deleted: %v", err)
 	}
@@ -592,7 +590,7 @@ func TestOwnerIsolation(t *testing.T) {
 	if err := os.Chtimes(aDir, old, old); err != nil {
 		t.Fatal(err)
 	}
-	b = Open(dir, fake, "b")
+	b := Open(dir, fake, "b")
 	if _, err := os.Stat(aDir); !os.IsNotExist(err) {
 		t.Fatalf("an owner dir unused for 31 days survived: %v", err)
 	}

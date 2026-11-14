@@ -173,7 +173,7 @@ type scriptKey struct {
 // parseScript reads "1.5:down,2:enter,2.5:a" in time order.
 func parseScript(s string) []scriptKey {
 	var out []scriptKey
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		at, name, ok := strings.Cut(strings.TrimSpace(part), ":")
 		if !ok {
 			continue

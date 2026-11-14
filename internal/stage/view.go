@@ -1022,7 +1022,7 @@ func (m *Model) drawRecent(f *fb) {
 		if shown > 0 && len(m.recentRows) > shown {
 			top = max(0, min(sel-shown/2, len(m.recentRows)-shown))
 		}
-		for i := 0; i < shown; i++ {
+		for i := range shown {
 			row := m.recentRows[top+i]
 			yy := y + 4 + i
 			marker, fg := " ", m.th.text

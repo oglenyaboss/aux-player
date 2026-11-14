@@ -126,7 +126,7 @@ func New(cfg *config.Config, prov *apple.AppleProvider, progress ...func(string)
 	if segs := newSegCacheFromConfig(cfg); segs != nil {
 		streamer.SetSegmentCache(segs)
 		// ponytail: pruned once per launch; a long session can overshoot the cap by its own downloads
-		go segs.prune()
+		go func() { _ = segs.prune() }()
 	}
 
 	sink, err := newAudioSink()

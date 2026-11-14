@@ -912,7 +912,7 @@ func (m *Model) vibeAILibrary() func(ctx context.Context) ([]vibeai.Song, []vibe
 		}
 		if r.Due {
 			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), musicCheckTimeout)
+				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), musicCheckTimeout)
 				defer cancel()
 				_, _, _ = store.Refresh(ctx, library.Songs, "", false)
 			}()
