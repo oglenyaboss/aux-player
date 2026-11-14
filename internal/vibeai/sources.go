@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -238,10 +237,11 @@ type appleLibraryPage struct {
 	Data []struct {
 		ID         string `json:"id"`
 		Attributes struct {
-			ArtistName string `json:"artistName"`
-			Name       string `json:"name"`
-			AlbumName  string `json:"albumName"`
-			PlayParams *struct {
+			ArtistName  string `json:"artistName"`
+			Name        string `json:"name"`
+			AlbumName   string `json:"albumName"`
+			InFavorites bool   `json:"inFavorites"`
+			PlayParams  *struct {
 				CatalogID string `json:"catalogId"`
 			} `json:"playParams"`
 		} `json:"attributes"`
@@ -249,13 +249,13 @@ type appleLibraryPage struct {
 	Next string `json:"next"`
 }
 
-func parseLibraryPage(body []byte) ([]Song, []string, string, error) {
+func parseLibraryPage(body []byte) (songs, favorites []Song, next string, err error) {
 	var r appleLibraryPage
 	if err := json.Unmarshal(body, &r); err != nil {
 		return nil, nil, "", fmt.Errorf("apple: response is not JSON: %v", err)
 	}
-	out := make([]Song, 0, len(r.Data))
-	libIDs := make([]string, 0, len(r.Data))
+	songs = make([]Song, 0, len(r.Data))
+	favorites = make([]Song, 0)
 	for _, d := range r.Data {
 		id := ""
 		if d.Attributes.PlayParams != nil {
@@ -264,107 +264,51 @@ func parseLibraryPage(body []byte) ([]Song, []string, string, error) {
 		if id == "" {
 			id = d.ID
 		}
-		out = append(out, Song{
+		song := Song{
 			ID:     id,
 			Artist: d.Attributes.ArtistName,
 			Title:  d.Attributes.Name,
 			Album:  d.Attributes.AlbumName,
-		})
-		libIDs = append(libIDs, d.ID)
-	}
-	return out, libIDs, r.Next, nil
-}
-
-type appleRatingsResponse struct {
-	Data []struct {
-		ID         string `json:"id"`
-		Attributes struct {
-			Value int `json:"value"`
-		} `json:"attributes"`
-	} `json:"data"`
-}
-
-func parseRatings(body []byte) (map[string]bool, error) {
-	var r appleRatingsResponse
-	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, fmt.Errorf("apple: response is not JSON: %v", err)
-	}
-	loved := make(map[string]bool, len(r.Data))
-	for _, d := range r.Data {
-		if d.Attributes.Value == 1 {
-			loved[strings.TrimPrefix(d.ID, "r.")] = true
+		}
+		songs = append(songs, song)
+		if d.Attributes.InFavorites {
+			favorites = append(favorites, song)
 		}
 	}
-	return loved, nil
+	return songs, favorites, r.Next, nil
 }
 
-func fetchLibrary(ctx context.Context, api *appleAPI) ([]Song, []string, error) {
-	return fetchPagedSongs(ctx, api, "/me/library/songs?limit=100")
+func fetchLibrary(ctx context.Context, api *appleAPI) (library, favorites []Song, err error) {
+	return fetchPagedSongs(ctx, api, "/me/library/songs?limit=100&extend=inFavorites")
 }
 
-func fetchPagedSongs(ctx context.Context, api *appleAPI, firstPath string) ([]Song, []string, error) {
+func fetchPagedSongs(ctx context.Context, api *appleAPI, firstPath string) (library, favorites []Song, err error) {
 	path := firstPath
-	var out []Song
-	var libIDs []string
 	for {
 		body, status, err := api.getRaw(ctx, path)
 		if err != nil {
 			if status == http.StatusNotFound {
-				return out, libIDs, nil
+				return library, favorites, nil
 			}
 			return nil, nil, err
 		}
-		songs, ids, next, err := parseLibraryPage(body)
+		songs, favs, next, err := parseLibraryPage(body)
 		if err != nil {
 			return nil, nil, err
 		}
-		out = append(out, songs...)
-		libIDs = append(libIDs, ids...)
+		library = append(library, songs...)
+		favorites = append(favorites, favs...)
 		if next == "" {
-			return out, libIDs, nil
+			return library, favorites, nil
 		}
-		path = next
+		path = libraryPagePath(next)
 	}
 }
 
-func fetchFavorites(ctx context.Context, api *appleAPI, library []Song, libIDs []string) ([]Song, error) {
-	ids := make([]string, 0, len(libIDs))
-	seen := make(map[string]bool, len(libIDs))
-	for _, id := range libIDs {
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		ids = append(ids, id)
+func libraryPagePath(next string) string {
+	sep := "?"
+	if strings.Contains(next, "?") {
+		sep = "&"
 	}
-	loved := make(map[string]bool)
-	for st := 0; st < len(ids); st += 100 {
-		l, err := fetchRatingsBatch(ctx, api, ids[st:min(st+100, len(ids))])
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(loved, l)
-	}
-	favs := make([]Song, 0, len(loved))
-	for i, s := range library {
-		if loved[libIDs[i]] {
-			favs = append(favs, s)
-		}
-	}
-	return favs, nil
-}
-
-func fetchRatingsBatch(ctx context.Context, api *appleAPI, ids []string) (map[string]bool, error) {
-	body, status, err := api.getRaw(ctx, "/me/ratings/library-songs?ids="+url.QueryEscape(strings.Join(ids, ",")))
-	if err != nil {
-		if status == http.StatusNotFound || status == http.StatusNoContent {
-			return map[string]bool{}, nil
-		}
-		return nil, fmt.Errorf("ratings: %v", err)
-	}
-	l, err := parseRatings(body)
-	if err != nil {
-		return nil, fmt.Errorf("ratings: %v", err)
-	}
-	return l, nil
+	return next + sep + "limit=100&extend=inFavorites"
 }

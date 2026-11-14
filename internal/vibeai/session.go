@@ -113,6 +113,18 @@ func (s *Session) SetSignals(sig *Signals, sessionID string) {
 	s.sessionID = sessionID
 }
 
+func (s *Session) NoteSaved(song Song, favorite bool) {
+	if favorite {
+		s.favs.add(song)
+		for _, a := range splitArtists(song.Artist) {
+			s.known[a] = true
+		}
+		s.recountKnown()
+		return
+	}
+	s.lib.add(song)
+}
+
 func (s *Session) Need() int {
 	return max(s.Size-len(s.portion), 0)
 }
@@ -338,6 +350,13 @@ func (s *Session) ClosePortion() []Entry {
 	s.portionArts = make(map[string]int)
 	s.knownCount = 0
 	return out
+}
+
+// Give counts songs as served without putting them in a portion.
+func (s *Session) Give(songs []Song) {
+	for _, so := range songs {
+		s.given[songKey(so)] = true
+	}
 }
 
 func (s *Session) ResetPortion() {

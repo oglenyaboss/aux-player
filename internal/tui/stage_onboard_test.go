@@ -260,6 +260,39 @@ func TestStageSetupKeepsEmpty(t *testing.T) {
 	}
 }
 
+// A12: a first run without an agent key still onboards, a key does not, and the agent
+// with no key is marked.
+func TestStageOptionsAgentOptional(t *testing.T) {
+	o := stageOptions(&config.Config{VibeLang: "ru"}, false)
+	if o.Onboard || !o.NoAgent {
+		t.Fatalf("finished onboarding without an agent key: onboard=%v noAgent=%v, want false/true",
+			o.Onboard, o.NoAgent)
+	}
+	o = stageOptions(&config.Config{}, false)
+	if !o.Onboard || !o.NoAgent {
+		t.Fatalf("first run without a key: onboard=%v noAgent=%v, want true/true", o.Onboard, o.NoAgent)
+	}
+	o = stageOptions(&config.Config{VibeLLMAPIKey: "k"}, false)
+	if o.Onboard || o.NoAgent {
+		t.Fatalf("first run with a key: onboard=%v noAgent=%v, want false/false", o.Onboard, o.NoAgent)
+	}
+}
+
+// A13: a Setup without a model keeps the saved effort; a new model writes it.
+func TestStageSetupKeepsEffort(t *testing.T) {
+	isolatedHome(t)
+	m := newModel(nil)
+	m.cfg.VibeLLMEffort = "high"
+	m.vibeAIP.m.act(stage.Setup{Lang: "ru"})
+	if m.cfg.VibeLLMEffort != "high" {
+		t.Fatalf("effort after a skipped agent = %q, want high", m.cfg.VibeLLMEffort)
+	}
+	m.vibeAIP.m.act(stage.Setup{Model: "a/x"})
+	if m.cfg.VibeLLMEffort != "" {
+		t.Fatalf("effort after a new model = %q, want empty", m.cfg.VibeLLMEffort)
+	}
+}
+
 func TestStageLastfmConnect(t *testing.T) {
 	isolatedHome(t)
 	setLastfmAuth(t, func(context.Context, string, string) (string, error) { return "sess", nil })

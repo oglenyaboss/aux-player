@@ -9,6 +9,30 @@ import (
 
 func (m *Model) render() *fb {
 	f := newFB(m.w, m.h)
+	// The drawer takes its columns from the stage: the phase is laid out in the rest.
+	if dw := m.musicDrawerWidth(); dw > 0 {
+		m.withWidth(m.w-dw, func() { m.drawStage(f) })
+	} else {
+		m.drawStage(f)
+	}
+	if m.mu.open || m.mu.shut {
+		if m.musicStyle() == musicStylePalette {
+			m.mlVeil(f, 0.55*m.mlProgress())
+		}
+		m.drawMusic(f)
+	}
+	if m.recentOpen {
+		m.drawRecent(f)
+	}
+	if m.help {
+		m.drawHelp(f)
+	}
+	m.lastShot = f
+	return f
+}
+
+// drawStage is the backdrop, the phase and the particles behind any overlay.
+func (m *Model) drawStage(f *fb) {
 	m.backdrop(f)
 	switch m.ph {
 	case phIntro:
@@ -31,11 +55,14 @@ func (m *Model) render() *fb {
 	if m.snap != nil && m.snap.w == f.w && m.snap.h == f.h {
 		m.dissolve(f)
 	}
-	if m.help {
-		m.drawHelp(f)
-	}
-	m.lastShot = f
-	return f
+}
+
+// withWidth lays the stage out for w columns and always puts the width back.
+func (m *Model) withWidth(w int, fn func()) {
+	full := m.w
+	m.w = w
+	defer func() { m.w = full }()
+	fn()
 }
 
 // backdrop: a slow, barely-there tint of the accent, plus bloom; in play
@@ -124,9 +151,11 @@ func (m *Model) drawIntro(f *fb) {
 	for _, p := range m.logo {
 		ly = math.Max(ly, p.ty)
 	}
+	// The logo was built for the whole window: the drawer pushes it into the stage.
+	dx := float64(f.w-m.w) / 2
 	for _, p := range m.logo {
 		k := easeOut(prog(m.pt, p.delay, p.life))
-		x, y := lerpf(p.sx, p.tx, k), lerpf(p.sy, p.ty, k)
+		x, y := lerpf(p.sx, p.tx, k)-dx, lerpf(p.sy, p.ty, k)
 		c := m.logoColor(p.tx, x0, x1)
 		if k < 1 {
 			c = f.pixelAt(int(x), int(y)).lerp(c, 0.2+0.8*k)
@@ -156,13 +185,21 @@ func (m *Model) drawIntro(f *fb) {
 	if m.err != "" {
 		f.fade(bx+2, by+3, trunc(m.err, bw), m.th.bad, 1, false)
 	}
-	if m.o.Example != nil {
-		if hint := trunc(tr("например: ", "e.g. ")+m.o.Example(), m.w-6); hint != "" {
-			f.fade(cx-len([]rune(hint))/2, by+4, hint, m.th.dim, a*0.6, false)
-		}
+	hint := ""
+	if m.o.NoAgent {
+		hint = tr("агент не подключён — enter откроет настройку", "agent not connected — enter sets it up")
+	} else if m.o.Example != nil {
+		hint = tr("например: ", "e.g. ") + m.o.Example()
 	}
-	hint := tr("tab настройки", "tab settings")
-	f.fade(m.w-3-len([]rune(hint)), m.h-2, hint, m.th.dim, a*0.7, false)
+	if hint = trunc(hint, m.w-6); hint != "" {
+		f.fade(cx-len([]rune(hint))/2, by+4, hint, m.th.dim, a*0.6, false)
+	}
+	hint = tr("tab настройки", "tab settings")
+	hx := m.w - 3 - len([]rune(hint))
+	f.fade(hx, m.h-2, hint, m.th.dim, a*0.7, false)
+	if mh := "ctrl+o " + tr("музыка", "music"); hx-2-len([]rune(mh)) > 0 {
+		f.fade(hx-2-len([]rune(mh)), m.h-2, mh, m.th.dim, a*0.55, false)
+	}
 }
 
 func (m *Model) drawLaunch(f *fb) {
@@ -668,20 +705,7 @@ func (m *Model) drawPlay(f *fb) {
 		}
 	}
 
-	if m.typing {
-		bx, by, bw := 3, m.h-4, m.w-6
-		for yy := by; yy < by+3; yy++ {
-			for xx := bx; xx < bx+bw; xx++ {
-				if p := f.at(xx, yy); p != nil {
-					p.bg, p.ch, p.pix = p.bg.lerp(m.th.bg, 0.8), ' ', false
-				}
-			}
-		}
-		m.glowBox(f, bx, by, bw, 3, 1)
-		f.textS(bx+2, by+1, "›", m.th.a1, true, false)
-		f.text(bx+4, by+1, string(m.reply), m.th.text)
-		f.put(bx+4+len(m.reply), by+1, '▎', m.th.a1.mul(0.6+0.4*math.Sin(m.t*6)))
-	} else if !g.mini {
+	if !g.mini {
 		help := tr("? клавиши", "? keys")
 		f.fade(3, m.h-2, tr("/ сказать агенту", "/ talk to the agent"), m.th.dim, 0.7, false)
 		f.fade(m.w-3-len([]rune(help)), m.h-2, help, m.th.dim, 0.7, false)
@@ -690,13 +714,9 @@ func (m *Model) drawPlay(f *fb) {
 	m.drawToasts(f)
 }
 
-// drawNextLine is the play-phase line under the progress bar: what the agent is doing
-// with the next portion.
-func (m *Model) drawNextLine(f *fb, x, y, pw int) {
-	if m.next.state == nextOff || y-1 >= m.h-2 {
-		return
-	}
-	sy := y - 1
+// nextLineText is what drawNextLine says: the standing portion or the owner's words
+// while it gathers, the ready line, and the failure while it still shows.
+func (m *Model) nextLineText() (string, bool) {
 	switch m.next.state {
 	case nextGathering:
 		var s string
@@ -713,13 +733,36 @@ func (m *Model) drawNextLine(f *fb, x, y, pw int) {
 				s += fmt.Sprintf(tr(", пересобираю следующие %d", ", rebuilding the next %d"), m.portionSize())
 			}
 		}
+		return s, true
+	case nextReady:
+		return fmt.Sprintf(tr("✓ следующие %d готовы", "✓ next %d ready"), len(m.next.tracks)), true
+	case nextFailed:
+		if m.t-m.next.at < 6 {
+			return tr("✗ следующие не собрались", "✗ couldn't pick the next ones"), true
+		}
+	}
+	return "", false
+}
+
+// drawNextLine is the play-phase line under the progress bar: what the agent is doing
+// with the next portion.
+func (m *Model) drawNextLine(f *fb, x, y, pw int) {
+	if m.next.state == nextOff || y-1 >= m.h-2 {
+		return
+	}
+	s, ok := m.nextLineText()
+	if !ok {
+		return
+	}
+	sy := y - 1
+	switch m.next.state {
+	case nextGathering:
 		m.wave(f, x, sy, trunc(s, pw), m.th.a1)
 	case nextReady:
-		s := fmt.Sprintf(tr("✓ следующие %d готовы", "✓ next %d ready"), len(m.next.tracks))
 		f.fade(x, sy, trunc(s, pw), m.th.a1, easeOut(prog(m.t-m.next.at, 0, 0.3)), false)
 	case nextFailed:
 		if a := 0.9 * (1 - prog(m.t-m.next.at, 5, 1)); a > 0 {
-			f.fade(x, sy, trunc(tr("✗ следующие не собрались", "✗ couldn't pick the next ones"), pw), m.th.bad, a, false)
+			f.fade(x, sy, trunc(s, pw), m.th.bad, a, false)
 		}
 	}
 }
@@ -781,25 +824,37 @@ func (m *Model) drawNextStrip(f *fb, x, y, pw int) {
 	}
 }
 
-// drawCover lays the cover into its box over a glow of its own colours.
-func (m *Model) drawCover(f *fb, g playGeom, tk *Track, e *egg, reveal float64) {
-	glow := m.cover(tk.Key(), 12, 12)
+// coverHalo breathes the cover's own colours into the cells around its box, kept
+// inside the clip of x0, y0, x1, y1 (half-open).
+func (m *Model) coverHalo(f *fb, key string, cx, cy, cw, ch int, k float64, clip [4]int) {
+	glow := m.cover(key, 12, 12)
 	breathe := 0.9 + 0.1*math.Sin(m.t*1.6)
-	sc := float64(g.ch) / 22
+	sc := float64(ch) / 22
 	rx, ry := int(18*sc)+2, int(8*sc)+1
-	for y := g.cy - ry; y < g.cy+g.ch+ry; y++ {
-		for x := g.cx - rx; x < g.cx+g.cw+rx; x++ {
-			if x >= g.cx && x < g.cx+g.cw && y >= g.cy && y < g.cy+g.ch {
+	for y := cy - ry; y < cy+ch+ry; y++ {
+		if y < clip[1] || y >= clip[3] {
+			continue
+		}
+		for x := cx - rx; x < cx+cw+rx; x++ {
+			if x < clip[0] || x >= clip[2] {
 				continue
 			}
-			nx := math.Max(float64(g.cx), math.Min(float64(g.cx+g.cw-1), float64(x)))
-			ny := math.Max(float64(g.cy), math.Min(float64(g.cy+g.ch-1), float64(y)))
+			if x >= cx && x < cx+cw && y >= cy && y < cy+ch {
+				continue
+			}
+			nx := math.Max(float64(cx), math.Min(float64(cx+cw-1), float64(x)))
+			ny := math.Max(float64(cy), math.Min(float64(cy+ch-1), float64(y)))
 			d := math.Hypot((float64(x)-nx)*0.5, float64(y)-ny)
-			c := glow.at(int((nx-float64(g.cx))/float64(g.cw)*11), int((ny-float64(g.cy))/float64(g.ch)*11))
+			c := glow.at(int((nx-float64(cx))/float64(cw)*11), int((ny-float64(cy))/float64(ch)*11))
 			lit := smooth((c.lum() - 0.12) * 4)
-			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*(0.4+0.6*reveal)*(1-m.pause))
+			f.tint(x, y, c, 0.55*lit*math.Exp(-d/(1+2.2*sc))*breathe*k)
 		}
 	}
+}
+
+// drawCover lays the cover into its box over a glow of its own colours.
+func (m *Model) drawCover(f *fb, g playGeom, tk *Track, e *egg, reveal float64) {
+	m.coverHalo(f, tk.Key(), g.cx, g.cy, g.cw, g.ch, (0.4+0.6*reveal)*(1-m.pause), [4]int{0, 0, f.w, f.h})
 
 	cov := m.cover(tk.Key(), g.cw, g.ch*2)
 	var prev *pixgrid
@@ -918,6 +973,11 @@ func (m *Model) drawHelp(f *fb) {
 		{"-", tr("меньше такого", "less like this")},
 		{"n", tr("следующий", "next")},
 		{"w", tr("в плейлист", "save to playlist")},
+		{"l", tr("в библиотеку", "add to library")},
+		{"f", tr("в Favorites", "add to Favorites")},
+		{"h", tr("недавние треки", "recently played")},
+		{"m", tr("музыка", "music")},
+		{"ctrl+o", tr("музыка", "music")},
 		{"r", tr("заново", "start over")},
 		{"q", tr("выход", "quit")},
 	}
@@ -936,6 +996,44 @@ func (m *Model) drawHelp(f *fb) {
 		f.textS(x+3, y+2+i, k[0], m.th.a1, true, false)
 		f.text(x+6, y+2+i, k[1], m.th.text)
 	}
+}
+
+func (m *Model) drawRecent(f *fb) {
+	visible := min(10, max(0, m.h-8))
+	shown := min(len(m.recentRows), visible)
+	w := min(m.w-4, 56)
+	h := shown + 7
+	x, y := (m.w-w)/2, (m.h-h)/2
+	bg := m.th.bg.lerp(m.th.text, 0.06)
+	for yy := y; yy < y+h; yy++ {
+		for xx := x; xx < x+w; xx++ {
+			if p := f.at(xx, yy); p != nil {
+				p.bg, p.ch, p.pix = bg, ' ', false
+			}
+		}
+	}
+	m.glowBox(f, x, y, w, h, 1)
+	f.textS(x+3, y+2, trunc(tr("недавние треки", "recently played"), w-6), m.th.a1, true, false)
+	if len(m.recentRows) == 0 {
+		f.text(x+3, y+4, trunc(tr("пока ничего", "nothing yet"), w-6), m.th.text)
+	} else {
+		sel := max(0, min(m.recentSel, len(m.recentRows)-1))
+		top := 0
+		if shown > 0 && len(m.recentRows) > shown {
+			top = max(0, min(sel-shown/2, len(m.recentRows)-shown))
+		}
+		for i := 0; i < shown; i++ {
+			row := m.recentRows[top+i]
+			yy := y + 4 + i
+			marker, fg := " ", m.th.text
+			if top+i == sel {
+				marker, fg = "›", m.th.a1
+			}
+			f.text(x+2, yy, marker, fg)
+			f.textS(x+4, yy, trunc(row.Title+" — "+row.Artist, w-6), fg, top+i == sel, false)
+		}
+	}
+	f.text(x+3, y+5+shown, trunc(tr("l библиотека · f Favorites · esc закрыть", "l library · f Favorites · esc close"), w-6), m.th.dim)
 }
 
 func (m *Model) orb(f *fb, cx, cy, grow float64) {

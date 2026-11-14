@@ -1,6 +1,7 @@
 package vibeai
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 func newTestEngineUI(t *testing.T, ch *fakeChatter, ui UI) *Engine {
@@ -841,5 +843,124 @@ func TestEngineDropLastForgetsLater(t *testing.T) {
 	}
 	if user := ch.got[4][1].Content; strings.Contains(user, "убрать хоррор?") {
 		t.Errorf("ход 3: вопрос отброшенной порции остался в заданных:\n%s", user)
+	}
+}
+
+func TestEngineNoteSavedFavoriteUpdatesPromptOnce(t *testing.T) {
+	e := newTestEngine(t, &fakeChatter{})
+	song := Song{ID: "1", Artist: "New Artist", Title: "Saved Song", Album: "Saved Album"}
+	line := "- New Artist — Saved Song (Saved Album)\n"
+	e.NoteSaved(song, true)
+	e.NoteSaved(song, true)
+	msg := e.agent.msgs[0].Content
+	if n := strings.Count(msg, line); n != 1 {
+		t.Errorf("system message contains the line %d times, want 1", n)
+	}
+	e.agent.Reset()
+	if !strings.Contains(e.agent.msgs[0].Content, line) {
+		t.Error("Reset dropped the saved favorite from the system message")
+	}
+}
+
+func TestEngineNoteSavedLibraryLeavesStateAlone(t *testing.T) {
+	dir := t.TempDir()
+	memPath := filepath.Join(dir, "memory.md")
+	mem, err := memory.Open(memPath, memory.DefaultLimit)
+	if err != nil {
+		t.Fatalf("memory.Open: %v", err)
+	}
+	if err := mem.Add("likes long intros", "the listener said so"); err != nil {
+		t.Fatalf("memory.Add: %v", err)
+	}
+	sigPath := filepath.Join(dir, "signals.jsonl")
+	sig, err := OpenSignals(sigPath)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	if err := sig.append(signalRec{Time: testNow, Session: "s1", Kind: "played", ID: "x"}); err != nil {
+		t.Fatalf("signals append: %v", err)
+	}
+
+	e := newTestEngine(t, &fakeChatter{})
+	e.mem = mem
+	e.sig = sig
+	promptBefore := e.agent.msgs[0].Content
+	memoryBefore := readFileBytes(t, memPath)
+	signalsBefore := readFileBytes(t, sigPath)
+
+	e.NoteSaved(Song{ID: "1", Artist: "New Artist", Title: "Saved Song"}, false)
+
+	if got := e.agent.msgs[0].Content; got != promptBefore {
+		t.Errorf("system message changed:\n%s", got)
+	}
+	if got := readFileBytes(t, memPath); !bytes.Equal(got, memoryBefore) {
+		t.Errorf("memory file changed: %q -> %q", memoryBefore, got)
+	}
+	if got := readFileBytes(t, sigPath); !bytes.Equal(got, signalsBefore) {
+		t.Errorf("signals file changed: %q -> %q", signalsBefore, got)
+	}
+}
+
+func readFileBytes(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file inside the test's temp dir
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return data
+}
+
+// Songs the listener queued by hand are never offered again in the session.
+func TestServedSongsAreNotRepeated(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("c1", "set_plan", `{"seeds":[{"artist":"A","mode":"and_similar"}],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"}
+		]}`)),
+		toolResp(call("c3", "submit_candidates", `{"tracks":[
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	e.Served([]Song{{ID: "x1", Artist: "A", Title: "T1"}})
+	p, err := e.Turn(context.Background(), "after the album")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	var got []string
+	for _, tr := range p.Tracks {
+		got = append(got, tr.Artist+" — "+tr.Title)
+	}
+	if want := "B — T2,C — T3,D — T4"; strings.Join(got, ",") != want {
+		t.Fatalf("portion = %v, want %s", got, want)
+	}
+}
+
+// A named session stores its name, not the request text, with each signal.
+func TestLabelNamesSignals(t *testing.T) {
+	ch := &fakeChatter{}
+	e := newTestEngine(t, ch)
+	e.Label("Blonde")
+	ch.resps = append(ch.resps,
+		toolResp(call("c1", "set_plan", `{"seeds":[{"artist":"A","mode":"and_similar"}],"exclusions":[]}`)),
+		toolResp(call("c2", "submit_candidates", `{"tracks":[
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"},
+			{"artist":"D","title":"T4","why":"w"}
+		]}`)),
+	)
+	if _, err := e.Turn(context.Background(), "The listener put on the album \"Blonde\".\n1. A — T1"); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if err := e.Record([]Outcome{{ID: "x", Artist: "B", Title: "T2", Kind: "played"}}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if got := e.sig.recs[len(e.sig.recs)-1].Query; got != "Blonde" {
+		t.Fatalf("signal query = %q, want Blonde", got)
+	}
+	if !strings.Contains(e.history(), "1. A — T1") {
+		t.Fatal("the history lost the request text")
 	}
 }

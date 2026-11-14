@@ -8,6 +8,7 @@ package local
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -238,6 +239,27 @@ func (p *Provider) GetLibraryPlaylists(_ context.Context) ([]provider.Playlist, 
 	return nil, nil
 }
 
+// GetLibraryAlbums returns one album per distinct album name in the scanned
+// directory, using the "local-album:" IDs GetAlbumTracks resolves.
+func (p *Provider) GetLibraryAlbums(_ context.Context) ([]provider.Album, error) {
+	albums := []provider.Album{}
+	index := map[string]int{}
+	for _, t := range p.tracks {
+		if i, ok := index[t.Album]; ok {
+			albums[i].TrackCount++
+			continue
+		}
+		index[t.Album] = len(albums)
+		albums = append(albums, provider.Album{
+			ID:         "local-album:" + t.Album,
+			Title:      t.Album,
+			Artist:     t.Artist,
+			TrackCount: 1,
+		})
+	}
+	return albums, nil
+}
+
 func (p *Provider) GetPlaylistTracks(_ context.Context, _ string) ([]provider.Track, error) {
 	return nil, nil
 }
@@ -272,7 +294,15 @@ func (p *Provider) CreatePlaylist(_ context.Context, _ string, _ []string) (prov
 
 func (p *Provider) LoveSong(_ context.Context, _ string, _ bool) error      { return nil }
 func (p *Provider) GetSongRating(_ context.Context, _ string) (bool, error) { return false, nil }
-func (p *Provider) AddToPlaylist(_ context.Context, _, _ string) error      { return nil }
+
+func (p *Provider) AddToLibrary(_ context.Context, _ string) error {
+	return errors.New("local files cannot be saved to Apple Music")
+}
+
+func (p *Provider) AddToFavorites(_ context.Context, _ string) error {
+	return errors.New("local files cannot be saved to Apple Music")
+}
+func (p *Provider) AddToPlaylist(_ context.Context, _, _ string) error { return nil }
 
 func (p *Provider) GetRecommendations(_ context.Context) ([]provider.RecommendationGroup, error) {
 	// Group tracks by genre using their metadata tags.

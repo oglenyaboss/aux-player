@@ -25,6 +25,9 @@ type Config struct {
 	CacheMaxAge         time.Duration
 	PortionSize         int
 	Lang                string
+	// LoadLibrary, when set, serves the library and Favorites instead of the
+	// agent's own cache in CacheDir.
+	LoadLibrary func(ctx context.Context) (library, favorites []Song, err error)
 }
 
 type Track struct {
@@ -49,6 +52,7 @@ type Engine struct {
 	api        *appleAPI
 	cfg        Config
 	query      string
+	label      string
 	start      time.Time
 	sessionID  string
 	turns      int
@@ -82,7 +86,7 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		cfg.Storefront = "us"
 	}
 	if cfg.CacheMaxAge == 0 {
-		cfg.CacheMaxAge = 24 * time.Hour
+		cfg.CacheMaxAge = defaultCacheMaxAge
 	}
 	if cfg.PortionSize == 0 {
 		cfg.PortionSize = 5
@@ -92,7 +96,13 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 	if ui != nil {
 		progress = ui.Progress
 	}
-	library, favs, err := loadCaches(ctx, api, cfg.CacheDir, cfg.CacheMaxAge, progress)
+	var library, favs []Song
+	var err error
+	if cfg.LoadLibrary != nil {
+		library, favs, err = cfg.LoadLibrary(ctx)
+	} else {
+		library, favs, err = loadCaches(ctx, api, cfg.CacheDir, cfg.CacheMaxAge, progress)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +221,29 @@ func (e *Engine) Answer(q Question, raw string) {
 	e.log.f("## listener answer: \"%s\" → %s", q.Question, ans)
 	e.replies = append(e.replies, reply{after: len(e.portions), text: "to the question \"" + q.Question + "\" — " + ans})
 }
+
+func (e *Engine) NoteSaved(song Song, favorite bool) {
+	alreadyFavorite := favorite && e.session.favs.Has(song)
+	e.session.NoteSaved(song, favorite)
+	if favorite && !alreadyFavorite {
+		e.agent.noteFavorite(song)
+	}
+}
+
+// Label names the session in signals, playlist descriptions and the run log
+// instead of its first request, which then only goes to the agent.
+func (e *Engine) Label(name string) { e.label = name }
+
+// name is what the session is called outside the agent's prompt.
+func (e *Engine) name() string {
+	if e.label != "" {
+		return e.label
+	}
+	return e.query
+}
+
+// Served marks songs the listener already has queued: the picker does not offer them.
+func (e *Engine) Served(songs []Song) { e.session.Give(songs) }
 
 func (e *Engine) history() string {
 	seeds := make([]string, 0, len(e.session.plan.Seeds))
@@ -348,7 +381,7 @@ func (e *Engine) Record(outs []Outcome) error {
 		recs = append(recs, signalRec{
 			Time:    now,
 			Session: e.sessionID,
-			Query:   e.query,
+			Query:   e.name(),
 			Kind:    out.Kind,
 			ID:      out.ID,
 			Artist:  out.Artist,
@@ -373,7 +406,7 @@ func trackIDs(tracks []Track) []string {
 }
 
 func (e *Engine) SavePlaylist(ctx context.Context, name string, tracks []Track) (playlistID string, err error) {
-	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.query+"»", trackIDs(tracks))
+	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.name()+"»", trackIDs(tracks))
 	if err != nil {
 		return "", err
 	}
@@ -394,7 +427,7 @@ func (e *Engine) Close() (logPath string, err error) {
 	if e.cfg.RunsDir == "" {
 		return "", nil
 	}
-	return e.log.save(e.cfg.RunsDir, e.query, e.start)
+	return e.log.save(e.cfg.RunsDir, e.name(), e.start)
 }
 
 func toTrack(en Entry) Track {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -754,6 +755,76 @@ func TestGetLibraryPlaylists_PaginationParallel(t *testing.T) {
 	}
 }
 
+// --- GetLibraryAlbums ---
+
+func TestGetLibraryAlbums_ReturnsAllPagesInOrder(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/albums" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		switch r.URL.Query().Get("offset") {
+		case "":
+			writeJSON(t, w, map[string]any{
+				"data": []any{
+					libraryAlbumJSON("l.a1", "Blonde", "Frank Ocean", 17, "https://art/{w}x{h}.jpg"),
+					libraryAlbumJSON("l.a2", "SOS", "SZA", 23, ""),
+				},
+				"next": "/v1/me/library/albums?offset=100",
+			})
+		case "100":
+			if got := r.URL.Query().Get("limit"); got != "100" {
+				t.Errorf("next page limit = %q, want 100", got)
+			}
+			writeJSON(t, w, map[string]any{
+				"data": []any{libraryAlbumJSON("l.a3", "Isolation", "Kali Uchis", 15, "")},
+			})
+		default:
+			t.Errorf("unexpected offset %q", r.URL.Query().Get("offset"))
+		}
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	albums, err := p.GetLibraryAlbums(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryAlbums: %v", err)
+	}
+	want := []struct {
+		id, title, artist, art string
+		trackCount             int
+	}{
+		{"l.a1", "Blonde", "Frank Ocean", "https://art/300x300.jpg", 17},
+		{"l.a2", "SOS", "SZA", "", 23},
+		{"l.a3", "Isolation", "Kali Uchis", "", 15},
+	}
+	if len(albums) != len(want) {
+		t.Fatalf("albums = %+v, want %d", albums, len(want))
+	}
+	for i, expected := range want {
+		got := albums[i]
+		if got.ID != expected.id || got.Title != expected.title || got.Artist != expected.artist ||
+			got.ArtworkURL != expected.art || got.TrackCount != expected.trackCount {
+			t.Errorf("album %d = %+v, want %+v", i, got, expected)
+		}
+	}
+}
+
+func TestGetLibraryAlbums_EmptyLibrary404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"code":404,"message":"HTTP 404 Not Found"}`, http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	albums, err := p.GetLibraryAlbums(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil error on 404 Not Found, got: %v", err)
+	}
+	if len(albums) != 0 {
+		t.Errorf("expected 0 albums, got %d", len(albums))
+	}
+}
+
 // --- GetPlaylistTracks ---
 
 func TestGetPlaylistTracks(t *testing.T) {
@@ -944,6 +1015,12 @@ func albumJSON(id, name, artist string, trackCount int) map[string]any {
 			"artwork":    map[string]any{"url": "", "width": 300, "height": 300},
 		},
 	}
+}
+
+func libraryAlbumJSON(id, name, artist string, trackCount int, artURL string) map[string]any {
+	a := albumJSON(id, name, artist, trackCount)
+	a["attributes"].(map[string]any)["artwork"] = map[string]any{"url": artURL, "width": 300, "height": 300}
+	return a
 }
 
 func playlistJSON(id, name string, trackCount int) map[string]any {
@@ -1531,80 +1608,125 @@ func TestGetLibraryPlaylists_AddsSyntheticFavorites(t *testing.T) {
 	}
 }
 
-func TestGetPlaylistTracks_FavoritesUsesRatings(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/me/library/songs":
-			writeJSON(t, w, map[string]any{"data": []any{
-				songJSONWithCatalog("i.one", "cat1", "Loved", "A", "B", 1000, ""),
-				songJSONWithCatalog("i.two", "cat2", "Plain", "A", "B", 1000, ""),
-			}, "next": ""})
-		case "/me/ratings/songs":
-			if r.URL.Query().Get("ids") != "cat1,cat2" {
-				t.Errorf("ids query = %q", r.URL.Query().Get("ids"))
-			}
-			writeJSON(t, w, map[string]any{"data": []any{map[string]any{"id": "r.cat1", "attributes": map[string]any{"value": 1}}}})
-		default:
-			t.Fatalf("unexpected path %s", r.URL.Path)
+func TestGetPlaylistTracks_FavoritesUsesInFavorites(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/songs" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
 		}
-	}))
-	defer srv.Close()
+		writeJSON(t, w, map[string]any{"data": []any{
+			favoriteSongJSON("i.one", "cat1", "Kept", true),
+			favoriteSongJSON("i.two", "cat2", "Dropped", false),
+		}, "next": ""})
+	})
 
-	p := newTestProvider(t, srv)
 	tracks, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
 	if err != nil {
 		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
 	}
-	if len(tracks) != 1 || tracks[0].Title != "Loved" {
-		t.Fatalf("favorites tracks = %+v", tracks)
+	if len(tracks) != 1 || tracks[0].ID != "i.one" {
+		t.Fatalf("favorites = %+v, want exactly i.one", tracks)
+	}
+	if tracks[0].CatalogID != "cat1" {
+		t.Errorf("catalog id = %q, want cat1", tracks[0].CatalogID)
+	}
+	got := calls()
+	if len(got) == 0 {
+		t.Fatal("no requests recorded")
+	}
+	for _, c := range got {
+		if strings.HasPrefix(c.path, "/me/ratings") {
+			t.Errorf("favorites used the legacy ratings endpoint: %s", c.path)
+		}
+		if extend := c.query.Get("extend"); extend != "inFavorites" {
+			t.Errorf("%s: extend = %q, want inFavorites", c.path, extend)
+		}
 	}
 }
 
-func TestGetPlaylistTracks_FavoritesRatingsBatchesAreBoundedParallel(t *testing.T) {
-	librarySongs := make([]any, 250)
-	for i := range librarySongs {
-		catalogID := "cat" + strconv.Itoa(i)
-		librarySongs[i] = songJSONWithCatalog("i."+catalogID, catalogID, "Song "+catalogID, "A", "B", 1000, "")
-	}
-
-	var active atomic.Int32
-	var maxActive atomic.Int32
-	var ratingCalls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/me/library/songs":
-			writeJSON(t, w, map[string]any{"data": librarySongs, "next": ""})
-		case "/me/ratings/songs":
-			current := active.Add(1)
-			for {
-				maxSeen := maxActive.Load()
-				if current <= maxSeen || maxActive.CompareAndSwap(maxSeen, current) {
-					break
-				}
-			}
-			ratingCalls.Add(1)
-			time.Sleep(20 * time.Millisecond)
-			active.Add(-1)
-			writeJSON(t, w, map[string]any{"data": []any{}})
-		default:
-			t.Fatalf("unexpected path %s", r.URL.Path)
+func TestGetPlaylistTracks_FavoritesNextLinkKeepsExtend(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("offset") == "100" {
+			writeJSON(t, w, map[string]any{"data": []any{
+				favoriteSongJSON("i.two", "cat2", "Second page", true),
+			}})
+			return
 		}
-	}))
-	defer srv.Close()
+		writeJSON(t, w, map[string]any{
+			"data": []any{favoriteSongJSON("i.one", "cat1", "First page", true)},
+			"next": "/v1/me/library/songs?offset=100",
+		})
+	})
 
-	p := newTestProvider(t, srv)
-	_, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
+	tracks, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
 	if err != nil {
 		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
 	}
-	if ratingCalls.Load() != 3 {
-		t.Fatalf("ratingCalls = %d, want 3", ratingCalls.Load())
+	ids := make([]string, 0, len(tracks))
+	for _, tr := range tracks {
+		ids = append(ids, tr.ID)
 	}
-	if maxActive.Load() < 2 {
-		t.Fatalf("ratings were not fetched in parallel, maxActive = %d", maxActive.Load())
+	if strings.Join(ids, ",") != "i.one,i.two" {
+		t.Fatalf("favorites = %v, want [i.one i.two]", ids)
 	}
-	if maxActive.Load() > 5 {
-		t.Fatalf("ratings concurrency unbounded, maxActive = %d", maxActive.Load())
+	sawPage2 := false
+	for _, c := range calls() {
+		if extend := c.query.Get("extend"); extend != "inFavorites" {
+			t.Errorf("%s?%s: extend = %q, want inFavorites", c.path, c.query.Encode(), extend)
+		}
+		if c.query.Get("offset") == "100" {
+			sawPage2 = true
+		}
+	}
+	if !sawPage2 {
+		t.Fatalf("page 2 was never requested: %+v", calls())
+	}
+}
+
+func TestGetPlaylistTracks_FavoritesOffsetsKeepExtend(t *testing.T) {
+	const total = 150
+	page := func(start, count int) []any {
+		songs := make([]any, count)
+		for i := range songs {
+			n := start + i
+			songs[i] = favoriteSongJSON("i.s"+strconv.Itoa(n), "cat"+strconv.Itoa(n), "Song", n == 0 || n == 100)
+		}
+		return songs
+	}
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		offset := 0
+		if v := r.URL.Query().Get("offset"); v != "" {
+			offset, _ = strconv.Atoi(v)
+		}
+		if offset < 0 || offset >= total {
+			t.Errorf("unexpected offset %d", offset)
+		}
+		writeJSON(t, w, map[string]any{
+			"data": page(offset, min(100, total-offset)),
+			"meta": map[string]any{"total": total},
+		})
+	})
+
+	tracks, err := p.GetPlaylistTracks(context.Background(), "aux:favorites")
+	if err != nil {
+		t.Fatalf("GetPlaylistTracks(favorites): %v", err)
+	}
+	ids := make([]string, 0, len(tracks))
+	for _, tr := range tracks {
+		ids = append(ids, tr.ID)
+	}
+	if strings.Join(ids, ",") != "i.s0,i.s100" {
+		t.Fatalf("favorites = %v, want [i.s0 i.s100]", ids)
+	}
+	got := calls()
+	if len(got) != 2 {
+		t.Fatalf("requests = %d, want 2: %+v", len(got), got)
+	}
+	for _, c := range got {
+		if extend := c.query.Get("extend"); extend != "inFavorites" {
+			t.Errorf("%s?%s: extend = %q, want inFavorites", c.path, c.query.Encode(), extend)
+		}
 	}
 }
 
@@ -1612,4 +1734,213 @@ func songJSONWithCatalog(id, catalogID, name, artist, album string, durationMs i
 	s := songJSON(id, name, artist, album, durationMs, artURL)
 	s["attributes"].(map[string]any)["playParams"] = map[string]any{"id": id, "kind": "song", "catalogId": catalogID}
 	return s
+}
+
+func favoriteSongJSON(id, catalogID, name string, inFavorites bool) map[string]any {
+	s := songJSONWithCatalog(id, catalogID, name, "Artist", "Album", 1000, "")
+	s["attributes"].(map[string]any)["inFavorites"] = inFavorites
+	return s
+}
+
+type recordedAppleCall struct {
+	method string
+	path   string
+	query  url.Values
+}
+
+func recordingProvider(t *testing.T, handle func(http.ResponseWriter, *http.Request)) (*apple.AppleProvider, func() []recordedAppleCall) {
+	t.Helper()
+	var mu sync.Mutex
+	var calls []recordedAppleCall
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, recordedAppleCall{method: r.Method, path: r.URL.Path, query: r.URL.Query()})
+		mu.Unlock()
+		handle(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return newTestProvider(t, srv), func() []recordedAppleCall {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]recordedAppleCall(nil), calls...)
+	}
+}
+
+// --- LibrarySongCount ---
+
+func TestGetLibraryTracks_ReportsFavorites(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/songs" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(t, w, map[string]any{"data": []any{
+			favoriteSongJSON("i.one", "cat1", "Loved", true),
+			favoriteSongJSON("i.two", "cat2", "Plain", false),
+		}, "next": ""})
+	})
+
+	tracks, err := p.GetLibraryTracks(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryTracks: %v", err)
+	}
+	if len(tracks) != 2 || !tracks[0].Favorite || tracks[1].Favorite {
+		t.Fatalf("favorites flags = %+v, want [true false]", tracks)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if extend := got[0].query.Get("extend"); extend != "inFavorites" {
+		t.Errorf("extend = %q, want inFavorites", extend)
+	}
+}
+
+func TestLibrarySongCount(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/library/songs" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(t, w, map[string]any{"data": []any{}, "meta": map[string]any{"total": 137}})
+	})
+
+	n, err := p.LibrarySongCount(context.Background())
+	if err != nil {
+		t.Fatalf("LibrarySongCount: %v", err)
+	}
+	if n != 137 {
+		t.Errorf("count = %d, want 137", n)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if limit := got[0].query.Get("limit"); limit != "1" {
+		t.Errorf("limit = %q, want 1", limit)
+	}
+}
+
+func TestLibrarySongCount_ZeroTotal(t *testing.T) {
+	p, _ := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"data": []any{}, "meta": map[string]any{"total": 0}})
+	})
+	n, err := p.LibrarySongCount(context.Background())
+	if err != nil {
+		t.Fatalf("LibrarySongCount: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("count = %d, want 0 with no error", n)
+	}
+}
+
+func TestAddToLibrary_PostsCatalogID(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})
+	if err := p.AddToLibrary(context.Background(), "123"); err != nil {
+		t.Fatalf("AddToLibrary: %v", err)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if got[0].method != http.MethodPost || got[0].path != "/me/library" {
+		t.Errorf("request = %s %s, want POST /me/library", got[0].method, got[0].path)
+	}
+	if id := got[0].query.Get("ids[songs]"); id != "123" {
+		t.Errorf("ids[songs] = %q, want 123", id)
+	}
+}
+
+func TestAddToFavorites_PostsCatalogID(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})
+	if err := p.AddToFavorites(context.Background(), "123"); err != nil {
+		t.Fatalf("AddToFavorites: %v", err)
+	}
+	got := calls()
+	if len(got) != 1 {
+		t.Fatalf("requests = %d, want 1: %+v", len(got), got)
+	}
+	if got[0].method != http.MethodPost || got[0].path != "/me/favorites" {
+		t.Errorf("request = %s %s, want POST /me/favorites", got[0].method, got[0].path)
+	}
+	if id := got[0].query.Get("ids[songs]"); id != "123" {
+		t.Errorf("ids[songs] = %q, want 123", id)
+	}
+}
+
+func TestAddToFavorites_ResolvesLibraryID(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(t, w, map[string]any{"data": []any{map[string]any{
+				"id":         "i.abc",
+				"attributes": map[string]any{"playParams": map[string]any{"catalogId": "555"}},
+			}}})
+		case http.MethodPost:
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			t.Errorf("unexpected method %s", r.Method)
+		}
+	})
+	if err := p.AddToFavorites(context.Background(), "i.abc"); err != nil {
+		t.Fatalf("AddToFavorites: %v", err)
+	}
+	got := calls()
+	if len(got) != 2 {
+		t.Fatalf("requests = %d, want 2: %+v", len(got), got)
+	}
+	if got[0].method != http.MethodGet || got[0].path != "/me/library/songs/i.abc" {
+		t.Errorf("resolve request = %s %s, want GET /me/library/songs/i.abc", got[0].method, got[0].path)
+	}
+	if got[1].method != http.MethodPost || got[1].path != "/me/favorites" {
+		t.Errorf("post request = %s %s, want POST /me/favorites", got[1].method, got[1].path)
+	}
+	if id := got[1].query.Get("ids[songs]"); id != "555" {
+		t.Errorf("ids[songs] = %q, want 555", id)
+	}
+	if strings.Contains(got[1].query.Encode(), "i.abc") {
+		t.Errorf("library id leaked into the POST: %s", got[1].query.Encode())
+	}
+}
+
+func TestAddToLibrary_ResolveFailurePostsNothing(t *testing.T) {
+	p, calls := recordingProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		writeJSON(t, w, map[string]any{"data": []any{map[string]any{"id": "i.abc", "attributes": map[string]any{}}}})
+	})
+	if err := p.AddToLibrary(context.Background(), "i.abc"); err == nil {
+		t.Fatal("AddToLibrary: expected an error for a library song with no catalog id")
+	}
+	for _, c := range calls() {
+		if c.method == http.MethodPost {
+			t.Errorf("POSTed %s after a failed resolve", c.path)
+		}
+	}
+}
+
+func TestAddToFavorites_Unauthorized(t *testing.T) {
+	p, _ := recordingProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	if err := p.AddToFavorites(context.Background(), "123"); err == nil {
+		t.Fatal("AddToFavorites: expected an error on 401")
+	}
+}
+
+func TestAddToLibrary_ServerError(t *testing.T) {
+	p, _ := recordingProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	if err := p.AddToLibrary(context.Background(), "123"); err == nil {
+		t.Fatal("AddToLibrary: expected an error on 500")
+	}
 }

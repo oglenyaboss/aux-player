@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/oglenyaboss/aux-player/internal/config"
+	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/tui/art"
@@ -38,8 +39,16 @@ type Model struct {
 	playerState player.State
 	stateCh     <-chan player.State
 
-	queueIDs    []string         // current playback queue IDs
-	queueTracks []provider.Track // full track objects for the agent's stream top-up
+	queueIDs     []string                  // current playback queue IDs
+	queueTracks  []provider.Track          // full track objects for the agent's stream top-up
+	recentTracks []provider.Track          // tracks played this launch, newest first
+	musicTracks  map[string]provider.Track // the music screen's song rows, keyed by their item ID
+	library      *library.Store            // the library on disk; nil until musicLibrary opens it
+	libraryOf    string                    // the provider type and token the store was opened for
+	musicChecks  int                       // background library refreshes in flight
+	musicFound   map[string]musicSearchHit // recent searches by query
+	musicLast    *musicSelection           // the manual selection the queue holds; nil once replaced
+	saves        map[string]saveState
 
 	artHTTP          *http.Client
 	supportsArtColor func() bool
@@ -73,6 +82,7 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		supportsArtColor: art.SupportsColor,
 		appleLogin:       opts.AppleLogin,
 		lastfmConnected:  opts.LastfmConnected,
+		saves:            map[string]saveState{},
 	}
 	if plyr != nil {
 		m.stateCh = plyr.Subscribe()
@@ -188,6 +198,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		VibeAIAnswersMsg, VibeAISubmitMsg, VibeAICancelMsg, VibeAIActionMsg, VibeAILaterMsg, VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
+	case SaveTrackMsg, saveTrackDoneMsg:
+		cmds = append(cmds, m.handleSaveMsg(msg))
+
+	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicFollowMsg,
+		musicRefreshMsg, musicCheckedMsg:
+		cmds = append(cmds, m.handleMusicMsg(msg))
+
 	case tickMsg:
 		if m.errMsg != "" && time.Now().After(m.errExpiry) {
 			m.errMsg = ""
@@ -239,6 +256,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.appendLog(pp)
 		}
+		m.noteRecent(s)
 		m.vibeAIOnState(s)
 		cmds = append(cmds, m.vibeAIHandoff(s), m.vibeAIStreamTick(s))
 		m.playerState = s
@@ -257,6 +275,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case EngineReadyMsg:
 		m.player = msg.Player
 		m.provider = msg.Provider
+		m.library = nil
 		m.stateCh = msg.Player.Subscribe()
 		m.appendLog("[engine] backend: " + msg.Backend)
 		cmds = append(cmds, waitForState(m.stateCh))

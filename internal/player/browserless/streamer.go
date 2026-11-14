@@ -57,6 +57,10 @@ type StreamServer struct {
 	mu         sync.RWMutex
 	streams    map[string]*trackStream
 	serverCert []byte
+	segs       *segCache
+
+	// decrypt overrides decryptSegment in tests that stub out the CDM.
+	decrypt func(segData []byte, st *trackStream) ([]byte, error)
 
 	// onFail and onLog are set once, before the first stream is prepared.
 	// The local client cannot be told why a stream stopped once the 200 has
@@ -114,6 +118,12 @@ func NewStreamServer(cdmEngine *cdm.CDM, licClient *license.Client) (*StreamServ
 	}()
 
 	return s, nil
+}
+
+// SetSegmentCache attaches an on-disk cache of encrypted segments; a nil
+// cache disables it.
+func (s *StreamServer) SetSegmentCache(c *segCache) {
+	s.segs = c
 }
 
 // PrepareTrack resolves Apple Music playback metadata, acquires the Widevine license,
@@ -494,11 +504,21 @@ func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.
 		segURL = st.baseURI + seg.uri
 	}
 
-	segData, stage, err := fetchSegmentWithRetry(ctx, client, segURL, seg.offset, seg.length)
-	if err != nil {
-		return nil, stage, err
+	// Only the encrypted bytes that fetchSegmentWithRetry returns are
+	// cached; decryption always happens in memory.
+	key := segKey(st.kid, seg)
+	segData, fromCache := s.segs.get(key, seg.length)
+	if !fromCache {
+		var stage string
+		var err error
+		segData, stage, err = fetchSegmentWithRetry(ctx, client, segURL, seg.offset, seg.length)
+		if err != nil {
+			return nil, stage, err
+		}
+		s.segs.put(key, segData)
 	}
-	aacData, err := s.decryptSegment(segData, st)
+
+	aacData, err := s.decryptSeg(segData, st)
 	if errors.Is(err, cdm.ErrNoKey) {
 		// The license expires some time after it was acquired, so a track
 		// paused long enough, or prefetched long before it plays, needs a new
@@ -506,9 +526,24 @@ func (s *StreamServer) fetchAndDecryptSegment(ctx context.Context, client *http.
 		if err := s.acquireKey(ctx, st.keyServer, st.keyURI, st.kid, st.trackID); err != nil {
 			return nil, "relicense", err
 		}
-		aacData, err = s.decryptSegment(segData, st)
+		aacData, err = s.decryptSeg(segData, st)
+	}
+	if err != nil && fromCache && !errors.Is(err, cdm.ErrNoKey) {
+		// Cached bytes that fail to decrypt may be corrupt: drop them, fetch
+		// fresh ciphertext once and try again.
+		s.segs.drop(key)
+		fresh, stage, ferr := fetchSegmentWithRetry(ctx, client, segURL, seg.offset, seg.length)
+		if ferr != nil {
+			return nil, stage, ferr
+		}
+		segData = fresh
+		s.segs.put(key, segData)
+		aacData, err = s.decryptSeg(segData, st)
 	}
 	if err != nil {
+		if !errors.Is(err, cdm.ErrNoKey) {
+			s.segs.drop(key)
+		}
 		return nil, "decrypt", err
 	}
 	return aacData, "", nil
@@ -525,6 +560,13 @@ func (s *StreamServer) decryptSegment(segData []byte, st *trackStream) ([]byte, 
 		}
 		return s.cdmEngine.DecryptSubsamples(kid, iv, input, cdmSubs)
 	})
+}
+
+func (s *StreamServer) decryptSeg(segData []byte, st *trackStream) ([]byte, error) {
+	if s.decrypt != nil {
+		return s.decrypt(segData, st)
+	}
+	return s.decryptSegment(segData, st)
 }
 
 // acquireKey loads a fresh Widevine license for kid into the CDM.

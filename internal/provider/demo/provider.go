@@ -114,6 +114,25 @@ func (Provider) GetLibraryPlaylists(_ context.Context) ([]provider.Playlist, err
 	return out, nil
 }
 
+// GetLibraryAlbums returns one album per distinct album name in the demo
+// library, in library order.
+func (Provider) GetLibraryAlbums(_ context.Context) ([]provider.Album, error) {
+	albums := []provider.Album{}
+	index := map[string]int{}
+	for _, t := range Tracks {
+		if i, ok := index[t.Album]; ok {
+			albums[i].TrackCount++
+			continue
+		}
+		index[t.Album] = len(albums)
+		album := demoAlbum(t)
+		album.ArtworkURL = t.ArtworkURL
+		album.TrackCount = 1
+		albums = append(albums, album)
+	}
+	return albums, nil
+}
+
 func (Provider) GetPlaylistTracks(_ context.Context, id string) ([]provider.Track, error) {
 	if tracks, ok := playlistTracks[id]; ok {
 		out := make([]provider.Track, len(tracks))
@@ -148,6 +167,9 @@ func (Provider) CreatePlaylist(_ context.Context, name string, _ []string) (prov
 func (Provider) LoveSong(_ context.Context, _ string, _ bool) error { return nil }
 
 func (Provider) GetSongRating(_ context.Context, _ string) (bool, error) { return false, nil }
+
+func (Provider) AddToLibrary(_ context.Context, _ string) error   { return nil }
+func (Provider) AddToFavorites(_ context.Context, _ string) error { return nil }
 
 func (Provider) AddToPlaylist(_ context.Context, _, _ string) error { return nil }
 

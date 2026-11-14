@@ -39,7 +39,7 @@ func stripANSI(s string) string { return ansi.ReplaceAllString(s, "") }
 // frameAt over the model internals: fixed 30 fps tick, a render on every step.
 func frameText(t *testing.T, w, h int, at float64) string {
 	t.Helper()
-	s := newScene(true, true)
+	s := newScene(true, true, "palette")
 	s.m.SetSize(w, h)
 	const dt = 1.0 / 30
 	var clock float64
@@ -86,7 +86,7 @@ func TestLangEnScanAndPlayText(t *testing.T) {
 // The help overlay is toggled by "?" in the player now: the demo frames render it there.
 func TestLangEnHelpFrame(t *testing.T) {
 	langEN(t)
-	s := newScene(false, false)
+	s := newScene(false, false, "palette")
 	s.m.SetSize(110, 32)
 	s.m.JumpPlay(demoTracks(), 0, 0)
 	s.m.Key("?", "")
@@ -128,7 +128,7 @@ func TestLangModelStepEn(t *testing.T) {
 func TestLangEnQueryAndHint(t *testing.T) {
 	langEN(t)
 	// the old test ran the intro without onboarding; replay the same 4 seconds
-	s := newScene(false, true)
+	s := newScene(false, true, "palette")
 	s.m.SetSize(110, 32)
 	const dt = 1.0 / 30
 	var clock float64

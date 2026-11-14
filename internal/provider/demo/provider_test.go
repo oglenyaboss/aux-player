@@ -150,6 +150,49 @@ func TestProvider_GetPlaylistTracks_ReturnsCopy(t *testing.T) {
 	}
 }
 
+// --- GetLibraryAlbums ---
+
+func TestProvider_GetLibraryAlbums_DistinctAlbums(t *testing.T) {
+	p := newProvider()
+	albums, err := p.GetLibraryAlbums(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryAlbums: %v", err)
+	}
+	if len(albums) == 0 {
+		t.Fatal("GetLibraryAlbums returned empty list")
+	}
+	seen := map[string]bool{}
+	trackCount := 0
+	for _, a := range albums {
+		if a.ID == "" || a.Title == "" {
+			t.Errorf("album %+v has an empty id or title", a)
+		}
+		if seen[a.ID] {
+			t.Errorf("album id %q appears more than once", a.ID)
+		}
+		seen[a.ID] = true
+		if a.ArtworkURL == "" {
+			t.Errorf("album %s artwork URL is empty", a.ID)
+		}
+		trackCount += a.TrackCount
+	}
+	if trackCount != len(demo.Tracks) {
+		t.Errorf("albums hold %d tracks, want %d", trackCount, len(demo.Tracks))
+	}
+}
+
+func TestProvider_GetLibraryAlbums_ReturnsCopy(t *testing.T) {
+	p := newProvider()
+	albums, _ := p.GetLibraryAlbums(context.Background())
+	if len(albums) > 0 {
+		albums[0].Title = "mutated"
+	}
+	albums2, _ := p.GetLibraryAlbums(context.Background())
+	if len(albums2) > 0 && albums2[0].Title == "mutated" {
+		t.Error("GetLibraryAlbums returned a shared slice (not a copy)")
+	}
+}
+
 // --- GetAlbumTracks ---
 
 func TestProvider_GetAlbumTracks_ReturnsAllTracks(t *testing.T) {
@@ -294,5 +337,15 @@ func TestProvider_GetSongRating_ReturnsFalse(t *testing.T) {
 	}
 	if loved {
 		t.Error("GetSongRating() = true, want false (demo always returns false)")
+	}
+}
+
+func TestProvider_AddToLibraryAndFavorites_NoError(t *testing.T) {
+	p := newProvider()
+	if err := p.AddToLibrary(context.Background(), "d1"); err != nil {
+		t.Errorf("AddToLibrary: %v", err)
+	}
+	if err := p.AddToFavorites(context.Background(), "d1"); err != nil {
+		t.Errorf("AddToFavorites: %v", err)
 	}
 }

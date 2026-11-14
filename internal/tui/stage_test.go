@@ -29,6 +29,8 @@ func stageKeyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "ctrl+o", "ctrl+e", "ctrl+k":
+		return tea.KeyPressMsg{Code: []rune(k)[5], Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: []rune(k)[0], Text: k}
 }

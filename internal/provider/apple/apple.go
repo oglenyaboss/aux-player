@@ -20,14 +20,18 @@ import (
 )
 
 const (
-	defaultBaseURL         = "https://api.music.apple.com/v1"
-	favoritesPlaylistID    = "aux:favorites"
-	favoritesPlaylistName  = "Favorites"
-	ratingBatchSize        = 100
-	ratingBatchConcurrency = 5
+	defaultBaseURL        = "https://api.music.apple.com/v1"
+	favoritesPlaylistID   = provider.FavoritesPlaylistID
+	favoritesPlaylistName = "Favorites"
+	// favoritesEndpoint asks Apple to report inFavorites on every library song.
+	favoritesEndpoint = "/me/library/songs?limit=100&extend=inFavorites"
 	// maxResponseBody bounds how much of any API response is read.
 	maxResponseBody = 32 << 20
 )
+
+// favoritesPageParams keep the inFavorites extension on pages reached through
+// a "next" link, which carries only the parameters Apple chose to repeat.
+var favoritesPageParams = url.Values{"limit": {"100"}, "extend": {"inFavorites"}}
 
 // resolveURL turns an endpoint into the URL to request. A relative endpoint
 // is joined to base. An absolute one, which is how Apple's "next" pagination
@@ -195,6 +199,8 @@ type songAttributes struct {
 	PlayParams  *playParams `json:"playParams"`
 	DiscNumber  int         `json:"discNumber"`
 	TrackNumber int         `json:"trackNumber"`
+	// InFavorites is only sent when the request asks for extend=inFavorites.
+	InFavorites bool `json:"inFavorites"`
 }
 
 type songResource struct {
@@ -323,6 +329,7 @@ func toTrack(s songResource) provider.Track {
 		Genres:      provider.CleanAll(slices.Clone(s.Attributes.GenreNames)),
 		DiscNumber:  s.Attributes.DiscNumber,
 		TrackNumber: s.Attributes.TrackNumber,
+		Favorite:    s.Attributes.InFavorites,
 	}
 	if s.Attributes.PlayParams != nil && s.Attributes.PlayParams.CatalogID != "" {
 		t.CatalogID = s.Attributes.PlayParams.CatalogID
@@ -549,7 +556,12 @@ func (a *AppleProvider) Search(ctx context.Context, query string) (*provider.Sea
 	return result, nil
 }
 
-func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint string) ([]provider.Track, error) {
+// fetchSongResources pages through a songs endpoint and returns the raw
+// resources, so a caller can read attributes toTrack drops. nextParams are
+// applied to every "next" link: Apple's links repeat only the parameters it
+// chooses, and a library page fetched without extend=inFavorites reports every
+// song as not favourite.
+func (a *AppleProvider) fetchSongResources(ctx context.Context, baseEndpoint string, nextParams url.Values) ([]songResource, error) {
 	req, err := a.newRequest(ctx, http.MethodGet, baseEndpoint)
 	if err != nil {
 		return nil, err
@@ -561,22 +573,26 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 
 	total := firstPage.Meta.Total
 	if total == 0 {
-		tracks := make([]provider.Track, 0, len(firstPage.Data))
-		for _, s := range firstPage.Data {
-			tracks = append(tracks, toTrack(s))
-		}
+		resources := make([]songResource, 0, len(firstPage.Data))
+		resources = append(resources, firstPage.Data...)
 		if firstPage.Next == "" {
-			return tracks, nil
+			return resources, nil
 		}
 		endpoint := firstPage.Next
 		for endpoint != "" {
+			if len(nextParams) > 0 {
+				endpoint, err = withQueryParams(endpoint, nextParams)
+				if err != nil {
+					return nil, err
+				}
+			}
 			req, err := a.newRequest(ctx, http.MethodGet, endpoint)
 			if err != nil {
 				return nil, err
 			}
 			var page paginatedSongs
 			if err := a.do(req, &page); err != nil {
-				if len(tracks) > 0 && (strings.Contains(err.Error(), "404 Not Found") || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || ctx.Err() != nil) {
+				if len(resources) > 0 && (strings.Contains(err.Error(), "404 Not Found") || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || ctx.Err() != nil) {
 					break
 				}
 				if strings.Contains(err.Error(), "404 Not Found") {
@@ -584,24 +600,22 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 				}
 				return nil, err
 			}
-			for _, s := range page.Data {
-				tracks = append(tracks, toTrack(s))
-			}
+			resources = append(resources, page.Data...)
 			endpoint = page.Next
 		}
-		return tracks, nil
+		return resources, nil
 	}
 
 	limit := 100
-	tracks := make([]provider.Track, total)
+	resources := make([]songResource, total)
 	for i, s := range firstPage.Data {
 		if i < total {
-			tracks[i] = toTrack(s)
+			resources[i] = s
 		}
 	}
 
 	if total <= len(firstPage.Data) {
-		return tracks[:len(firstPage.Data)], nil
+		return resources[:len(firstPage.Data)], nil
 	}
 
 	offsets := []int{}
@@ -663,8 +677,8 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 
 			for j, s := range page.Data {
 				idx := offset + j
-				if idx < len(tracks) {
-					tracks[idx] = toTrack(s)
+				if idx < len(resources) {
+					resources[idx] = s
 				}
 			}
 		}(offset)
@@ -675,10 +689,10 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 	select {
 	case err := <-errChan:
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || ctx.Err() != nil {
-			var filtered []provider.Track
-			for _, t := range tracks {
-				if t.ID != "" {
-					filtered = append(filtered, t)
+			var filtered []songResource
+			for _, s := range resources {
+				if s.ID != "" {
+					filtered = append(filtered, s)
 				}
 			}
 			if len(filtered) > 0 {
@@ -689,25 +703,72 @@ func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint st
 	default:
 	}
 
-	var finalTracks []provider.Track
-	for _, t := range tracks {
-		if t.ID != "" {
-			finalTracks = append(finalTracks, t)
+	var finalResources []songResource
+	for _, s := range resources {
+		if s.ID != "" {
+			finalResources = append(finalResources, s)
 		}
 	}
-	return finalTracks, nil
+	return finalResources, nil
+}
+
+// withQueryParams returns endpoint with params set, replacing what the link
+// already carries for those keys.
+func withQueryParams(endpoint string, params url.Values) (string, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	for key, values := range params {
+		q.Set(key, values[0])
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+func toTracks(resources []songResource) []provider.Track {
+	if resources == nil {
+		return nil
+	}
+	tracks := make([]provider.Track, 0, len(resources))
+	for _, s := range resources {
+		tracks = append(tracks, toTrack(s))
+	}
+	return tracks
+}
+
+func (a *AppleProvider) fetchSongsPaginated(ctx context.Context, baseEndpoint string) ([]provider.Track, error) {
+	resources, err := a.fetchSongResources(ctx, baseEndpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	return toTracks(resources), nil
 }
 
 func (a *AppleProvider) GetLibraryTracks(ctx context.Context) ([]provider.Track, error) {
-	endpoint := "/me/library/songs?limit=100"
-	tracks, err := a.fetchSongsPaginated(ctx, endpoint)
+	resources, err := a.fetchSongResources(ctx, favoritesEndpoint, favoritesPageParams)
 	if err != nil {
 		if strings.Contains(err.Error(), "404 Not Found") {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return tracks, nil
+	return toTracks(resources), nil
+}
+
+// LibrarySongCount returns the total number of songs in the user's library
+// via a single one-item request, so callers can cheaply detect changes.
+func (a *AppleProvider) LibrarySongCount(ctx context.Context) (int, error) {
+	req, err := a.newRequest(ctx, http.MethodGet, "/me/library/songs?limit=1")
+	if err != nil {
+		return 0, err
+	}
+	var resp paginatedSongs
+	if err := a.do(req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Meta.Total, nil
 }
 
 func (a *AppleProvider) fetchPlaylistsPaginated(ctx context.Context, baseEndpoint string) ([]provider.Playlist, error) {
@@ -875,6 +936,45 @@ func (a *AppleProvider) GetLibraryPlaylists(ctx context.Context) ([]provider.Pla
 	return playlists, nil
 }
 
+// maxLibraryAlbumPages bounds GetLibraryAlbums at 10,000 albums: a library
+// can be large, but a "next" link that never ends must not loop forever.
+const maxLibraryAlbumPages = 100
+
+// GetLibraryAlbums lists the albums in the user's library ("l." IDs), in
+// Apple's order. A 404 means the library holds no albums, which is not an
+// error; any later page failing does, since a short list would look complete.
+func (a *AppleProvider) GetLibraryAlbums(ctx context.Context) ([]provider.Album, error) {
+	albums := []provider.Album{}
+	endpoint := "/me/library/albums?limit=100"
+	for pages := 0; endpoint != ""; pages++ {
+		if pages == maxLibraryAlbumPages {
+			return nil, fmt.Errorf("GetLibraryAlbums: more than %d pages", maxLibraryAlbumPages)
+		}
+		req, err := a.newRequest(ctx, http.MethodGet, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		var page paginatedAlbums
+		if err := a.do(req, &page); err != nil {
+			if pages == 0 && strings.Contains(err.Error(), "404 Not Found") {
+				return albums, nil
+			}
+			return nil, fmt.Errorf("GetLibraryAlbums: %w", err)
+		}
+		for _, r := range page.Data {
+			albums = append(albums, toAlbum(r))
+		}
+		endpoint = page.Next
+		if endpoint != "" {
+			// Apple's next link drops limit, which falls back to 25 per page.
+			if endpoint, err = withQueryParams(endpoint, url.Values{"limit": {"100"}}); err != nil {
+				return nil, fmt.Errorf("GetLibraryAlbums: %w", err)
+			}
+		}
+	}
+	return albums, nil
+}
+
 func hasFavoritesPlaylist(playlists []provider.Playlist) bool {
 	for _, pl := range playlists {
 		name := strings.ToLower(strings.TrimSpace(pl.Name))
@@ -982,144 +1082,25 @@ func (a *AppleProvider) GetCatalogPlaylistTracks(ctx context.Context, playlistID
 	return a.fetchSongsPaginated(ctx, endpoint)
 }
 
+// getFavoriteTracks returns the library songs Apple Music marks as Favorites,
+// in library order. The extension is re-applied to every page because Apple's
+// "next" links drop it, and a page fetched without it reports every song as
+// not favourite.
 func (a *AppleProvider) getFavoriteTracks(ctx context.Context) ([]provider.Track, error) {
-	tracks, err := a.GetLibraryTracks(ctx)
+	resources, err := a.fetchSongResources(ctx, favoritesEndpoint, favoritesPageParams)
 	if err != nil {
-		return nil, fmt.Errorf("favorites: library tracks: %w", err)
+		if strings.Contains(err.Error(), "404 Not Found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("favorites: library songs: %w", err)
 	}
-	catalogIDs := make([]string, 0, len(tracks))
-	trackCatalogID := make(map[string]string, len(tracks))
-	seen := make(map[string]bool, len(tracks))
-	for _, track := range tracks {
-		catalogID := track.CatalogID
-		if catalogID == "" && !strings.HasPrefix(track.ID, "i.") {
-			catalogID = track.ID
-		}
-		if catalogID == "" {
-			continue
-		}
-		trackCatalogID[track.ID] = catalogID
-		if !seen[catalogID] {
-			catalogIDs = append(catalogIDs, catalogID)
-			seen[catalogID] = true
+	favorites := make([]songResource, 0, len(resources))
+	for _, r := range resources {
+		if r.Attributes.InFavorites {
+			favorites = append(favorites, r)
 		}
 	}
-	if len(catalogIDs) == 0 {
-		return nil, nil
-	}
-	loved, err := a.getSongRatings(ctx, catalogIDs)
-	if err != nil {
-		return nil, fmt.Errorf("favorites: ratings: %w", err)
-	}
-	favorites := make([]provider.Track, 0, len(tracks))
-	for _, track := range tracks {
-		if loved[trackCatalogID[track.ID]] {
-			favorites = append(favorites, track)
-		}
-	}
-	return favorites, nil
-}
-
-type ratingsResponse struct {
-	Data []struct {
-		ID         string `json:"id"`
-		Attributes struct {
-			Value int `json:"value"`
-		} `json:"attributes"`
-	} `json:"data"`
-}
-
-func (a *AppleProvider) getSongRatings(ctx context.Context, ids []string) (map[string]bool, error) {
-	loved := make(map[string]bool, len(ids))
-	if len(ids) == 0 {
-		return loved, nil
-	}
-
-	type batch struct {
-		ids []string
-	}
-	batchCount := (len(ids) + ratingBatchSize - 1) / ratingBatchSize
-	jobs := make(chan batch, batchCount)
-	errs := make(chan error, 1)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
-	workerCount := min(ratingBatchConcurrency, batchCount)
-	for range workerCount {
-		wg.Go(func() {
-			for job := range jobs {
-				ratings, err := a.fetchSongRatingsBatch(ctx, job.ids)
-				if err != nil {
-					select {
-					case errs <- err:
-					default:
-					}
-					continue
-				}
-				mu.Lock()
-				for id := range ratings {
-					loved[id] = true
-				}
-				mu.Unlock()
-			}
-		})
-	}
-
-	for start := 0; start < len(ids); start += ratingBatchSize {
-		end := min(start+ratingBatchSize, len(ids))
-		select {
-		case jobs <- batch{ids: ids[start:end]}:
-		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			return nil, ctx.Err()
-		}
-	}
-	close(jobs)
-	wg.Wait()
-
-	select {
-	case err := <-errs:
-		return nil, err
-	default:
-	}
-	return loved, nil
-}
-
-func (a *AppleProvider) fetchSongRatingsBatch(ctx context.Context, ids []string) (map[string]bool, error) {
-	ep := "/me/ratings/songs?ids=" + url.QueryEscape(strings.Join(ids, ","))
-	req, err := a.newRequest(ctx, http.MethodGet, ep)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req) //nolint:gosec // G704: URL is constructed from config, not user input
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
-	_ = resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNoContent {
-		return map[string]bool{}, nil
-	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("apple music api %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var ratings ratingsResponse
-	if len(body) > 0 {
-		if err := json.Unmarshal(body, &ratings); err != nil {
-			return nil, err
-		}
-	}
-	loved := make(map[string]bool, len(ratings.Data))
-	for _, rating := range ratings.Data {
-		if rating.Attributes.Value == 1 {
-			// GET /v1/me/ratings/songs?ids=<catalog ids> has been observed to return
-			// rating resource IDs prefixed as "r.<catalog id>". Apple's public docs do
-			// not document the wrapper prefix, so only strip that exact prefix.
-			loved[strings.TrimPrefix(rating.ID, "r.")] = true
-		}
-	}
-	return loved, nil
+	return toTracks(favorites), nil
 }
 
 // createPlaylistRequest is the JSON body for POST /v1/me/library/playlists.
@@ -1397,6 +1378,33 @@ func (a *AppleProvider) LoveSong(ctx context.Context, catalogID string, loved bo
 	putReq.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
 	putReq.Header.Set("Content-Type", "application/json")
 	return a.do(putReq, nil)
+}
+
+func (a *AppleProvider) AddToLibrary(ctx context.Context, songID string) error {
+	return a.addSongTo(ctx, "/me/library", songID)
+}
+
+func (a *AppleProvider) AddToFavorites(ctx context.Context, songID string) error {
+	return a.addSongTo(ctx, "/me/favorites", songID)
+}
+
+func (a *AppleProvider) addSongTo(ctx context.Context, endpoint, songID string) error {
+	if strings.HasPrefix(songID, "i.") {
+		catalogID, err := a.resolveCatalogSongID(ctx, songID)
+		if err != nil {
+			return err
+		}
+		songID = catalogID
+	}
+	u := fmt.Sprintf("%s%s?ids[songs]=%s", a.baseURL, endpoint, url.QueryEscape(songID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, http.NoBody) //nolint:gosec // G107: URL is constructed from config, not user input
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+a.cfg.AppleDeveloperToken)
+	req.Header.Set("Origin", "https://music.apple.com")
+	req.Header.Set("Music-User-Token", a.cfg.AppleUserToken)
+	return a.do(req, nil)
 }
 
 // ratingResponse wraps GET /v1/me/ratings/songs/{id}.

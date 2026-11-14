@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +87,23 @@ func (p *Player) ResetSessionExpired() {
 	p.mu.Unlock()
 }
 
+// newSegCacheFromConfig builds the on-disk encrypted-segment cache from the
+// audio_cache_mb setting; nil means no cache.
+func newSegCacheFromConfig(cfg *config.Config) *segCache {
+	mb := cfg.AudioCacheMB
+	if mb < 0 {
+		return nil
+	}
+	if mb == 0 {
+		mb = 2048
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return nil
+	}
+	return newSegCache(filepath.Join(dir, "aux", "audio"), int64(mb)*1024*1024)
+}
+
 // New creates a ready browserless Player.
 func New(cfg *config.Config, prov *apple.AppleProvider, progress ...func(string)) (*Player, error) {
 	cdmPath, err := EnsureCDM(progress...)
@@ -102,6 +121,12 @@ func New(cfg *config.Config, prov *apple.AppleProvider, progress ...func(string)
 	if err != nil {
 		_ = cdmEngine.Close()
 		return nil, fmt.Errorf("browserless stream server: %w", err)
+	}
+
+	if segs := newSegCacheFromConfig(cfg); segs != nil {
+		streamer.SetSegmentCache(segs)
+		// ponytail: pruned once per launch; a long session can overshoot the cap by its own downloads
+		go segs.prune()
 	}
 
 	sink, err := newAudioSink()

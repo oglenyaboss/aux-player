@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"math"
 	"net/http"
 	urlpkg "net/url"
 	"os"
@@ -91,6 +93,36 @@ func FetchAndDecode(ctx context.Context, client *http.Client, url string, maxByt
 		return nil, fmt.Errorf("fetch artwork: status %d", resp.StatusCode)
 	}
 	return decodeBounded(resp.Body, maxBytes)
+}
+
+// Shrink returns an area-average downscale of img that fits within side×side,
+// keeping the aspect ratio; an image already within the limit comes back unchanged.
+func Shrink(img image.Image, side int) image.Image {
+	b := img.Bounds()
+	if b.Dx() <= side && b.Dy() <= side {
+		return img
+	}
+	scale := float64(side) / float64(max(b.Dx(), b.Dy()))
+	w := max(1, int(math.Round(float64(b.Dx())*scale)))
+	h := max(1, int(math.Round(float64(b.Dy())*scale)))
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		y0 := b.Min.Y + y*b.Dy()/h
+		y1 := max(b.Min.Y+(y+1)*b.Dy()/h, y0+1)
+		for x := range w {
+			x0 := b.Min.X + x*b.Dx()/w
+			x1 := max(b.Min.X+(x+1)*b.Dx()/w, x0+1)
+			var r, g, bl, a, n uint64
+			for yy := y0; yy < y1; yy++ {
+				for xx := x0; xx < x1; xx++ {
+					cr, cg, cb, ca := img.At(xx, yy).RGBA()
+					r, g, bl, a, n = r+uint64(cr), g+uint64(cg), bl+uint64(cb), a+uint64(ca), n+1
+				}
+			}
+			out.SetRGBA64(x, y, color.RGBA64{R: uint16(r / n), G: uint16(g / n), B: uint16(bl / n), A: uint16(a / n)})
+		}
+	}
+	return out
 }
 
 func decodeDataURL(raw string, maxBytes int64) (image.Image, error) {
