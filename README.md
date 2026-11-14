@@ -90,6 +90,7 @@ When the agent asks a question with track cards:
 |----------------|--------------|
 | `aux auth login`, `logout`, `status` | Manage the Apple Music session |
 | `aux auth lastfm` | Manage Last.fm scrobbling |
+| `aux update` | Check for a newer release and install it now |
 | `aux version` | Print the version |
 | `--demo` | Built-in fake tracks, no account or internet needed |
 | `--local`, `--music-dir` | Play local music files instead of Apple Music |
@@ -98,7 +99,7 @@ When the agent asks a question with track cards:
 | `--debug` | Debug logging |
 | `--config` | Use another config file |
 
-Release builds check GitHub for a newer release once a day and update themselves; `--no-update` turns this off. Builds from source report version `dev` and are never replaced.
+Release builds check GitHub for a newer release once a day and update themselves; `--no-update` turns this off, `aux update` checks right away. Builds from source report version `dev` and are never replaced.
 
 ## Data
 
