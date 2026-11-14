@@ -3,6 +3,10 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
+## [1.3.0] — 2026-11-14
+
+- `aux update` checks for a newer release and installs it right away, without waiting for the once-a-day check.
+
 ## [1.2.0] — 2026-11-14
 
 - Music screen: search the catalog and your library, browse Favorites, albums and playlists, and play them without the agent. Open it with `ctrl+o` on the intro or `m` in the player; `ctrl+e` appends a track to the queue. Without the agent a queue ends where it ends.
