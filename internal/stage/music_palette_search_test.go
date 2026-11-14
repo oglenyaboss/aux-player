@@ -265,11 +265,11 @@ func TestPaletteGridFocus(t *testing.T) {
 	}
 	bg := m.th.bg.lerp(m.th.text, 0.07)
 	sel, other := f.at(x1, y1), f.at(x2, y2)
-	if sel == nil || sel.fg != m.th.a1 {
-		t.Errorf("the selected title is not in the accent color")
-	}
 	dist := func(a, b col) float64 {
 		return math.Sqrt((a.r-b.r)*(a.r-b.r) + (a.g-b.g)*(a.g-b.g) + (a.b-b.b)*(a.b-b.b))
+	}
+	if sel == nil || dist(sel.fg, m.th.a1) > 1e-9 {
+		t.Fatalf("the selected title is not in the accent color")
 	}
 	if other == nil || dist(other.fg, bg) >= dist(sel.fg, bg) {
 		t.Errorf("the rest of the grid is not faded toward the panel background")

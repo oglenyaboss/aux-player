@@ -38,6 +38,7 @@ func saveTestModel(t *testing.T, prov provider.Provider, plyr player.Player) *Mo
 	t.Helper()
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LocalAppData", t.TempDir())
 	m := newModel(plyr)
 	m.provider = prov
 	m.stateCh = nil

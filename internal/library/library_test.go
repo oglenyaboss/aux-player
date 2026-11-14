@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -237,14 +238,14 @@ func TestLoad_SongsColdThenWarm(t *testing.T) {
 	ownerDir := filepath.Join(dir, s.owner)
 	if info, err := os.Stat(ownerDir); err != nil {
 		t.Fatalf("owner dir: %v", err)
-	} else if perm := info.Mode().Perm(); perm != 0o700 {
+	} else if perm := info.Mode().Perm(); perm != 0o700 && runtime.GOOS != "windows" {
 		t.Errorf("owner dir mode = %o, want 700", perm)
 	}
 	info, err := os.Stat(filepath.Join(ownerDir, "songs.json"))
 	if err != nil {
 		t.Fatalf("songs file: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	if perm := info.Mode().Perm(); perm != 0o600 && runtime.GOOS != "windows" {
 		t.Errorf("songs file mode = %o, want 600", perm)
 	}
 
