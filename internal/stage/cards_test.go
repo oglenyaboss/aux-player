@@ -231,7 +231,7 @@ func TestScanSlotsOption(t *testing.T) {
 	m.SetSize(110, 32)
 	toScan(t, m)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "0 из 5") {
-		t.Fatalf("кадр без «0 из 5»:\n%s", frame)
+		t.Fatalf("frame without «0 из 5»:\n%s", frame)
 	}
 	tracks := []Track{
 		{ID: "p1", Artist: "A", Title: "One", Dur: 120},
@@ -262,7 +262,7 @@ func TestScanSlotsDefault(t *testing.T) {
 	m.SetSize(110, 32)
 	toScan(t, m)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "0 из 20") {
-		t.Fatalf("кадр без «0 из 20»:\n%s", frame)
+		t.Fatalf("frame without «0 из 20»:\n%s", frame)
 	}
 }
 
@@ -278,7 +278,7 @@ func TestTrackCardEscNone(t *testing.T) {
 		t.Fatalf("expected Raw [none], recorded %v", r.acts)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "мимо") {
-		t.Fatalf("кадр без «мимо»:\n%s", frame)
+		t.Fatalf("frame without «мимо»:\n%s", frame)
 	}
 }
 
@@ -296,7 +296,7 @@ func TestTrackCardOwnWords(t *testing.T) {
 		t.Fatalf("expected Raw [потише], recorded %v", r.acts)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "своё: потише") {
-		t.Fatalf("кадр без «своё: потише»:\n%s", frame)
+		t.Fatalf("frame without «своё: потише»:\n%s", frame)
 	}
 }
 
@@ -407,7 +407,7 @@ func TestTrackCardHint(t *testing.T) {
 	m.Key("", "тише")
 	frame = stripANSI(m.View())
 	if !strings.Contains(frame, "› тише") {
-		t.Fatalf("кадр без «› тише»:\n%s", frame)
+		t.Fatalf("frame without «› тише»:\n%s", frame)
 	}
 	if strings.Contains(frame, "esc мимо") {
 		t.Fatalf("the hint stayed during input:\n%s", frame)
