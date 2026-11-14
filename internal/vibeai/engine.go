@@ -38,9 +38,10 @@ type Track struct {
 }
 
 type Portion struct {
-	Tracks []Track
-	Note   string
-	Later  *Question
+	Tracks   []Track
+	Note     string
+	Later    *Question
+	Playlist *PlaylistPlan
 }
 
 type Engine struct {
@@ -200,7 +201,7 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 	if e.agent.Later != nil {
 		e.log.f("later question: %s %v", e.agent.Later.Question, e.agent.Later.Options)
 	}
-	return Portion{Tracks: tracks, Note: e.agent.Note, Later: e.agent.Later}, nil
+	return Portion{Tracks: tracks, Note: e.agent.Note, Later: e.agent.Later, Playlist: e.session.Playlist()}, nil
 }
 
 func (e *Engine) DropLast() {

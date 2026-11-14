@@ -12,10 +12,17 @@ type Seed struct {
 	Mode   string // "not_it" | "and_similar" | "want_it"
 }
 
+type PlaylistPlan struct {
+	Size        int    `json:"size"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 type Plan struct {
 	Seeds         []Seed
 	Exclusions    []string // artist names
 	FromFavorites bool
+	Playlist      *PlaylistPlan // nil — stream mode
 }
 
 type Entry struct {
@@ -55,6 +62,7 @@ type Session struct {
 	knownCount      int
 	sig             *Signals
 	sessionID       string
+	stream          int
 	Size, PerArtist int
 }
 
@@ -66,6 +74,7 @@ func NewSession(library, favorites []Song, size int) *Session {
 		given:       make(map[string]bool),
 		inPortion:   make(map[string]bool),
 		portionArts: make(map[string]int),
+		stream:      size,
 		Size:        size,
 		PerArtist:   2,
 	}
@@ -73,6 +82,11 @@ func NewSession(library, favorites []Song, size int) *Session {
 
 func (s *Session) SetPlan(p Plan) {
 	s.plan = p
+	if p.Playlist != nil {
+		s.Size = p.Playlist.Size
+	} else {
+		s.Size = s.stream
+	}
 	s.excl = make(map[string]string, len(p.Exclusions))
 	for _, name := range p.Exclusions {
 		if k := normKey(name); k != "" {
@@ -86,6 +100,15 @@ func (s *Session) SetPlan(p Plan) {
 		}
 	}
 	s.recountKnown()
+}
+
+func (s *Session) Playlist() *PlaylistPlan { return s.plan.Playlist }
+
+func (s *Session) window() int { return max(windowSize, s.Size) }
+
+func (s *Session) perArtist() int {
+	w := s.window()
+	return max(s.PerArtist, w*s.PerArtist/windowSize)
 }
 
 func (s *Session) recountKnown() {
@@ -195,16 +218,18 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		v.Reason = "known track (library)"
 		return v
 	}
+	playlist := s.plan.Playlist != nil
 	for _, a := range arts {
-		if s.seeds[a] == "want_it" {
+		mode := s.seeds[a]
+		if mode == "want_it" || (playlist && mode == "and_similar") {
 			continue
 		}
-		if s.portionArts[a]+windowArts[a] >= s.PerArtist {
+		if s.portionArts[a]+windowArts[a] >= s.perArtist() {
 			v.Reason = "artist limit: " + a
 			return v
 		}
 	}
-	maxSimilar := int(math.Ceil(float64(windowSize)*0.15 - 1e-9))
+	maxSimilar := int(math.Ceil(float64(s.window())*0.15 - 1e-9))
 	for _, a := range arts {
 		if s.seeds[a] == "and_similar" && s.portionArts[a]+windowArts[a] >= maxSimilar {
 			v.Reason = "referent limit"
@@ -285,6 +310,9 @@ func (s *Session) TakeReserve() []string {
 func (s *Session) ClearReserve() { s.reserve = nil }
 
 func (s *Session) Done() bool {
+	if s.plan.Playlist != nil {
+		return s.Need() == 0
+	}
 	return s.Need() <= s.Size/10
 }
 
@@ -298,7 +326,7 @@ func (s *Session) hasSeedArtist(arts []string) bool {
 }
 
 func (s *Session) maxKnown() int {
-	return int(math.Floor(float64(windowSize)*0.2 + 1e-9))
+	return int(math.Floor(float64(s.window())*0.2 + 1e-9))
 }
 
 func (s *Session) KnownLeft() int {
