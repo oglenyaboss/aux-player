@@ -271,3 +271,36 @@ func TestMusicFollowOnKeepsTypedTurn(t *testing.T) {
 		t.Fatal("the switch replaced the typed request")
 	}
 }
+
+type followRecorder struct {
+	labels []string
+	served [][]vibeai.Song
+}
+
+func (f *followRecorder) Label(name string)          { f.labels = append(f.labels, name) }
+func (f *followRecorder) Served(songs []vibeai.Song) { f.served = append(f.served, songs) }
+
+// The selection's title and tracks are drained into the turn, which names the
+// session after it and marks the tracks served; a typed turn primes nothing.
+func TestMusicFollowPrimesEngine(t *testing.T) {
+	m, _ := musicTestModel(t, newMusicProvider())
+	followOn(t, m)
+	playBlonde(t, m)
+	if r := m.vibeAI; r.followSongs != nil || r.followName != "" {
+		t.Fatalf("followSongs=%+v followName=%q, want drained into the turn", r.followSongs, r.followName)
+	}
+	rec := &followRecorder{}
+	songs := []vibeai.Song{{ID: "i.b1", Title: "Nikes"}, {ID: "i.b2", Title: "Ivy"}}
+	primeFollow(rec, "Blonde", songs)
+	if len(rec.labels) != 1 || rec.labels[0] != "Blonde" {
+		t.Errorf("Label calls = %q, want Blonde", rec.labels)
+	}
+	if len(rec.served) != 1 || len(rec.served[0]) != 2 || rec.served[0][1].Title != "Ivy" {
+		t.Errorf("Served calls = %+v, want the album", rec.served)
+	}
+	none := &followRecorder{}
+	primeFollow(none, "", nil)
+	if len(none.labels)+len(none.served) != 0 {
+		t.Errorf("a typed turn primed the engine: %+v", none)
+	}
+}

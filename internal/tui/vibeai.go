@@ -262,12 +262,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 			}
 			r.engine = e
 		}
-		if name != "" {
-			r.engine.Label(name)
-		}
-		if len(given) > 0 {
-			r.engine.Served(given)
-		}
+		primeFollow(r.engine, name, given)
 		noteSavedSongs(r.engine, saved)
 		if drop || r.undelivered {
 			r.engine.DropLast()
@@ -291,6 +286,21 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 		case <-ctx.Done():
 		}
 		return nil
+	}
+}
+
+// followPrimer takes a manual selection into a fresh session.
+type followPrimer interface {
+	Label(string)
+	Served([]vibeai.Song)
+}
+
+func primeFollow(e followPrimer, name string, given []vibeai.Song) {
+	if name != "" {
+		e.Label(name)
+	}
+	if len(given) > 0 {
+		e.Served(given)
 	}
 }
 
