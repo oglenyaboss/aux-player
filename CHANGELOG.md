@@ -3,6 +3,15 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
+## [1.2.0] — 2026-11-14
+
+- Music screen: search the catalog and your library, browse Favorites, albums and playlists, and play them without the agent. Open it with `ctrl+o` on the intro or `m` in the player; `ctrl+e` appends a track to the queue. Without the agent a queue ends where it ends.
+- The agent is optional: Apple Music alone is enough to listen, and the agent can be set up later.
+- The agent can continue after your choice: `ctrl+n` on the Music screen turns it on, and the agent's tracks join once your album, playlist or track has played. Your own picks never count as ratings or go into the agent's memory.
+- Add the playing or a recently played track to the Apple Music library (`l`) or Favorites (`f`); `h` lists what played this launch.
+- Your library is kept on disk and checked in the background, so the Music screen and the agent start faster.
+- Replays come from an encrypted on-disk audio cache (2 GB by default, `audio_cache_mb` in `config.json`); the license is still requested on every play.
+
 ## [1.1.0] — 2026-11-04
 
 - The scan is now a turntable: each kept track arrives as a sleeve with its real cover, its record is laid on the platter, and the needle drops into the player once the side is full.
