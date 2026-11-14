@@ -77,6 +77,9 @@ type Rate struct{ Up bool }
 // Save is the w key: the host writes the queue as a playlist and answers via Toast.
 type Save struct{}
 
+// Listen is enter on a finished playlist: the host plays the side.
+type Listen struct{}
+
 // SaveTrack is the l / f key: the host saves the track with ID, or the playing track when ID is empty.
 type SaveTrack struct {
 	ID        string
@@ -253,9 +256,11 @@ type Model struct {
 	doneAt    float64
 	portionNo int
 
-	note    string
-	portion []Track
-	pDone   bool
+	note      string
+	portion   []Track
+	pDone     bool
+	playlist  bool
+	savedLine string
 
 	snap   *fb
 	transT float64
@@ -456,7 +461,7 @@ func (m *Model) Step(dt float64) {
 	case PhDone:
 		m.spinStep(dt)
 		m.scanStep(dt)
-		if m.pt > 3.2 {
+		if m.pt > 3.2 && !m.playlist {
 			m.toPlay()
 		}
 	case PhPlay:
@@ -618,6 +623,22 @@ func (m *Model) PortionDone(tracks []Track, note string) {
 	m.note = note
 	m.portion = append([]Track(nil), tracks...)
 	m.pDone = true
+}
+
+// PlaylistMode grows side A to the playlist size; the filled rows keep their tracks.
+func (m *Model) PlaylistMode(size int) {
+	m.playlist = true
+	for len(m.slots) < size {
+		m.slots = append(m.slots, &slot{fillAt: -1})
+	}
+}
+
+// PlaylistSaved is the save status drawn on the done screen of a playlist.
+func (m *Model) PlaylistSaved(line string) {
+	m.savedLine = line
+	if m.ph == PhPlay {
+		m.say(line)
+	}
 }
 
 // queueAdditions appends the tracks the queue doesn't have yet, by key, and reports
@@ -1256,7 +1277,19 @@ func (m *Model) Key(k, text string) bool {
 		return true
 	case PhPlay:
 		return m.playKey(k, text)
+	case PhDone:
+		if m.playlist && k == "enter" {
+			if m.toPlay() {
+				m.send(Listen{})
+			}
+			return true
+		}
+		fallthrough
 	default:
+		if m.ph == PhDone && m.playlist && k == "w" {
+			m.send(Save{})
+			return true
+		}
 		switch k {
 		case "q":
 			m.send(Quit{})

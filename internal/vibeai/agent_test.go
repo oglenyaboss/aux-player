@@ -1221,7 +1221,7 @@ func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 
 func TestPromptRulesWantItShare(t *testing.T) {
 	for _, want := range []string{
-		"portions of 5 tracks",
+		"portions of tracks (5 in a stream)",
 		"an artist name with a mood, time or activity",
 		"3–4 tracks out of 5",
 		`"only X", "X and that's it" — the whole portion from X`,
@@ -1413,5 +1413,154 @@ func TestTurnNoExtraStepOnOtherErrors(t *testing.T) {
 	}
 	if len(ch.got) != 2 {
 		t.Fatalf("Chat called %d times, want 2", len(ch.got))
+	}
+}
+
+func TestDispatchSetPlanPlaylist(t *testing.T) {
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
+	ctx := context.Background()
+	res := a.dispatch(ctx, call("p1", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":30,"name":"Дым и лупы","description":"d"}}`))
+	if res != "plan accepted: referents 0, exclusions 0, playlist of 30" {
+		t.Errorf("got %q, want \"plan accepted: referents 0, exclusions 0, playlist of 30\"", res)
+	}
+	if p := a.Session.Playlist(); p == nil || p.Name != "Дым и лупы" {
+		t.Fatalf("playlist: %+v, want name \"Дым и лупы\"", p)
+	}
+	if res := a.dispatch(ctx, call("p2", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":4,"name":"P"}}`)); res != "error: playlist size must be 5–60" {
+		t.Errorf("size 4: got %q", res)
+	}
+	if res := a.dispatch(ctx, call("p2b", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":5,"name":"P"}}`)); res != "plan accepted: referents 0, exclusions 0, playlist of 5" {
+		t.Errorf("size 5: got %q, want \"plan accepted: referents 0, exclusions 0, playlist of 5\"", res)
+	}
+	if res := a.dispatch(ctx, call("p3", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":30,"name":"  "}}`)); res != "error: playlist name is required" {
+		t.Errorf("blank name: got %q", res)
+	}
+	long := strings.Repeat("Д", 70)
+	if res := a.dispatch(ctx, call("p4", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":30,"name":"`+long+`"}}`)); strings.HasPrefix(res, "error") {
+		t.Fatalf("long name: got %q", res)
+	}
+	if p := a.Session.Playlist(); p == nil || len([]rune(p.Name)) != 60 {
+		t.Fatalf("stored name: %q, want 60 runes", p.Name)
+	}
+}
+
+func TestTurnPlaylistModeKeepsNudging(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":10,"name":"P"}}`)),
+		toolResp(call("s1", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"}
+		]}`)),
+		textResp("more"),
+		textResp("more"),
+		textResp("more"),
+		toolResp(call("s2", "submit_candidates", `{"tracks":[
+			{"artist":"D","title":"T4","why":"w"},
+			{"artist":"E","title":"T5","why":"w"},
+			{"artist":"F","title":"T6","why":"w"},
+			{"artist":"G","title":"T7","why":"w"},
+			{"artist":"H","title":"T8","why":"w"},
+			{"artist":"I","title":"T9","why":"w"},
+			{"artist":"J","title":"T10","why":"w"}
+		]}`)),
+		textResp("done"),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "playlist for the flight")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 10 {
+		t.Fatalf("entries: %d, want 10", len(entries))
+	}
+	if len(ch.got) != 6 {
+		t.Fatalf("Chat called %d times, want 6", len(ch.got))
+	}
+}
+
+func TestPromptRulesPlaylistMode(t *testing.T) {
+	for _, want := range []string{
+		"you serve portions of tracks (5 in a stream)",
+		"6. Playlist mode.",
+		"size = the number they named, 30 if none (5–60)",
+		"name — short, in the listener's language, about the sound, not a copy of the request",
+		"The whole playlist is one portion: keep calling submit_candidates until it is full.",
+		"Artists the listener named are and_similar or want_it seeds.",
+		"- In playlist mode the limits scale to the playlist size: about 10% per artist, the and_similar referents are capped at 15%, known artists at 20%.",
+	} {
+		if !strings.Contains(promptRules, want) {
+			t.Errorf("promptRules does not contain %q", want)
+		}
+	}
+}
+
+func TestPromptPlaylistSetPlanFirst(t *testing.T) {
+	for _, want := range []string{
+		"Call set_plan with playlist first, before the card",
+		"(5–60)",
+	} {
+		if !strings.Contains(promptRules, want) {
+			t.Errorf("promptRules does not contain %q", want)
+		}
+	}
+}
+
+func TestPortionCarriesPlaylistPlan(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":10,"name":"Flight","description":"dub and haze"}}`)),
+		toolResp(call("s", "submit_candidates", `{"tracks":[
+			{"artist":"A","title":"T1","why":"w"},
+			{"artist":"B","title":"T2","why":"w"},
+			{"artist":"C","title":"T3","why":"w"},
+			{"artist":"D","title":"T4","why":"w"},
+			{"artist":"E","title":"T5","why":"w"},
+			{"artist":"F","title":"T6","why":"w"},
+			{"artist":"G","title":"T7","why":"w"},
+			{"artist":"H","title":"T8","why":"w"},
+			{"artist":"I","title":"T9","why":"w"},
+			{"artist":"J","title":"T10","why":"w"}
+		]}`)),
+	}}
+	e := newTestEngine(t, ch)
+	p, err := e.Turn(context.Background(), "playlist for the flight")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(p.Tracks) != 10 {
+		t.Fatalf("tracks: %d, want 10", len(p.Tracks))
+	}
+	if p.Playlist == nil {
+		t.Fatal("Playlist = nil, want the plan")
+	}
+	if p.Playlist.Size != 10 || p.Playlist.Name != "Flight" || p.Playlist.Description != "dub and haze" {
+		t.Errorf("Playlist = %+v, want {10 Flight dub and haze}", *p.Playlist)
+	}
+}
+
+type playlistUI struct {
+	*fakeUI
+	got []PlaylistPlan
+}
+
+func (p *playlistUI) Playlist(plan PlaylistPlan) { p.got = append(p.got, plan) }
+
+func TestSetPlanNotifiesPlaylistUI(t *testing.T) {
+	ui := &playlistUI{fakeUI: &fakeUI{}}
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, ui)
+	ctx := context.Background()
+	if res := a.dispatch(ctx, call("p1", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":20,"name":"N"}}`)); !strings.HasPrefix(res, "plan accepted") {
+		t.Fatalf("set_plan: %q", res)
+	}
+	if len(ui.got) != 1 {
+		t.Fatalf("playlist notifications = %d, want 1", len(ui.got))
+	}
+	if got := ui.got[0]; got.Size != 20 || got.Name != "N" || got.Description != "" {
+		t.Errorf("playlist = %+v, want {20 N }", got)
+	}
+	a.dispatch(ctx, call("p2", "set_plan", `{"seeds":[],"exclusions":[]}`))
+	if len(ui.got) != 1 {
+		t.Errorf("a stream plan must not notify the playlist UI, got %v", ui.got)
 	}
 }

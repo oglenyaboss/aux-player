@@ -198,7 +198,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg, AppleLoginMsg,
+	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIPlaylistMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg, AppleLoginMsg,
 		VibeAIAnswersMsg, VibeAISubmitMsg, VibeAICancelMsg, VibeAIActionMsg, VibeAILaterMsg, VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 

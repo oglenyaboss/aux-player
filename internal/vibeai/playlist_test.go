@@ -157,7 +157,7 @@ func TestEngineSaveAndAppendPlaylist(t *testing.T) {
 	api, reqs := postServer(t, http.StatusCreated, `{"data":[{"id":"p.abc"}]}`)
 	e := &Engine{api: api, log: &runLog{}, query: "рейдж 2024"}
 	tracks := []Track{{ID: "1", Artist: "A", Title: "T1"}, {ID: "2", Artist: "B", Title: "T2"}}
-	id, err := e.SavePlaylist(context.Background(), "Порция 1", tracks)
+	id, err := e.SavePlaylist(context.Background(), "Порция 1", "", tracks)
 	if err != nil || id != "p.abc" {
 		t.Fatalf("SavePlaylist: (%q, %v)", id, err)
 	}

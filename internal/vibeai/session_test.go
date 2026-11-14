@@ -3,6 +3,7 @@ package vibeai
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -818,5 +819,170 @@ func TestNoteSavedFavoriteRecountsKnown(t *testing.T) {
 	s.NoteSaved(Song{ID: "z9", Artist: "Z", Title: "Other"}, true)
 	if got := s.KnownLeft(); got != before-1 {
 		t.Errorf("KnownLeft = %d, want %d", got, before-1)
+	}
+}
+
+// R1/R2/R3: playlist mode fills one portion of the target size, keeps the artists
+// the listener named, and is done only when full.
+func TestPlaylistModeLetsNamedArtistsThrough(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{
+		Seeds: []Seed{
+			{"Westside Gunn", "want_it"},
+			{"Earl Sweatshirt", "and_similar"},
+			{"Armand Hammer", "and_similar"},
+		},
+		Exclusions: []string{"Kendrick Lamar", "21 Savage"},
+		Playlist:   &PlaylistPlan{Size: 30, Name: "Drumless haze"},
+	})
+	for i, line := range []string{
+		"Westside Gunn & Joey Bada$$ — 327 (feat. Tyler, The Creator & Billie Essco)",
+		"Westside Gunn — George Bondo (feat. Conway the Machine & BENNY the BUTCHER)",
+		"Earl Sweatshirt — Shattered Dreams",
+		"Armand Hammer & The Alchemist — Falling out the Sky (feat. Earl Sweatshirt)",
+		"Benny the Butcher — Crowns for Kings (Feat. Black Thought)",
+		"Westside Gunn — Allah Sent Me (feat. Conway the Machine & Benny the Butcher)",
+		"Earl Sweatshirt — Nowhere2go",
+	} {
+		artist, title, _ := strings.Cut(line, " — ")
+		song := Song{ID: fmt.Sprintf("%d", i+1), Artist: artist, Title: title}
+		v := s.Offer(Suggestion{Artist: artist, Title: title}, song, true)
+		if !v.Accepted {
+			t.Fatalf("%s: rejected: %s", line, v.Reason)
+		}
+	}
+	if s.Need() != 23 {
+		t.Errorf("Need = %d, want 23", s.Need())
+	}
+	if s.Done() {
+		t.Error("Done = true, want false")
+	}
+}
+
+func TestStreamModeStillRejectsTheSameTracks(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{
+		Seeds: []Seed{
+			{"Westside Gunn", "want_it"},
+			{"Earl Sweatshirt", "and_similar"},
+			{"Armand Hammer", "and_similar"},
+		},
+		Exclusions: []string{"Kendrick Lamar", "21 Savage"},
+	})
+	for i, line := range []string{
+		"Westside Gunn & Joey Bada$$ — 327 (feat. Tyler, The Creator & Billie Essco)",
+		"Westside Gunn — George Bondo (feat. Conway the Machine & BENNY the BUTCHER)",
+		"Earl Sweatshirt — Shattered Dreams",
+		"Armand Hammer & The Alchemist — Falling out the Sky (feat. Earl Sweatshirt)",
+		"Benny the Butcher — Crowns for Kings (Feat. Black Thought)",
+	} {
+		artist, title, _ := strings.Cut(line, " — ")
+		song := Song{ID: fmt.Sprintf("%d", i+1), Artist: artist, Title: title}
+		if v := s.Offer(Suggestion{Artist: artist, Title: title}, song, true); !v.Accepted {
+			t.Fatalf("%s: rejected: %s", line, v.Reason)
+		}
+	}
+	s.ClosePortion()
+	for _, want := range []struct {
+		line   string
+		reason string
+	}{
+		{"Westside Gunn — Allah Sent Me (feat. Conway the Machine & Benny the Butcher)", "artist limit: bennythebutcher"},
+		{"Earl Sweatshirt — Nowhere2go", "artist limit: earlsweatshirt"},
+	} {
+		artist, title, _ := strings.Cut(want.line, " — ")
+		song := Song{ID: "x" + title, Artist: artist, Title: title}
+		v := s.Offer(Suggestion{Artist: artist, Title: title}, song, true)
+		if v.Accepted || v.Reason != want.reason {
+			t.Errorf("%s: got (%v, %q), want (false, %q)", want.line, v.Accepted, v.Reason, want.reason)
+		}
+	}
+}
+
+func TestPlaylistModeScaledLimits(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{Playlist: &PlaylistPlan{Size: 30, Name: "P"}})
+	for i := 1; i <= 3; i++ {
+		title := fmt.Sprintf("T%d", i)
+		song := Song{ID: fmt.Sprintf("%d", i), Artist: "A", Title: title}
+		if v := s.Offer(Suggestion{Artist: "A", Title: title}, song, true); !v.Accepted {
+			t.Fatalf("%s: rejected: %s", title, v.Reason)
+		}
+	}
+	song := Song{ID: "4", Artist: "A", Title: "T4"}
+	v := s.Offer(Suggestion{Artist: "A", Title: "T4"}, song, true)
+	if v.Accepted || v.Reason != "artist limit: a" {
+		t.Errorf("got (%v, %q), want (false, \"artist limit: a\")", v.Accepted, v.Reason)
+	}
+}
+
+func TestPlaylistModeDoneOnlyWhenFull(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{Playlist: &PlaylistPlan{Size: 10, Name: "P"}})
+	for i := range 9 {
+		artist := fmt.Sprintf("A%d", i)
+		song := Song{ID: fmt.Sprintf("%d", i), Artist: artist, Title: fmt.Sprintf("T%d", i)}
+		if v := s.Offer(Suggestion{Artist: artist, Title: song.Title}, song, true); !v.Accepted {
+			t.Fatalf("%s: rejected: %s", artist, v.Reason)
+		}
+	}
+	if s.Done() {
+		t.Fatal("9 of 10: Done = true, want false")
+	}
+	song := Song{ID: "10", Artist: "B", Title: "T10"}
+	if v := s.Offer(Suggestion{Artist: "B", Title: "T10"}, song, true); !v.Accepted {
+		t.Fatalf("10th: rejected: %s", v.Reason)
+	}
+	if !s.Done() {
+		t.Error("full: Done = false, want true")
+	}
+}
+
+func TestSetPlanKeepsPlaylistWithinSession(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{Playlist: &PlaylistPlan{Size: 30, Name: "P"}})
+	if s.Need() != 30 {
+		t.Fatalf("playlist: Need = %d, want 30", s.Need())
+	}
+	s.SetPlan(Plan{})
+	if s.Need() != 30 {
+		t.Errorf("second plan: Need = %d, want 30", s.Need())
+	}
+	if p := s.Playlist(); p == nil || p.Size != 30 {
+		t.Errorf("second plan: playlist = %+v, want the 30-track playlist kept", p)
+	}
+}
+
+func TestStreamSessionStaysStream(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{})
+	s.SetPlan(Plan{})
+	if s.Need() != 5 {
+		t.Errorf("stream: Need = %d, want 5", s.Need())
+	}
+	if p := s.Playlist(); p != nil {
+		t.Errorf("stream: playlist = %+v, want nil", p)
+	}
+}
+
+// D4: in playlist mode an and_similar referent is capped by the referent limit,
+// not by the per-artist one.
+func TestPlaylistModeSeedArtistsSkipTheArtistLimit(t *testing.T) {
+	s := NewSession(nil, nil, 5)
+	s.SetPlan(Plan{
+		Seeds:    []Seed{{Artist: "Westside Gunn", Mode: "and_similar"}},
+		Playlist: &PlaylistPlan{Size: 10, Name: "P"},
+	})
+	for i := 1; i <= 3; i++ {
+		title := fmt.Sprintf("S%d", i)
+		song := Song{ID: fmt.Sprintf("%d", i), Artist: "Westside Gunn", Title: title}
+		if v := s.Offer(Suggestion{Artist: "Westside Gunn", Title: title}, song, true); !v.Accepted {
+			t.Fatalf("S%d: rejected: %s", i, v.Reason)
+		}
+	}
+	song := Song{ID: "4", Artist: "Westside Gunn", Title: "S4"}
+	v := s.Offer(Suggestion{Artist: "Westside Gunn", Title: "S4"}, song, true)
+	if v.Accepted || v.Reason != "referent limit" {
+		t.Errorf("S4: got (%v, %q), want (false, \"referent limit\")", v.Accepted, v.Reason)
 	}
 }

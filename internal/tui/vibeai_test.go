@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/oglenyaboss/aux-player/internal/config"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
@@ -287,7 +288,7 @@ func TestVibeAI_SaveTwiceSamePortion(t *testing.T) {
 	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) != nil {
 		t.Error("saving the same portion twice should be a no-op")
 	}
-	m.handleVibeAIMsg(vibeAISavedMsg{id: "p.1", name: "AUX · x", n: 3, created: true})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "AUX · x", n: 3, created: true})
 	m.vibeAITurnCmd("", false, false)
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "3"}})
@@ -1258,5 +1259,236 @@ func TestVibeAI_NextClearedOnCancel(t *testing.T) {
 	m.handleVibeAIMsg(VibeAICancelMsg{})
 	if frame := auxFrame(m, 110, 32); strings.Contains(frame, "taking in") {
 		t.Fatalf("the next line must go on cancel:\n%s", frame)
+	}
+}
+
+// vibeAICmdMsgs runs a command tree without blocking on the bridge event
+// reader: a wait on the event channel is abandoned after a short timeout.
+func vibeAICmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			done := make(chan tea.Msg, 1)
+			go func(c tea.Cmd) { done <- c() }(c)
+			select {
+			case m := <-done:
+				if m != nil {
+					out = append(out, m)
+				}
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+func TestVibeAIPlaylistEventStopsAutoplay(t *testing.T) {
+	mp := newMockPlayer()
+	m := newModel(mp)
+	m.vibeAITurnCmd("плейлист", true, false)
+	gen := m.vibeAI.gen
+	acceptPick(m, gen, "1", "A", "One")
+	if len(m.queueIDs) != 1 || m.queueIDs[0] != "1" {
+		t.Fatalf("queue = %v, want auto-start of the first pick", m.queueIDs)
+	}
+	cmd := m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen, plan: vibeai.PlaylistPlan{Size: 30, Name: "Haze"}})
+	if cmd == nil {
+		t.Fatal("the playlist event must keep reading events")
+	}
+	vibeAICmdMsgs(cmd)
+	if !mp.pauseCalled {
+		t.Error("the card track that already started must be paused")
+	}
+	if m.vibeAI.autoplay {
+		t.Error("autoplay must be off in playlist mode")
+	}
+	if m.vibeAI.playlist == nil || m.vibeAI.playlist.Name != "Haze" {
+		t.Fatalf("playlist = %+v, want Haze", m.vibeAI.playlist)
+	}
+	acceptPick(m, gen, "2", "B", "Two")
+	if len(m.queueIDs) != 1 || m.queueIDs[0] != "1" {
+		t.Errorf("a pick after the playlist event must not autoplay, queue = %v", m.queueIDs)
+	}
+}
+
+func TestVibeAIPlaylistEventStaleIgnored(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	gen := m.vibeAI.gen
+	cmd := m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen - 1, plan: vibeai.PlaylistPlan{Size: 30, Name: "Haze"}})
+	if cmd == nil {
+		t.Error("a stale playlist event must keep reading events, so waitVibeAI is expected")
+	}
+	if m.vibeAI.playlist != nil {
+		t.Errorf("playlist = %+v, want nil for a stale event", m.vibeAI.playlist)
+	}
+}
+
+func playlistPlan() vibeai.PlaylistPlan {
+	return vibeai.PlaylistPlan{Size: 10, Name: "Haze", Description: "d"}
+}
+
+// playlistPortion lands a fresh playlist turn with the event and the done message.
+func playlistPortion(t *testing.T) (*Model, tea.Cmd) {
+	t.Helper()
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	gen := m.vibeAI.gen
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen, plan: plan})
+	return m, m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+}
+
+func TestVibeAIPlaylistPortionSavesNotPlays(t *testing.T) {
+	m, cmd := playlistPortion(t)
+	if len(m.queueIDs) != 0 {
+		t.Fatalf("queue = %v, want nothing playing in playlist mode", m.queueIDs)
+	}
+	if cmd == nil {
+		t.Fatal("a landed playlist portion must return the save command")
+	}
+	var saved *vibeAISavedMsg
+	for _, msg := range vibeAICmdMsgs(cmd) {
+		if s, ok := msg.(vibeAISavedMsg); ok {
+			saved = &s
+		}
+	}
+	if saved == nil || saved.err == nil || saved.err.Error() != "no vibe session" {
+		t.Fatalf("saved = %+v, want the no-session error", saved)
+	}
+	if m.vibeAI.savedPortion != m.vibeAI.portion {
+		t.Fatalf("savedPortion = %d, want portion %d", m.vibeAI.savedPortion, m.vibeAI.portion)
+	}
+}
+
+func TestVibeAIPlaylistSavedShowsOnStage(t *testing.T) {
+	m := newModel(nil)
+	stage.SetLang("en")
+	t.Cleanup(func() { stage.SetLang("ru") })
+	vibeAITypeText(m, "плейлист")
+	gen := m.vibeAI.gen
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen, plan: plan})
+	acceptPick(m, gen, "1", "A", "One")
+	acceptPick(m, gen, "2", "B", "Two")
+	acceptPick(m, gen, "3", "C", "Three")
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "Haze", n: 3, created: true})
+	st := m.vibeAIP.m.st
+	for i := 0; i < 6000 && st.Phase() != stage.PhDone; i++ {
+		st.Step(1.0 / 30)
+	}
+	if st.Phase() != stage.PhDone {
+		t.Fatalf("phase = %v, want PhDone", st.Phase())
+	}
+	for i := 0; i < 30; i++ {
+		st.Step(1.0 / 30)
+	}
+	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {
+		t.Errorf("the done screen is missing the save result:\n%s", frame)
+	}
+}
+
+func TestVibeAIPlaylistSaveErrorAllowsRetry(t *testing.T) {
+	m, _ := playlistPortion(t)
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
+	if m.vibeAI.savedPortion != 0 {
+		t.Fatalf("savedPortion = %d, want 0 after a failed save", m.vibeAI.savedPortion)
+	}
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
+		t.Error("a failed save must be retryable")
+	}
+}
+
+func TestVibeAIListenPlaysSide(t *testing.T) {
+	m, _ := playlistPortion(t)
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIListen})
+	if want := []string{"1", "2", "3"}; !vibeAIEqual(want, m.queueIDs) {
+		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
+	}
+}
+
+func TestVibeAIStreamSaveErrorAllowsRetry(t *testing.T) {
+	m := openVibeWithPortion(t)
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
+		t.Fatal("first save should run")
+	}
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
+	if m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAISave}) == nil {
+		t.Error("a failed stream save must be retryable")
+	}
+}
+
+func TestVibeAIPlaylistDoesNotTopUp(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+	m.vibeAI.busy = false
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIListen})
+	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) != nil {
+		t.Error("a saved playlist must not top itself up from the stream")
+	}
+	if !m.vibeAI.stream {
+		t.Error("the listener's stream setting must survive a playlist run")
+	}
+	m.vibeAITurnCmd("обычный запрос", true, false)
+	if m.vibeAI.playlist != nil {
+		t.Error("a new request must leave playlist mode")
+	}
+}
+
+func TestVibeAIPlaylistShortSaveSaysSo(t *testing.T) {
+	m := newModel(nil)
+	stage.SetLang("en")
+	t.Cleanup(func() { stage.SetLang("ru") })
+	vibeAITypeText(m, "плейлист")
+	gen := m.vibeAI.gen
+	plan := playlistPlan()
+	m.handleVibeAIMsg(vibeAIPlaylistMsg{gen: gen, plan: plan})
+	acceptPick(m, gen, "1", "A", "One")
+	acceptPick(m, gen, "2", "B", "Two")
+	acceptPick(m, gen, "3", "C", "Three")
+	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second, playlist: &plan})
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: m.vibeAI.gen, id: "p.1", name: "Haze", n: 3, created: true})
+	st := m.vibeAIP.m.st
+	for i := 0; i < 6000 && st.Phase() != stage.PhDone; i++ {
+		st.Step(1.0 / 30)
+	}
+	if st.Phase() != stage.PhDone {
+		t.Fatalf("phase = %v, want PhDone", st.Phase())
+	}
+	for i := 0; i < 30; i++ {
+		st.Step(1.0 / 30)
+	}
+	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {
+		t.Errorf("the done screen is missing the shortfall:\n%s", frame)
+	}
+}
+
+func TestVibeAIStaleSaveIgnored(t *testing.T) {
+	m := openVibeWithPortion(t)
+	old := m.vibeAI.gen
+	m.vibeAITurnCmd("новый", true, false)
+	m.handleVibeAIMsg(vibeAISavedMsg{gen: old, id: "p.old", name: "Old", n: 3, created: true})
+	if m.vibeAI.playlistID != "" {
+		t.Errorf("playlistID = %q, want a stale save reply ignored", m.vibeAI.playlistID)
+	}
+}
+
+func TestVibeAIPlaylistEventRoutedThroughUpdate(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	_, cmd := m.Update(vibeAIPlaylistMsg{gen: m.vibeAI.gen, plan: vibeai.PlaylistPlan{Size: 12, Name: "Run"}})
+	if m.vibeAI.playlist == nil || m.vibeAI.playlist.Size != 12 {
+		t.Fatalf("playlist = %+v, want the event handled by Update", m.vibeAI.playlist)
+	}
+	if cmd == nil {
+		t.Fatal("Update must keep reading agent events after a playlist event")
 	}
 }
