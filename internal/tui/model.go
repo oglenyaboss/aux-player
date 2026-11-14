@@ -103,6 +103,10 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 			m.errExpiry = time.Now().Add(30 * time.Second)
 		}
 	}
+	if opts.UpdateNotice != nil {
+		m.appendLog("[updater] " + opts.UpdateNotice.text())
+		m.vibeAIP.m.notice = opts.UpdateNotice
+	}
 	if len(opts.InitialTracks) > 0 {
 		ids := make([]string, len(opts.InitialTracks))
 		for i, t := range opts.InitialTracks {
@@ -271,6 +275,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DebugLogMsg:
 		m.appendLog(string(msg))
+
+	case UpdateNoticeMsg:
+		m.appendLog("[updater] " + msg.text())
+		m.vibeAIP.m.notice = &msg
 
 	case EngineReadyMsg:
 		m.player = msg.Player

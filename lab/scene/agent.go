@@ -23,6 +23,8 @@ type scene struct {
 	emit  bool
 	wait  float64 // seconds the agent thinks before its submit
 
+	toast string // a host line waiting for the player, to eyeball the notice surface (-toast)
+
 	keyTyped    int // how many key runes the onboarding autopilot typed in
 	filterTyped int // how many filter runes the onboarding autopilot typed in
 }
@@ -48,6 +50,10 @@ func newScene(firstRun, pilot bool, musicStyle string) *scene {
 func (s *scene) hook(dt float64) {
 	if s.pilot {
 		s.drive()
+	}
+	if s.toast != "" && s.m.Phase() == stage.PhPlay && s.m.PhaseTime() > 1 {
+		s.m.Toast(s.toast)
+		s.toast = ""
 	}
 	s.stream(dt)
 	s.mus.step(dt)

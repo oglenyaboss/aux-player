@@ -395,3 +395,70 @@ func TestStagePlayActions(t *testing.T) {
 		t.Errorf("phase = %d, want intro after restart", m.vibeAIP.m.st.Phase())
 	}
 }
+
+// enLang pins the scene language for the English assertions and restores it after.
+func enLang(t *testing.T) {
+	t.Helper()
+	stage.SetLang("en")
+	t.Cleanup(func() { stage.SetLang(stage.DefaultLang()) })
+}
+
+func TestUpdateNoticeText(t *testing.T) {
+	enLang(t)
+	if got := (UpdateNoticeMsg{Installed: true, Tag: "v1.2.3"}).text(); got != "AUX updated to v1.2.3" {
+		t.Errorf("installed text = %q, want %q", got, "AUX updated to v1.2.3")
+	}
+	if got := (UpdateNoticeMsg{Tag: "v2.0.0"}).text(); got != "AUX v2.0.0 is available" {
+		t.Errorf("available text = %q, want %q", got, "AUX v2.0.0 is available")
+	}
+}
+
+// The startup notice from Options must reach the screen and wait there.
+func TestNew_CarriesUpdateNotice(t *testing.T) {
+	m := New(testCfg(), &mockProvider{}, nil, Options{UpdateNotice: &UpdateNoticeMsg{Installed: true, Tag: "v1.2.3"}})
+	if m.vibeAIP.m.notice == nil || !m.vibeAIP.m.notice.Installed || m.vibeAIP.m.notice.Tag != "v1.2.3" {
+		t.Fatalf("notice = %#v, want the installed v1.2.3 waiting on the screen", m.vibeAIP.m.notice)
+	}
+}
+
+// stepScene advances the scene by total in 60fps steps, the pace its springs
+// are tuned for; one big Step throws them off.
+func stepScene(m *Model, total float64) {
+	const dt = 1.0 / 60
+	for t := 0.0; t < total; t += dt {
+		m.vibeAIP.m.st.Step(dt)
+	}
+}
+
+// A notice sent while the scene is up waits for the player page, toasts there
+// exactly once, and never comes back.
+func TestUpdateNotice_ToastsOnceInThePlayer(t *testing.T) {
+	enLang(t)
+	m := newModel(nil)
+	m.width, m.height = 160, 45
+	base := time.Now()
+
+	m.Update(UpdateNoticeMsg{Installed: true, Tag: "v1.2.3"})
+	m.handleVibeAIMsg(stageTickMsg(base))
+	if m.vibeAIP.m.notice == nil {
+		t.Fatal("a tick outside the player must not spend the notice")
+	}
+
+	stageIntoPlayer(m)
+	m.handleVibeAIMsg(stageTickMsg(base.Add(time.Second)))
+	if m.vibeAIP.m.notice != nil {
+		t.Fatal("the player page must spend the notice")
+	}
+	stepScene(m, 1)
+	if frame := ansi.Strip(m.vibeAIP.m.Frame(160, 45)); !strings.Contains(frame, "AUX updated to v1.2.3") {
+		t.Fatal("the notice must be on screen in the player")
+	}
+
+	// Past the toast's life the line is gone, and no later tick brings it back.
+	stepScene(m, 3)
+	m.handleVibeAIMsg(stageTickMsg(base.Add(5 * time.Second)))
+	stepScene(m, 1)
+	if frame := ansi.Strip(m.vibeAIP.m.Frame(160, 45)); strings.Contains(frame, "AUX updated to v1.2.3") {
+		t.Fatal("the notice must show exactly once")
+	}
+}

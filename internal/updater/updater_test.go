@@ -437,6 +437,9 @@ func TestUpdate_CurrentVersionNeedsNothing(t *testing.T) {
 	if got.Exe != "" {
 		t.Errorf("Exe = %q, want empty", got.Exe)
 	}
+	if tag := InstalledNotice("v1.2.3"); tag != "" {
+		t.Errorf("InstalledNotice = %q, want empty: nothing was installed", tag)
+	}
 }
 
 func TestUpdate_CheckFailureKnowsNothing(t *testing.T) {
@@ -986,5 +989,62 @@ func TestAPIPointsAtFork(t *testing.T) {
 	const want = "https://api.github.com/repos/oglenyaboss/aux-player/releases/latest"
 	if apiURL != want {
 		t.Errorf("apiURL = %q, want %q", apiURL, want)
+	}
+}
+
+// ── installed-update notice ──────────────────────────────────────────────────
+
+func TestInstalledNotice(t *testing.T) {
+	isolateCache(t)
+	if got := InstalledNotice("v1.0.0"); got != "" {
+		t.Fatalf("InstalledNotice with no record = %q, want empty", got)
+	}
+
+	recordInstall("v1.2.3")
+
+	// The running build is the one the update installed: the tag comes back
+	// with the "v" the built-in version lacks, and only once.
+	if got := InstalledNotice("1.2.3"); got != "v1.2.3" {
+		t.Fatalf("InstalledNotice = %q, want v1.2.3", got)
+	}
+	if got := InstalledNotice("1.2.3"); got != "" {
+		t.Fatalf("second InstalledNotice = %q, want empty: the notice shows once", got)
+	}
+
+	// A build that is not the recorded one consumes the record instead of
+	// leaving it to announce a stale update later.
+	recordInstall("v2.0.0")
+	if got := InstalledNotice("dev"); got != "" {
+		t.Fatalf("InstalledNotice(dev) = %q, want empty", got)
+	}
+	if got := InstalledNotice("v2.0.0"); got != "" {
+		t.Fatal("a record for another build must be consumed, not left behind")
+	}
+}
+
+// The record the next start turns into a notice is written by the update
+// itself, before the caller can re-exec.
+func TestUpdate_RecordsTheInstallForTheNextStart(t *testing.T) {
+	isolateCache(t)
+	fakeExe(t, 0o755)
+	srv := fakeReleases(t, "v2.0.0", true, []byte("new binary"))
+	defer srv.Close()
+
+	if got := update(srv.URL, "v1.0.0", true, discard); got.Outcome != OutcomeInstalled {
+		t.Fatalf("Outcome = %v, want OutcomeInstalled", got.Outcome)
+	}
+	if tag := InstalledNotice("2.0.0"); tag != "v2.0.0" {
+		t.Errorf("InstalledNotice = %q, want v2.0.0", tag)
+	}
+}
+
+func TestResultAvailable(t *testing.T) {
+	if !(Result{Outcome: OutcomeManual, Tag: "v2.0.0"}.Available()) {
+		t.Error("OutcomeManual is a release left uninstalled and must be Available")
+	}
+	for _, o := range []Outcome{OutcomeFailed, OutcomeCurrent, OutcomeInstalled, OutcomeDisabled} {
+		if (Result{Outcome: o}.Available()) {
+			t.Errorf("Outcome %v must not be announced as available", o)
+		}
 	}
 }
