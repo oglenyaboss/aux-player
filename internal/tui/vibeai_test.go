@@ -1480,3 +1480,15 @@ func TestVibeAIStaleSaveIgnored(t *testing.T) {
 		t.Errorf("playlistID = %q, want a stale save reply ignored", m.vibeAI.playlistID)
 	}
 }
+
+func TestVibeAIPlaylistEventRoutedThroughUpdate(t *testing.T) {
+	m := newModel(nil)
+	m.vibeAITurnCmd("плейлист", true, false)
+	_, cmd := m.Update(vibeAIPlaylistMsg{gen: m.vibeAI.gen, plan: vibeai.PlaylistPlan{Size: 12, Name: "Run"}})
+	if m.vibeAI.playlist == nil || m.vibeAI.playlist.Size != 12 {
+		t.Fatalf("playlist = %+v, want the event handled by Update", m.vibeAI.playlist)
+	}
+	if cmd == nil {
+		t.Fatal("Update must keep reading agent events after a playlist event")
+	}
+}

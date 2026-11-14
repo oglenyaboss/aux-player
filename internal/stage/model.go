@@ -634,7 +634,12 @@ func (m *Model) PlaylistMode(size int) {
 }
 
 // PlaylistSaved is the save status drawn on the done screen of a playlist.
-func (m *Model) PlaylistSaved(line string) { m.savedLine = line }
+func (m *Model) PlaylistSaved(line string) {
+	m.savedLine = line
+	if m.ph == PhPlay {
+		m.say(line)
+	}
+}
 
 // queueAdditions appends the tracks the queue doesn't have yet, by key, and reports
 // how many landed.

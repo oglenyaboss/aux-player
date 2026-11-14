@@ -161,3 +161,14 @@ func TestPlaylistDoneWSaves(t *testing.T) {
 		t.Fatalf("Save sent %d times, want 1: %v", n, r.acts)
 	}
 }
+
+func TestPlaylistSavedAfterListenToasts(t *testing.T) {
+	m := New(Options{Slots: 5})
+	m.SetSize(110, 32)
+	playlistDone(t, m, 12)
+	m.Key("enter", "")
+	m.PlaylistSaved("saved ♫ Haze · 12 tracks")
+	if len(m.toasts) == 0 || m.toasts[len(m.toasts)-1].text != "saved ♫ Haze · 12 tracks" {
+		t.Fatal("a save reply that lands in the player must show as a toast")
+	}
+}
