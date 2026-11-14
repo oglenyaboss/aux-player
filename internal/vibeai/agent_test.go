@@ -1287,3 +1287,131 @@ func TestDispatchSetPlanFromFavorites(t *testing.T) {
 		t.Errorf("без поля: got %q", res)
 	}
 }
+
+func TestTurnRetriesFailedMemoryWhenFull(t *testing.T) {
+	long := strings.Repeat("x", 301)
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", fmt.Sprintf(`{"text":%q,"evidence":"e"}`, long)),
+		),
+		toolResp(call("m2", "memory_add", `{"text":"short pref","evidence":"e"}`)),
+		textResp("done"),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 3 {
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
+	}
+	found := false
+	for _, m := range ch.got[2] {
+		if m.Role == "tool" && strings.HasPrefix(m.Content, "error: text is too long") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the retry call's messages do not contain the memory_add error")
+	}
+	found = false
+	for _, e := range a.Memory.Entries() {
+		if strings.Contains(e.Text, "short pref") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("memory does not contain %q: %+v", "short pref", a.Memory.Entries())
+	}
+}
+
+func TestTurnRetriesMemoryOnlyOnce(t *testing.T) {
+	long := strings.Repeat("x", 301)
+	bad := fmt.Sprintf(`{"text":%q,"evidence":"e"}`, long)
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", bad),
+		),
+		toolResp(call("m2", "memory_add", bad)),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(ch.got) != 3 {
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+}
+
+func TestTurnNoExtraStepWhenMemoryOK(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", `{"text":"short pref","evidence":"e"}`),
+		),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
+	}
+}
+
+func TestTurnNoExtraStepOnOtherErrors(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("d1", "describe", `{"kind":"song","artist":"X"}`),
+		),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
+	}
+}

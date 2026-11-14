@@ -291,6 +291,7 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 	}
 	a.msgs = append(a.msgs, llm.Message{Role: "user", Content: user})
 	hints := 0
+	memoryRetried := false
 	start := time.Now()
 	for step := 1; step <= a.MaxSteps; step++ {
 		resp, err := a.LLM.Chat(ctx, a.msgs, agentTools(), false)
@@ -317,13 +318,21 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 			}
 			break
 		}
+		memoryFailed := false
 		for _, call := range resp.Message.ToolCalls {
 			a.logf("→ %s %s", call.Name, call.Arguments)
 			res := a.dispatch(ctx, call)
 			a.logf("← %s", truncateRunes(res, 1500))
 			a.msgs = append(a.msgs, llm.Message{Role: "tool", ToolCallID: call.ID, Content: res})
+			if strings.HasPrefix(call.Name, "memory_") && strings.HasPrefix(res, "error: ") {
+				memoryFailed = true
+			}
 		}
 		if a.Session.Done() {
+			if memoryFailed && !memoryRetried {
+				memoryRetried = true
+				continue
+			}
 			break
 		}
 	}
