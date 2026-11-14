@@ -19,7 +19,7 @@ func TestAppleLoginLoopRetries(t *testing.T) {
 	appleLoginLoop(ask, func() error {
 		calls++
 		if calls == 1 {
-			return errors.New("первый заход сорвался")
+			return errors.New("the first attempt failed")
 		}
 		return nil
 	}, func(msg tea.Msg) {

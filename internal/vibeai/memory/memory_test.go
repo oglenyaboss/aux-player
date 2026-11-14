@@ -33,10 +33,10 @@ func mustAdd(t *testing.T, st *Store, text, evidence string) {
 func TestOpenMissingFileEmpty(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), DefaultLimit)
 	if got := len(st.Entries()); got != 0 {
-		t.Fatalf("записей: %d, want 0", got)
+		t.Fatalf("entries: %d, want 0", got)
 	}
 	if !strings.Contains(st.Section(), "(empty)") {
-		t.Fatalf("Section без (пусто): %q", st.Section())
+		t.Fatalf("Section without (empty): %q", st.Section())
 	}
 }
 
@@ -45,16 +45,16 @@ func TestAddPersistsAndReloads(t *testing.T) {
 	st := openStore(t, path, DefaultLimit)
 	mustAdd(t, st, "не нравится Gunna", "владелец: «Gunna нет»")
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("файл не создан: %v", err)
+		t.Fatalf("the file was not created: %v", err)
 	}
 	reloaded := openStore(t, path, DefaultLimit)
 	entries := reloaded.Entries()
 	if len(entries) != 1 {
-		t.Fatalf("записей: %d, want 1", len(entries))
+		t.Fatalf("entries: %d, want 1", len(entries))
 	}
 	want := Entry{Text: "не нравится Gunna", Evidence: "владелец: «Gunna нет»", Created: "2026-10-21", Updated: "2026-10-21"}
 	if entries[0] != want {
-		t.Fatalf("запись: %+v, want %+v", entries[0], want)
+		t.Fatalf("entry: %+v, want %+v", entries[0], want)
 	}
 }
 
@@ -62,24 +62,24 @@ func TestAddEmptyEvidence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "memory.md")
 	st := openStore(t, path, DefaultLimit)
 	if err := st.Add("нравится джаз", ""); err == nil {
-		t.Fatal("ожидалась ошибка при пустом evidence")
+		t.Fatal("an error was expected for empty evidence")
 	}
 	if got := len(st.Entries()); got != 0 {
-		t.Fatalf("записей: %d, want 0", got)
+		t.Fatalf("entries: %d, want 0", got)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("файл не должен существовать, err: %v", err)
+		t.Fatalf("the file must not exist, err: %v", err)
 	}
 }
 
 func TestAddTextLengthLimit(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), DefaultLimit)
 	if err := st.Add(strings.Repeat("ы", 301), "e"); err == nil {
-		t.Fatal("ожидалась ошибка при 301 руне")
+		t.Fatal("an error was expected for 301 runes")
 	}
 	mustAdd(t, st, strings.Repeat("ы", 300), "e")
 	if got := len(st.Entries()); got != 1 {
-		t.Fatalf("записей: %d, want 1", got)
+		t.Fatalf("entries: %d, want 1", got)
 	}
 }
 
@@ -100,11 +100,11 @@ func TestReplaceKeepsCreated(t *testing.T) {
 	}
 	entries := st.Entries()
 	if len(entries) != 1 {
-		t.Fatalf("записей: %d, want 1", len(entries))
+		t.Fatalf("entries: %d, want 1", len(entries))
 	}
 	e := entries[0]
 	if e.Text != "не нравятся Gunna и Lil Tecca" || e.Evidence != "слова владельца" || e.Created != "2026-10-21" || e.Updated != "2026-10-21" {
-		t.Fatalf("запись: %+v", e)
+		t.Fatalf("entry: %+v", e)
 	}
 }
 
@@ -143,13 +143,13 @@ func TestFillAndConsolidate(t *testing.T) {
 		t.Fatalf("lastErr: %v", lastErr)
 	}
 	if st.Size() == 0 {
-		t.Fatal("ни одной записи не добавлено")
+		t.Fatal("no entry was added")
 	}
 	if err := st.Consolidate([]Entry{{Text: "нравится джаз", Evidence: "слова владельца"}}); err != nil {
 		t.Fatalf("Consolidate: %v", err)
 	}
 	if st.Size() > 120 {
-		t.Fatalf("Size после консолидации: %d > 120", st.Size())
+		t.Fatalf("Size after consolidation: %d > 120", st.Size())
 	}
 }
 

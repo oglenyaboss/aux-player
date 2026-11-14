@@ -83,7 +83,7 @@ func TestStageFullScreen(t *testing.T) {
 func TestStageTrackAlbumReleased(t *testing.T) {
 	tr := stageTrack(vibeai.Track{ID: "1", Artist: "Playboi Carti", Title: "Sky", Album: "Whole Lotta Red", Released: "2020-12-25", DurationMs: 61000}, "")
 	if tr.Album != "Whole Lotta Red" || tr.Released != "2020-12-25" {
-		t.Errorf("Album/Released = %q %q, ждём Whole Lotta Red / 2020-12-25", tr.Album, tr.Released)
+		t.Errorf("Album/Released = %q %q, want Whole Lotta Red / 2020-12-25", tr.Album, tr.Released)
 	}
 	if tr.Dur != 61 {
 		t.Errorf("Dur = %v, want 61 seconds", tr.Dur)
@@ -263,7 +263,7 @@ func TestStageTrackCardAll(t *testing.T) {
 		frame = ansi.Strip(m.vibeAIP.m.Frame(110, 32))
 	}
 	if !strings.Contains(frame, "Frank Ocean") || !strings.Contains(frame, "a всё вместе") {
-		t.Fatalf("кадр без карточки треков:\n%s", frame)
+		t.Fatalf("frame without the track card:\n%s", frame)
 	}
 	want1 := false
 	for _, c := range m.vibeAIP.m.want {
@@ -272,7 +272,7 @@ func TestStageTrackCardAll(t *testing.T) {
 		}
 	}
 	if !want1 {
-		t.Fatalf("обложки вариантов не заказаны: want = %+v", m.vibeAIP.m.want)
+		t.Fatalf("option covers were not requested: want = %+v", m.vibeAIP.m.want)
 	}
 	m.vibeAIP.m.st.Step(0.8) // the card accepts an answer only after 0.7s
 	press(m, "a")

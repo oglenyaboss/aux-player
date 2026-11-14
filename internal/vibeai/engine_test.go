@@ -54,10 +54,10 @@ func flowEngine(t *testing.T, ch *fakeChatter) *Engine {
 	e := newTestEngine(t, ch)
 	p, err := e.Turn(context.Background(), "в духе X")
 	if err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if len(p.Tracks) != 3 {
-		t.Fatalf("ход 1: %d треков, want 3", len(p.Tracks))
+		t.Fatalf("turn 1: %d tracks, want 3", len(p.Tracks))
 	}
 	err = e.Record([]Outcome{
 		{ID: p.Tracks[0].ID, Artist: "A", Title: "T1", Kind: "played"},
@@ -68,11 +68,11 @@ func flowEngine(t *testing.T, ch *fakeChatter) *Engine {
 	}
 	p2, err := e.Turn(context.Background(), "")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	for i, want := range []string{"D", "E", "F"} {
 		if p2.Tracks[i].Artist != want {
-			t.Errorf("ход 2, трек %d: %q, want %q", i, p2.Tracks[i].Artist, want)
+			t.Errorf("turn 2, track %d: %q, want %q", i, p2.Tracks[i].Artist, want)
 		}
 	}
 	return e
@@ -82,11 +82,11 @@ func TestTurnFreshContextEachTurn(t *testing.T) {
 	ch := &fakeChatter{}
 	flowEngine(t, ch)
 	if len(ch.got) != 3 {
-		t.Fatalf("Chat вызван %d раз, want 3", len(ch.got))
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
 	}
 	msgs := ch.got[2]
 	if len(msgs) != 2 || msgs[0].Role != "system" || msgs[1].Role != "user" {
-		t.Fatalf("последний вызов: %d сообщений, want ровно [system user]", len(msgs))
+		t.Fatalf("last call: %d messages, want exactly [system user]", len(msgs))
 	}
 	user := msgs[1].Content
 	for _, want := range []string{
@@ -98,7 +98,7 @@ func TestTurnFreshContextEachTurn(t *testing.T) {
 		"Continue the stream",
 	} {
 		if !strings.Contains(user, want) {
-			t.Errorf("user не содержит %q:\n%s", want, user)
+			t.Errorf("user does not contain %q:\n%s", want, user)
 		}
 	}
 }
@@ -119,30 +119,30 @@ func TestTurnReplyLifecycle(t *testing.T) {
 		]}`)),
 	)
 	if _, err := e.Turn(context.Background(), "меньше такого"); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	user := ch.got[3][1].Content
 	for _, want := range []string{"Portion 2:", "4. D — ", `New reply from the listener: "меньше такого"`} {
 		if !strings.Contains(user, want) {
-			t.Errorf("ход 3: user не содержит %q:\n%s", want, user)
+			t.Errorf("turn 3: user does not contain %q:\n%s", want, user)
 		}
 	}
 	if strings.Contains(user, "Listener replies:") {
-		t.Errorf("ход 3: user содержит «Реплики владельца:\n%s", user)
+		t.Errorf("turn 3: user contains \"Listener replies:\n%s", user)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 4: %v", err)
+		t.Fatalf("turn 4: %v", err)
 	}
 	user = ch.got[4][1].Content
 	for _, want := range []string{"Listener replies:", `- after portion 2: "меньше такого"`} {
 		if !strings.Contains(user, want) {
-			t.Errorf("ход 4: user не содержит %q:\n%s", want, user)
+			t.Errorf("turn 4: user does not contain %q:\n%s", want, user)
 		}
 	}
 	log := e.log.b.String()
 	for _, want := range []string{"## listener: (stream)", "## listener: меньше такого"} {
 		if !strings.Contains(log, want) {
-			t.Errorf("лог не содержит %q:\n%s", want, log)
+			t.Errorf("log does not contain %q:\n%s", want, log)
 		}
 	}
 }
@@ -162,16 +162,16 @@ func TestTurnFirstTurnGlobalBlock(t *testing.T) {
 		signalRec{Time: testNow, Kind: "skip_early", Session: "g2", Artist: "Ghostemane", Title: "X", Query: "q2"},
 	)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	key := songArtists(Song{Artist: "Ghostemane", Title: "X"})[0]
 	user := ch.got[0][1].Content
 	want := "в духе X\n\n" + globalBlock(e.sig.globalSkips()) + "\n\n" + skippedBlock(e.sig.skippedElsewhere("s1"))
 	if user != want {
-		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
+		t.Errorf("first message:\n%s\nwant:\n%s", user, want)
 	}
 	if !strings.Contains(user, "- "+key+": early skips 2 in 2 sessions, played through 0; queries: \"q1\", \"q2\"") {
-		t.Errorf("нет строки статистики:\n%s", user)
+		t.Errorf("no stats line:\n%s", user)
 	}
 }
 
@@ -204,28 +204,28 @@ func TestTurnFirstTurnSkippedBlock(t *testing.T) {
 	e := newTestEngine(t, ch)
 	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "other", Artist: "Ken Carson", Title: "Yale"})
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	user := ch.got[0][1].Content
 	want := "в духе X\n\n" + skippedBlock(e.sig.skippedElsewhere("s1"))
 	if user != want {
-		t.Errorf("первое сообщение:\n%s\nwant:\n%s", user, want)
+		t.Errorf("first message:\n%s\nwant:\n%s", user, want)
 	}
 }
 
 func TestHistorySkippedBlock(t *testing.T) {
 	e := newTestEngine(t, &fakeChatter{})
 	if h := e.history(); strings.Contains(h, "In past sessions the listener dropped") {
-		t.Fatalf("history без записей содержит блок:\n%s", h)
+		t.Fatalf("history without records contains the block:\n%s", h)
 	}
 	addSignals(t, e.sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "other", Artist: "SoFaygo", Title: "Knock Knock"})
 	h := e.history()
 	want := skippedBlock(e.sig.skippedElsewhere("s1"))
 	if want == "" {
-		t.Fatal("skippedBlock пуст, тест бессмыслен")
+		t.Fatal("skippedBlock is empty, the test is meaningless")
 	}
 	if !strings.HasSuffix(h, want) {
-		t.Errorf("history не заканчивается на блок:\n%s\nwant suffix:\n%s", h, want)
+		t.Errorf("history does not end with the block:\n%s\nwant suffix:\n%s", h, want)
 	}
 }
 
@@ -244,17 +244,17 @@ func TestGlobalBlock(t *testing.T) {
 
 func TestPromptRulesReactionWording(t *testing.T) {
 	if !strings.Contains(promptRules, "Step aside only from tracks played to the end") {
-		t.Error("нет новой формулировки про шаг в сторону")
+		t.Error("the new wording about stepping aside is missing")
 	}
 	if strings.Contains(promptRules, "may drift a step") {
-		t.Error("осталась старая формулировка про дрейф")
+		t.Error("the old drift wording is still there")
 	}
 }
 
 func TestValidateNoAppleTokens(t *testing.T) {
 	err := Config{}.Validate()
 	if err == nil || !strings.Contains(err.Error(), "no Apple tokens") {
-		t.Errorf("пустой конфиг: err = %v, want «no Apple tokens»", err)
+		t.Errorf("empty config: err = %v, want \"no Apple tokens\"", err)
 	}
 }
 
@@ -262,7 +262,7 @@ func TestValidateNoLLMKey(t *testing.T) {
 	cfg := Config{AppleDeveloperToken: "dev", AppleUserToken: "user"}
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "no LLM key") {
-		t.Errorf("без LLM-ключа: err = %v, want «no LLM key»", err)
+		t.Errorf("without the LLM key: err = %v, want \"no LLM key\"", err)
 	}
 }
 
@@ -270,7 +270,7 @@ func TestCacheFresh(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	if cacheFresh(dir, time.Hour, now) {
-		t.Error("нет файлов: want false")
+		t.Error("no files: want false")
 	}
 	lib := filepath.Join(dir, "library.json")
 	favs := filepath.Join(dir, "favorites.json")
@@ -280,7 +280,7 @@ func TestCacheFresh(t *testing.T) {
 		}
 	}
 	if !cacheFresh(dir, time.Hour, now) {
-		t.Error("оба файла, mtime сейчас: want true")
+		t.Error("both files, mtime now: want true")
 	}
 	old := now.Add(-2 * time.Hour)
 	for _, p := range []string{lib, favs} {
@@ -289,7 +289,7 @@ func TestCacheFresh(t *testing.T) {
 		}
 	}
 	if cacheFresh(dir, time.Hour, now) {
-		t.Error("mtime старше maxAge: want false")
+		t.Error("mtime older than maxAge: want false")
 	}
 }
 
@@ -297,7 +297,7 @@ func TestLastfmClientNoKey(t *testing.T) {
 	l := &lastfmClient{}
 	_, err := l.call(context.Background(), "artist.getsimilar", url.Values{"artist": {"Yeat"}})
 	if err == nil || err.Error() != "lastfm: no key" {
-		t.Errorf("err = %v, want «lastfm: нет ключа»", err)
+		t.Errorf("err = %v, want \"lastfm: no key\"", err)
 	}
 }
 
@@ -319,7 +319,7 @@ func TestToTracks(t *testing.T) {
 	}
 	tr := got[0]
 	if tr.ID != "1" || tr.Artist != "Yeat" || tr.Title != "Monëy so big" || tr.Album != "Up 2 Më" || tr.Year != "2021" {
-		t.Errorf("поля из Song не перенеслись: %+v", tr)
+		t.Errorf("fields from Song were not carried over: %+v", tr)
 	}
 	if tr.ArtworkURL != "https://example.com/a/{w}x{h}bb.jpg" || tr.DurationMs != 191000 {
 		t.Errorf("ArtworkURL/DurationMs: %q %d", tr.ArtworkURL, tr.DurationMs)
@@ -328,14 +328,14 @@ func TestToTracks(t *testing.T) {
 		t.Errorf("Why/Favorite: %q %v", tr.Why, tr.Favorite)
 	}
 	if got[1].Favorite || got[1].Why != "" {
-		t.Errorf("пустой entry: %+v", got[1])
+		t.Errorf("empty entry: %+v", got[1])
 	}
 }
 
 func TestToTrackReleased(t *testing.T) {
 	tr := toTrack(Entry{Song: Song{ID: "1", Released: "2020-12-25"}})
 	if tr.Released != "2020-12-25" {
-		t.Errorf("Released = %q, ждём 2020-12-25", tr.Released)
+		t.Errorf("Released = %q, want 2020-12-25", tr.Released)
 	}
 }
 
@@ -361,23 +361,23 @@ func TestTurnPortionNoteAndLater(t *testing.T) {
 	e := newTestEngine(t, ch)
 	p, err := e.Turn(context.Background(), "в духе X")
 	if err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if p.Note != "без крика" {
-		t.Errorf("Note = %q, want «без крика»", p.Note)
+		t.Errorf("Note = %q, want the submitted note", p.Note)
 	}
 	if p.Later != nil {
-		t.Fatalf("ход 1: Later: %+v, want пусто", p.Later)
+		t.Fatalf("turn 1: Later: %+v, want empty", p.Later)
 	}
 	p2, err := e.Turn(context.Background(), "")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if p2.Later == nil || p2.Later.Question != "убрать хоррор?" {
 		t.Fatalf("Later: %+v", p2.Later)
 	}
 	if len(p2.Later.Tracks) != 2 || p2.Later.Tracks[0].Artist != "A" || p2.Later.Tracks[1].Artist != "B" {
-		t.Errorf("Later.Tracks: %+v, want треки 1 и 2 первой порции", p2.Later.Tracks)
+		t.Errorf("Later.Tracks: %+v, want tracks 1 and 2 of the first portion", p2.Later.Tracks)
 	}
 	if len(p2.Tracks) != 3 {
 		t.Fatalf("Tracks: %d, want 3", len(p2.Tracks))
@@ -385,7 +385,7 @@ func TestTurnPortionNoteAndLater(t *testing.T) {
 	log := e.log.b.String()
 	for _, want := range []string{"note: без крика", "later question: убрать хоррор? [да нет]"} {
 		if !strings.Contains(log, want) {
-			t.Errorf("лог не содержит %q:\n%s", want, log)
+			t.Errorf("log does not contain %q:\n%s", want, log)
 		}
 	}
 }
@@ -397,10 +397,10 @@ func TestEngineAnswerQuestion(t *testing.T) {
 	e.Answer(q, "1")
 	h := e.history()
 	if !strings.Contains(h, `to the question "дальше?" — дрим-поп (A — T1)`) {
-		t.Errorf("history не содержит ответ:\n%s", h)
+		t.Errorf("history does not contain the answer:\n%s", h)
 	}
 	if !strings.Contains(e.log.b.String(), `## listener answer: "дальше?" → дрим-поп (A — T1)`) {
-		t.Errorf("лог не содержит ответ владельца:\n%s", e.log.b.String())
+		t.Errorf("log does not contain the listener answer:\n%s", e.log.b.String())
 	}
 }
 
@@ -429,17 +429,17 @@ func TestTurnWarmupReplyAndSecondTurnAskUserRejected(t *testing.T) {
 	}}
 	e := newTestEngineUI(t, ch, ui)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if ui.asks != 1 {
-		t.Errorf("UI.Ask вызван %d раз, want 1", ui.asks)
+		t.Errorf("UI.Ask called %d times, want 1", ui.asks)
 	}
 	user := ch.got[3][1].Content
 	if !strings.Contains(user, `to the question "какая эпоха?" — поздний (B — T2)`) {
-		t.Errorf("ход 2: user не содержит ответ разогрева:\n%s", user)
+		t.Errorf("turn 2: user does not contain the warmup answer:\n%s", user)
 	}
 	wantErr := "error: ask_user is allowed only in the first turn of the session; ask a fork in the skips through ask_later"
 	found := false
@@ -449,14 +449,14 @@ func TestTurnWarmupReplyAndSecondTurnAskUserRejected(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("ход 2: ошибка ask_user не видна в следующем вызове:\n%+v", ch.got[4])
+		t.Errorf("turn 2: the ask_user error is not visible in the next call:\n%+v", ch.got[4])
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	user = ch.got[5][1].Content
 	if n := strings.Count(user, `to the question "какая эпоха?" — поздний (B — T2)`); n != 1 {
-		t.Errorf("ход 3: ответ разогрева встречается %d раз, want 1:\n%s", n, user)
+		t.Errorf("turn 3: the warmup answer occurs %d times, want 1:\n%s", n, user)
 	}
 }
 
@@ -486,17 +486,17 @@ func TestTurnHistoryListsAskedLaterQuestions(t *testing.T) {
 	}}
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	user := ch.got[4][1].Content
 	if !strings.Contains(user, `Questions already asked (do not repeat): "убрать хоррор?"`) {
-		t.Errorf("ход 3: user не содержит заданный вопрос:\n%s", user)
+		t.Errorf("turn 3: user does not contain the asked question:\n%s", user)
 	}
 }
 
@@ -519,14 +519,14 @@ func TestTurnHistoryForAskLater(t *testing.T) {
 	}}
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	p2, err := e.Turn(context.Background(), "")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if p2.Later == nil || len(p2.Later.Tracks) != 2 || p2.Later.Tracks[0].Artist != "A" || p2.Later.Tracks[1].Artist != "B" {
-		t.Fatalf("Later.Tracks: %+v, want треки 1 и 2 первой порции", p2.Later)
+		t.Fatalf("Later.Tracks: %+v, want tracks 1 and 2 of the first portion", p2.Later)
 	}
 }
 
@@ -552,7 +552,7 @@ func TestHistoryTrackOutcomeWithRatings(t *testing.T) {
 		"3. C — T3 — not listened",
 	} {
 		if !strings.Contains(h, want) {
-			t.Errorf("history не содержит %q:\n%s", want, h)
+			t.Errorf("history does not contain %q:\n%s", want, h)
 		}
 	}
 }
@@ -561,10 +561,10 @@ func TestTurnTailAndPromptMentionRatings(t *testing.T) {
 	ch := &fakeChatter{}
 	flowEngine(t, ch)
 	if user := ch.got[2][1].Content; !strings.Contains(user, "▲ is the main referent") {
-		t.Errorf("хвост потока не содержит «▲ is the main referent»:\n%s", user)
+		t.Errorf("the stream tail does not contain \"▲ is the main referent\":\n%s", user)
 	}
 	if !strings.Contains(promptRules, "explicit ratings from the listener") {
-		t.Error("promptRules не содержит «explicit ratings from the listener»")
+		t.Error("promptRules does not contain \"explicit ratings from the listener\"")
 	}
 }
 
@@ -585,18 +585,18 @@ func TestTurnReplyClearsReserve(t *testing.T) {
 	}}
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "запрос"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	start := len(ch.got)
 	p, err := e.Turn(context.Background(), "чето мимо")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if len(p.Tracks) != 3 || p.Tracks[0].Artist != "E" {
-		t.Errorf("порция 2: %+v, want E, F, G", p.Tracks)
+		t.Errorf("portion 2: %+v, want E, F, G", p.Tracks)
 	}
 	if user := ch.got[start][1].Content; strings.Contains(user, "Candidates from the previous turn") {
-		t.Errorf("после реплики запас не сброшен:\n%s", user)
+		t.Errorf("the reserve was not cleared after the reply:\n%s", user)
 	}
 }
 
@@ -614,7 +614,7 @@ func skipNudgeEngine(t *testing.T, ch *fakeChatter, outs ...Outcome) *Engine {
 	)
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if err := e.Record(outs); err != nil {
 		t.Fatalf("Record: %v", err)
@@ -635,12 +635,12 @@ func TestTurnNudgesAskLater(t *testing.T) {
 	]}`)))
 	start := len(ch.got)
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	user := ch.got[start][1].Content
 	for _, want := range []string{"Skipped since the last question: A — T1; B — T2.", "call ask_later"} {
 		if !strings.Contains(user, want) {
-			t.Errorf("ход 2: user не содержит %q:\n%s", want, user)
+			t.Errorf("turn 2: user does not contain %q:\n%s", want, user)
 		}
 	}
 }
@@ -655,10 +655,10 @@ func TestTurnNoNudgeOneSkip(t *testing.T) {
 	]}`)))
 	start := len(ch.got)
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
-		t.Errorf("ход 2: подсказка при одном скипе:\n%s", user)
+		t.Errorf("turn 2: a hint with a single skip:\n%s", user)
 	}
 }
 
@@ -682,14 +682,14 @@ func TestTurnNudgeResetsAfterAskLater(t *testing.T) {
 		]}`)),
 	)
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	start := len(ch.got)
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
-		t.Errorf("ход 3: подсказка не сброшена после ask_later:\n%s", user)
+		t.Errorf("turn 3: the hint was not reset after ask_later:\n%s", user)
 	}
 }
 
@@ -706,10 +706,10 @@ func TestTurnNoNudgeOnReply(t *testing.T) {
 	]}`)))
 	start := len(ch.got)
 	if _, err := e.Turn(context.Background(), "потише"); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if user := ch.got[start][1].Content; strings.Contains(user, "Skipped since the last question") {
-		t.Errorf("ход 2: подсказка при реплике:\n%s", user)
+		t.Errorf("turn 2: a hint on a reply:\n%s", user)
 	}
 }
 
@@ -724,11 +724,11 @@ func TestTurnWritesNoServed(t *testing.T) {
 	}}
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход: %v", err)
+		t.Fatalf("turn: %v", err)
 	}
 	for _, r := range e.sig.recs {
 		if r.Kind == "served" {
-			t.Fatalf("порция не должна писать served: %+v", r)
+			t.Fatalf("the portion must not write served: %+v", r)
 		}
 	}
 }
@@ -752,10 +752,10 @@ func TestTurnStartsEmptyPortion(t *testing.T) {
 	e := newTestEngine(t, ch)
 	p1, err := e.Turn(context.Background(), "в духе X")
 	if err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if len(p1.Tracks) != 3 {
-		t.Fatalf("ход 1: %d треков, want 3", len(p1.Tracks))
+		t.Fatalf("turn 1: %d tracks, want 3", len(p1.Tracks))
 	}
 	v := e.session.Offer(Suggestion{Artist: "Z", Title: "TZ", Why: "w"}, Song{ID: "z", Artist: "Z", Title: "TZ"}, true)
 	if !v.Accepted {
@@ -763,19 +763,19 @@ func TestTurnStartsEmptyPortion(t *testing.T) {
 	}
 	p2, err := e.Turn(context.Background(), "")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if len(p2.Tracks) != 3 {
-		t.Fatalf("ход 2: %d треков, want 3", len(p2.Tracks))
+		t.Fatalf("turn 2: %d tracks, want 3", len(p2.Tracks))
 	}
 	for i, want := range []string{"D", "E", "F"} {
 		if p2.Tracks[i].Artist != want {
-			t.Errorf("ход 2, трек %d: %q, want %q", i, p2.Tracks[i].Artist, want)
+			t.Errorf("turn 2, track %d: %q, want %q", i, p2.Tracks[i].Artist, want)
 		}
 	}
 	for _, tr := range p2.Tracks {
 		if tr.Artist == "Z" {
-			t.Errorf("ход 2 содержит Z: %+v", p2.Tracks)
+			t.Errorf("turn 2 contains Z: %+v", p2.Tracks)
 		}
 	}
 }
@@ -791,22 +791,22 @@ func TestEngineDropLast(t *testing.T) {
 	e.DropLast()
 	p3, err := e.Turn(context.Background(), "")
 	if err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	if len(p3.Tracks) != 3 {
-		t.Fatalf("ход 3: %d треков, want 3", len(p3.Tracks))
+		t.Fatalf("turn 3: %d tracks, want 3", len(p3.Tracks))
 	}
 	user := ch.got[3][1].Content
 	if !strings.Contains(user, "A — T1") {
-		t.Errorf("user не содержит трек порции 1:\n%s", user)
+		t.Errorf("user does not contain a track of portion 1:\n%s", user)
 	}
 	for _, gone := range []string{"D — T4", "E — T5", "F — T6"} {
 		if strings.Contains(user, gone) {
-			t.Errorf("user содержит трек отброшенной порции %q:\n%s", gone, user)
+			t.Errorf("user contains a track of the dropped portion %q:\n%s", gone, user)
 		}
 	}
 	if !strings.Contains(e.log.b.String(), "## portion 2 dropped: listener reply") {
-		t.Errorf("дорог нет:\n%s", e.log.b.String())
+		t.Errorf("no dropped-portion entry:\n%s", e.log.b.String())
 	}
 }
 
@@ -832,17 +832,17 @@ func TestEngineDropLastForgetsLater(t *testing.T) {
 	}}
 	e := newTestEngine(t, ch)
 	if _, err := e.Turn(context.Background(), "в духе X"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if _, err := e.Turn(context.Background(), ""); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	e.DropLast()
 	if _, err := e.Turn(context.Background(), "потише"); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	if user := ch.got[4][1].Content; strings.Contains(user, "убрать хоррор?") {
-		t.Errorf("ход 3: вопрос отброшенной порции остался в заданных:\n%s", user)
+		t.Errorf("turn 3: the question of the dropped portion is still among the asked ones:\n%s", user)
 	}
 }
 

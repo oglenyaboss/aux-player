@@ -117,7 +117,7 @@ func TestVibeAI_StaleDoneIgnored(t *testing.T) {
 func TestVibeAI_StreamOnByDefault(t *testing.T) {
 	m := newModel(nil)
 	if !m.vibeAI.stream {
-		t.Error("stream mode должен быть включён по умолчанию")
+		t.Error("stream mode must be on by default")
 	}
 }
 
@@ -154,7 +154,7 @@ func TestVibeAI_AutoplayWithoutPicks(t *testing.T) {
 	gen := m.vibeAI.gen
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second})
 	if want := []string{"1", "2", "3"}; len(m.queueIDs) != len(want) || !vibeAIEqual(want, m.queueIDs) {
-		t.Fatalf("queue = %v, want %v — первый трек должен играть", m.queueIDs, want)
+		t.Fatalf("queue = %v, want %v — the first track must play", m.queueIDs, want)
 	}
 	if m.playerState.Track == nil || m.playerState.Track.ID != "1" {
 		t.Errorf("playing = %+v, want track 1", m.playerState.Track)
@@ -199,10 +199,10 @@ func TestVibeAILatePickAfterDoneIgnored(t *testing.T) {
 		Name:     "C — Three",
 		Accepted: true,
 	}}); cmd == nil {
-		t.Fatal("поздний пик должен вернуть waitVibeAI, иначе чтение канала остановится")
+		t.Fatal("a late pick must return waitVibeAI, otherwise reading the channel stops")
 	}
 	if len(m.vibeAI.feed.tracks) != 3 {
-		t.Fatalf("feed = %d треков, want 3: поздний пик не должен менять ленту", len(m.vibeAI.feed.tracks))
+		t.Fatalf("feed = %d tracks, want 3: a late pick must not change the feed", len(m.vibeAI.feed.tracks))
 	}
 	if want := []string{"1", "2", "3"}; !vibeAIEqual(want, m.queueIDs) {
 		t.Fatalf("queue = %v, want %v", m.queueIDs, want)
@@ -219,10 +219,10 @@ func TestVibeAILateAskAfterDoneIgnored(t *testing.T) {
 	acceptPick(m, gen, "1", "A", "One")
 	m.handleVibeAIMsg(vibeAIDoneMsg{gen: gen, tracks: vibeTracks(), elapsed: time.Second})
 	if cmd := m.handleVibeAIMsg(vibeAIAskMsg{gen: gen, qs: []vibeai.Question{{Question: "ещё?", Options: []string{"да", "нет"}}}}); cmd == nil {
-		t.Fatal("поздний вопрос должен вернуть waitVibeAI, иначе чтение канала остановится")
+		t.Fatal("a late question must return waitVibeAI, otherwise reading the channel stops")
 	}
 	if m.vibeAIP.m.st.Phase() == stage.PhAsk {
-		t.Error("поздний вопрос не должен захватывать клавиши")
+		t.Error("a late question must not capture keys")
 	}
 }
 
@@ -236,12 +236,12 @@ func TestVibeAI_StreamAppendsWhileOn(t *testing.T) {
 	m.handleVibeAIMsg(done())
 	before := len(m.queueIDs)
 	if before != 5 {
-		t.Fatalf("поток должен был добавить 2 трека в очередь, got %d", before)
+		t.Fatalf("the stream had to add 2 tracks to the queue, got %d", before)
 	}
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIStream})
 	m.handleVibeAIMsg(done())
 	if len(m.queueIDs) != before {
-		t.Errorf("очередь = %v, при выключенном потоке она должна оставаться неизменной", m.queueIDs)
+		t.Errorf("queue = %v, with the stream off it must stay unchanged", m.queueIDs)
 	}
 }
 
@@ -343,11 +343,11 @@ func TestVibeAI_PlayIndexOutOfBounds(t *testing.T) {
 	}
 	for _, idx := range []int{-1, n + 99} {
 		if cmd := m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: idx}); cmd != nil {
-			t.Errorf("play at index %d должен быть no-op, got cmd", idx)
+			t.Errorf("play at index %d must be a no-op, got cmd", idx)
 		}
 	}
 	if len(m.queueIDs) != n {
-		t.Errorf("queue = %v, очередь не должна была измениться", m.queueIDs)
+		t.Errorf("queue = %v, the queue must not have changed", m.queueIDs)
 	}
 }
 
@@ -403,7 +403,7 @@ func TestVibeAIOutcomesAcrossNilTrack(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 30, DurSec: 61}}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
-		t.Errorf("pending = %+v, want %+v (один исход с позицией до перехода)", m.vibeAI.pending, want)
+		t.Errorf("pending = %+v, want %+v (one outcome with the position before the switch)", m.vibeAI.pending, want)
 	}
 }
 
@@ -415,7 +415,7 @@ func TestVibeAIOutcomesSameTrackAtZero(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_mid", PosSec: 30, DurSec: 61}}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
-		t.Errorf("pending = %+v, want %+v (Position 0 не должен затирать heardPos)", m.vibeAI.pending, want)
+		t.Errorf("pending = %+v, want %+v (Position 0 must not overwrite heardPos)", m.vibeAI.pending, want)
 	}
 }
 
@@ -428,7 +428,7 @@ func TestVibeAIOutcomesRepeatStatesNoDouble(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 5 * time.Second})
 	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "skip_early", PosSec: 15, DurSec: 61}}
 	if !reflect.DeepEqual(m.vibeAI.pending, want) {
-		t.Errorf("pending = %+v, want ровно %+v", m.vibeAI.pending, want)
+		t.Errorf("pending = %+v, want exactly %+v", m.vibeAI.pending, want)
 	}
 }
 
@@ -438,7 +438,7 @@ func TestVibeAIOutcomesPlayedNoSkipInView(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 60 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	if len(m.vibeAI.pending) == 0 {
-		t.Fatal("pending пуст, want записанный исход")
+		t.Fatal("pending is empty, want the recorded outcome")
 	}
 	if m.vibeAI.pending[0].Kind != "played" {
 		t.Errorf("pending[0].Kind = %q, want played", m.vibeAI.pending[0].Kind)
@@ -450,7 +450,7 @@ func TestVibeAIOutcomesSubSecondIgnored(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 500 * time.Millisecond})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	if len(m.vibeAI.pending) != 0 {
-		t.Errorf("pending = %+v, want пусто: позиция < 1s не даёт исхода", m.vibeAI.pending)
+		t.Errorf("pending = %+v, want empty: a position < 1s gives no outcome", m.vibeAI.pending)
 	}
 }
 
@@ -459,7 +459,7 @@ func TestVibeAIOutcomesNonVibeTrackIgnored(t *testing.T) {
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "x"}, Position: 30 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
 	if len(m.vibeAI.pending) != 0 {
-		t.Errorf("pending = %+v, want пусто: трек вне vibe-подборки не даёт исхода", m.vibeAI.pending)
+		t.Errorf("pending = %+v, want empty: a track outside the vibe selection gives no outcome", m.vibeAI.pending)
 	}
 }
 
@@ -480,7 +480,7 @@ func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 		}
 	}
 	if n != 1 {
-		t.Errorf("исходов для трека 1 = %d, want 1 (play не должен давать двойной исход), pending = %+v", n, m.vibeAI.pending)
+		t.Errorf("outcomes for track 1 = %d, want 1 (play must not give a double outcome), pending = %+v", n, m.vibeAI.pending)
 	}
 }
 
@@ -520,7 +520,7 @@ func TestVibeAI_LaterQuestionAndAnswer(t *testing.T) {
 		later:  &vibeai.Question{Question: "убрать хоррор?", Options: []string{"да", "нет"}},
 	})
 	if m.vibeAI.later == nil {
-		t.Fatal("отложенный вопрос не попал в состояние")
+		t.Fatal("the later question did not get into the state")
 	}
 	m.handleVibeAIMsg(VibeAILaterMsg{Raw: "1"})
 	ans := m.vibeAI.laterAnswers
@@ -529,7 +529,7 @@ func TestVibeAI_LaterQuestionAndAnswer(t *testing.T) {
 	}
 	next := startVibeTurn(m)
 	if len(m.vibeAI.laterAnswers) != 0 {
-		t.Errorf("laterAnswers должны уйти в ход и очиститься, got %+v", m.vibeAI.laterAnswers)
+		t.Errorf("laterAnswers must go into the turn and be cleared, got %+v", m.vibeAI.laterAnswers)
 	}
 	if next != gen+1 || m.vibeAI.gen != next {
 		t.Fatalf("turn gen: got %d (model %d), want %d", next, m.vibeAI.gen, gen+1)
@@ -554,15 +554,15 @@ func TestVibeAI_AbortedTurnTrimsPicks(t *testing.T) {
 		t.Errorf("cancel: feed = %d tracks, want 0", len(m.vibeAI.feed.tracks))
 	}
 	if m.vibeAI.autoplay {
-		t.Error("cancel должен выключить автостарт")
+		t.Error("cancel must turn off autostart")
 	}
 	failed := make(t)
-	failed.handleVibeAIMsg(vibeAIDoneMsg{gen: failed.vibeAI.gen, err: errors.New("бум")})
+	failed.handleVibeAIMsg(vibeAIDoneMsg{gen: failed.vibeAI.gen, err: errors.New("boom")})
 	if len(failed.vibeAI.feed.tracks) != 0 {
 		t.Errorf("error: feed = %d tracks, want 0", len(failed.vibeAI.feed.tracks))
 	}
 	if failed.vibeAI.autoplay {
-		t.Error("ошибка хода должна выключить автостарт")
+		t.Error("a turn error must turn off autostart")
 	}
 }
 
@@ -624,7 +624,7 @@ func TestVibeAI_FeedOneSourceAcrossScenarios(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		m := picksOpen(t)
-		m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, err: errors.New("бум")})
+		m.handleVibeAIMsg(vibeAIDoneMsg{gen: m.vibeAI.gen, err: errors.New("boom")})
 		wantEmpty(t, m, "error")
 	})
 
@@ -673,10 +673,10 @@ func TestVibeAI_StreamRefillAhead(t *testing.T) {
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
 	s := player.State{Track: &provider.Track{ID: "1"}}
 	if m.vibeAIStreamTick(s) != nil {
-		t.Error("ahead 2 > 1 за треком 1: ход не должен стартовать")
+		t.Error("ahead 2 > 1 after track 1: the turn must not start")
 	}
 	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) == nil {
-		t.Fatal("ahead 1 ≤ 1 за треком 2: ход должен стартовать")
+		t.Fatal("ahead 1 ≤ 1 after track 2: the turn must start")
 	}
 	m.vibeAI.busy = false
 	if m.vibeAIStreamTick(player.State{Track: &provider.Track{ID: "2"}}) != nil {
@@ -1015,7 +1015,7 @@ func TestVibeAICloseWaitsForCancelledTurn(t *testing.T) {
 	}()
 	r.close()
 	if !released {
-		t.Fatal("close вернулся, не дождавшись отменённого хода: лог сессии потерян")
+		t.Fatal("close returned without waiting for the cancelled turn: the session log is lost")
 	}
 }
 
