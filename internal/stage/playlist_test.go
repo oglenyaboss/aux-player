@@ -148,3 +148,16 @@ func TestStreamDoneStillPlays(t *testing.T) {
 		t.Fatalf("phase %v, want PhPlay", m.Phase())
 	}
 }
+
+func TestPlaylistDoneWSaves(t *testing.T) {
+	r := &recorder{}
+	m := New(Options{Slots: 5, OnAction: r.on})
+	m.SetSize(110, 32)
+	playlistDone(t, m, 12)
+	if !m.Key("w", "") {
+		t.Fatal("w was not taken on a finished playlist")
+	}
+	if n := len(recorded[Save](r)); n != 1 {
+		t.Fatalf("Save sent %d times, want 1: %v", n, r.acts)
+	}
+}

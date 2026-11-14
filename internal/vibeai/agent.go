@@ -38,6 +38,10 @@ type UI interface {
 	Picked(p Pick)
 }
 
+type PlaylistUI interface {
+	Playlist(p PlaylistPlan)
+}
+
 type Pick struct {
 	Track    Track
 	Name     string
@@ -721,6 +725,11 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites 
 		ss[i] = Seed(s)
 	}
 	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites, Playlist: playlist})
+	if playlist != nil {
+		if pu, ok := a.UI.(PlaylistUI); ok {
+			pu.Playlist(*playlist)
+		}
+	}
 	a.planSet = true
 	res := fmt.Sprintf("plan accepted: referents %d, exclusions %d", len(seeds), len(exclusions))
 	if fromFavorites {

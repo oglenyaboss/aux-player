@@ -56,6 +56,7 @@ const (
 	VibeAIQueue
 	VibeAISave
 	VibeAIStream
+	VibeAIListen
 )
 
 // VibeAIActionMsg carries play/queue/save/stream commands. For Play, Index is

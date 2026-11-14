@@ -228,6 +228,8 @@ func (s *stageScreen) act(a stage.Action) {
 		}
 	case stage.Save:
 		s.out = append(s.out, VibeAIActionMsg{Action: VibeAISave})
+	case stage.Listen:
+		s.out = append(s.out, VibeAIActionMsg{Action: VibeAIListen})
 	case stage.SaveTrack:
 		if a.ID == "" {
 			if s.host.playerState.Track == nil {

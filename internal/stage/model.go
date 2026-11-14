@@ -1281,6 +1281,10 @@ func (m *Model) Key(k, text string) bool {
 		}
 		fallthrough
 	default:
+		if m.ph == PhDone && m.playlist && k == "w" {
+			m.send(Save{})
+			return true
+		}
 		switch k {
 		case "q":
 			m.send(Quit{})

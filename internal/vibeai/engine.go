@@ -406,8 +406,11 @@ func trackIDs(tracks []Track) []string {
 	return ids
 }
 
-func (e *Engine) SavePlaylist(ctx context.Context, name string, tracks []Track) (playlistID string, err error) {
-	id, err := createPlaylist(ctx, e.api, name, "AUX · «"+e.name()+"»", trackIDs(tracks))
+func (e *Engine) SavePlaylist(ctx context.Context, name, description string, tracks []Track) (playlistID string, err error) {
+	if description == "" {
+		description = "AUX · «" + e.name() + "»"
+	}
+	id, err := createPlaylist(ctx, e.api, name, description, trackIDs(tracks))
 	if err != nil {
 		return "", err
 	}

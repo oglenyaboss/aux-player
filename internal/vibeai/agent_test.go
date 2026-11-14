@@ -1524,3 +1524,29 @@ func TestPortionCarriesPlaylistPlan(t *testing.T) {
 		t.Errorf("Playlist = %+v, want {10 Flight dub and haze}", *p.Playlist)
 	}
 }
+
+type playlistUI struct {
+	*fakeUI
+	got []PlaylistPlan
+}
+
+func (p *playlistUI) Playlist(plan PlaylistPlan) { p.got = append(p.got, plan) }
+
+func TestSetPlanNotifiesPlaylistUI(t *testing.T) {
+	ui := &playlistUI{fakeUI: &fakeUI{}}
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, ui)
+	ctx := context.Background()
+	if res := a.dispatch(ctx, call("p1", "set_plan", `{"seeds":[],"exclusions":[],"playlist":{"size":20,"name":"N"}}`)); !strings.HasPrefix(res, "plan accepted") {
+		t.Fatalf("set_plan: %q", res)
+	}
+	if len(ui.got) != 1 {
+		t.Fatalf("playlist notifications = %d, want 1", len(ui.got))
+	}
+	if got := ui.got[0]; got.Size != 20 || got.Name != "N" || got.Description != "" {
+		t.Errorf("playlist = %+v, want {20 N }", got)
+	}
+	a.dispatch(ctx, call("p2", "set_plan", `{"seeds":[],"exclusions":[]}`))
+	if len(ui.got) != 1 {
+		t.Errorf("a stream plan must not notify the playlist UI, got %v", ui.got)
+	}
+}
