@@ -3,6 +3,7 @@
 //	go run ./lab/promo -dry                  writes the timeline for mix.py
 //	go run ./lab/promo -out v.mp4 -audio a.wav   renders the film
 //	go run ./lab/promo -sheet 0,5.5,16       stills of the film at those seconds
+//	go run ./lab/promo -edit lab/promo/edit.en.json -lang en -tracks lab/cache/promo/tracks.en.json -out v.mp4 -audio a.wav   the English film
 package main
 
 import (
@@ -114,9 +115,35 @@ func tracksOf(es []entry) []stage.Track {
 	return ts
 }
 
+// script is the language-dependent text the agent says during the preroll.
+type script struct {
+	askTitle string
+	askChip  string
+	progress []string
+	answer   string
+}
+
+func scriptFor(lang string) script {
+	if strings.HasPrefix(lang, "en") {
+		return script{
+			askTitle: "Where do we start?",
+			askChip:  "anchor",
+			progress: []string{"reading about SALUKI", "checking Kanye West's neighbours", "searching Apple Music…"},
+			answer:   "keeping the pressure, psychedelia next",
+		}
+	}
+	return script{
+		askTitle: "От чего оттолкнуться?",
+		askChip:  "ориентир",
+		progress: []string{"читаю про SALUKI", "смотрю соседей Kanye West", "проверяю в Apple Music…"},
+		answer:   "держу напор, дальше психоделика",
+	}
+}
+
 // film is the cursor over the timeline: one call of frame per frame in order.
 type film struct {
 	e      edit
+	s      script
 	es     []entry
 	tracks []stage.Track
 	drop   int
@@ -231,8 +258,8 @@ func dim(c *[rows * cols]cell, k float64) {
 	}
 }
 
-func newFilm(e edit, es []entry) *film {
-	f := &film{e: e, es: es, tracks: tracksOf(es), beat: 60 / e.DropBPM}
+func newFilm(e edit, es []entry, lang string) *film {
+	f := &film{e: e, es: es, s: scriptFor(lang), tracks: tracksOf(es), beat: 60 / e.DropBPM}
 	f.drop, f.last, f.end = f.e.layout()
 	f.pre = newPreroll(f)
 	return f
@@ -278,8 +305,9 @@ func main() {
 	audio := flag.String("audio", "", "")
 	crf := flag.Int("crf", 17, "")
 	preset := flag.String("preset", "slow", "")
+	lang := flag.String("lang", "ru", "language of the film's text: ru or en")
 	flag.Parse()
-	stage.SetLang("ru")
+	stage.SetLang(*lang)
 
 	var e edit
 	loadJSON(*editPath, &e)
@@ -293,7 +321,7 @@ func main() {
 	for _, s := range e.Segments {
 		ordered = append(ordered, byKey[s.Key])
 	}
-	f := newFilm(e, ordered)
+	f := newFilm(e, ordered, *lang)
 
 	a, err := loadAtlas(*atlasPath)
 	must(err)
