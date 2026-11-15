@@ -372,6 +372,12 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 				v.initErr = ""
 			}
 		}
+		// The update notice waits for the player page, the one surface the
+		// scene has for a host line, and is spent the moment it is shown.
+		if n := v.notice; n != nil && v.st.Phase() == stage.PhPlay {
+			v.st.Toast(n.text())
+			v.notice = nil
+		}
 		if m.errMsg != v.lastErr {
 			v.lastErr = m.errMsg
 			if m.errMsg != "" && v.st.Phase() == stage.PhPlay {

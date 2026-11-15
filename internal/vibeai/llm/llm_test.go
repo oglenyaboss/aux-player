@@ -96,11 +96,11 @@ func TestToolCallRoundtrip(t *testing.T) {
 		t.Errorf("FinishReason = %q, want tool_calls", resp.FinishReason)
 	}
 	if !strings.Contains(string(resp.Message.Raw), `"reasoning_content":"думаю"`) {
-		t.Errorf("Raw без reasoning_content: %s", resp.Message.Raw)
+		t.Errorf("Raw without reasoning_content: %s", resp.Message.Raw)
 	}
 	wantTools := `"tools":[{"type":"function","function":{"name":"describe","description":"описание","parameters":{"type":"object"}}}]`
 	if !strings.Contains(reqs()[0].body, wantTools) {
-		t.Errorf("в теле нет tools в формате R2: %s", reqs()[0].body)
+		t.Errorf("the body has no tools in the R2 format: %s", reqs()[0].body)
 	}
 
 	resp2, err := c.Chat(context.Background(), []Message{
@@ -116,10 +116,10 @@ func TestToolCallRoundtrip(t *testing.T) {
 	}
 	body := reqs()[1].body
 	if !strings.Contains(body, `"reasoning_content":"думаю"`) {
-		t.Errorf("второй запрос без reasoning_content: %s", body)
+		t.Errorf("the second request has no reasoning_content: %s", body)
 	}
 	if !strings.Contains(body, `"tool_call_id":"c1"`) {
-		t.Errorf("второй запрос без tool_call_id: %s", body)
+		t.Errorf("the second request has no tool_call_id: %s", body)
 	}
 }
 
@@ -132,33 +132,33 @@ func TestRequestHeaders(t *testing.T) {
 	}
 	rs := reqs()
 	if len(rs) != 2 {
-		t.Fatalf("запросов %d, want 2", len(rs))
+		t.Fatalf("requests %d, want 2", len(rs))
 	}
 	for i, r := range rs {
 		if r.method != http.MethodPost {
-			t.Errorf("запрос %d: method = %q, want POST", i, r.method)
+			t.Errorf("request %d: method = %q, want POST", i, r.method)
 		}
 		if r.path != "/chat/completions" {
-			t.Errorf("запрос %d: path = %q", i, r.path)
+			t.Errorf("request %d: path = %q", i, r.path)
 		}
 		if got := r.header.Get("Authorization"); got != "Bearer sk-secret-123" {
-			t.Errorf("запрос %d: Authorization = %q", i, got)
+			t.Errorf("request %d: Authorization = %q", i, got)
 		}
 		if got := r.header.Get("Content-Type"); got != "application/json" {
-			t.Errorf("запрос %d: Content-Type = %q", i, got)
+			t.Errorf("request %d: Content-Type = %q", i, got)
 		}
 		if got := r.header.Get("User-Agent"); got != "aux/"+version.Version {
-			t.Errorf("запрос %d: User-Agent = %q", i, got)
+			t.Errorf("request %d: User-Agent = %q", i, got)
 		}
 		sess := r.header.Get("x-opencode-session")
 		if !strings.HasPrefix(sess, "aux-") {
-			t.Errorf("запрос %d: session = %q, нет префикса aux-", i, sess)
+			t.Errorf("request %d: session = %q, no aux- prefix", i, sess)
 		}
 		if len(sess) != len("aux-")+32 {
-			t.Errorf("запрос %d: session = %q, want 16 байт hex", i, sess)
+			t.Errorf("request %d: session = %q, want 16 bytes of hex", i, sess)
 		}
 		if i > 0 && sess != rs[0].header.Get("x-opencode-session") {
-			t.Errorf("запрос %d: session %q != %q", i, sess, rs[0].header.Get("x-opencode-session"))
+			t.Errorf("request %d: session %q != %q", i, sess, rs[0].header.Get("x-opencode-session"))
 		}
 	}
 }
@@ -178,7 +178,7 @@ func TestRetryOn500(t *testing.T) {
 		t.Errorf("Content = %q, want ok", resp.Message.Content)
 	}
 	if n := len(reqs()); n != 2 {
-		t.Errorf("запросов %d, want 2", n)
+		t.Errorf("requests %d, want 2", n)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestRetryExhaustedOnEmptyMessage(t *testing.T) {
 		t.Fatal("want error")
 	}
 	if n := len(reqs()); n != 3 {
-		t.Errorf("запросов %d, want 3", n)
+		t.Errorf("requests %d, want 3", n)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestJSONModeRetry(t *testing.T) {
 		t.Errorf("Content = %q, want {\"a\":1}", resp.Message.Content)
 	}
 	if !strings.Contains(reqs()[0].body, `"response_format":{"type":"json_object"}`) {
-		t.Errorf("в теле нет response_format: %s", reqs()[0].body)
+		t.Errorf("the body has no response_format: %s", reqs()[0].body)
 	}
 }
 
@@ -221,13 +221,13 @@ func TestUnauthorizedNoRetry(t *testing.T) {
 		t.Fatal("want error")
 	}
 	if !strings.Contains(err.Error(), "HTTP 401") {
-		t.Errorf("err = %v, нет HTTP 401", err)
+		t.Errorf("err = %v, no HTTP 401", err)
 	}
 	if n := len(reqs()); n != 1 {
-		t.Errorf("запросов %d, want 1", n)
+		t.Errorf("requests %d, want 1", n)
 	}
 	if strings.Contains(err.Error(), "sk-secret-123") {
-		t.Errorf("ошибка содержит ключ: %v", err)
+		t.Errorf("the error contains the key: %v", err)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestNoToolsInBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.Contains(reqs()[0].body, `"tools"`) {
-		t.Errorf("тело содержит tools: %s", reqs()[0].body)
+		t.Errorf("the body contains tools: %s", reqs()[0].body)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestLoadEnv(t *testing.T) {
 		t.Fatal("want error")
 	}
 	if strings.Contains(err.Error(), "http://localhost:4096") || strings.Contains(err.Error(), "qwen3") {
-		t.Errorf("ошибка содержит значения: %v", err)
+		t.Errorf("the error contains the values: %v", err)
 	}
 }
 
@@ -288,10 +288,10 @@ func TestEffortOpenAIStyle(t *testing.T) {
 	}
 	body := reqs()[0].body
 	if !strings.Contains(body, `"reasoning_effort":"high"`) {
-		t.Errorf("в теле нет reasoning_effort: %s", body)
+		t.Errorf("the body has no reasoning_effort: %s", body)
 	}
 	if strings.Contains(body, `"reasoning":{`) {
-		t.Errorf("тело содержит reasoning-объект: %s", body)
+		t.Errorf("the body contains a reasoning object: %s", body)
 	}
 }
 
@@ -318,10 +318,10 @@ func TestEffortOpenRouter(t *testing.T) {
 	defer mu.Unlock()
 	body := bodies[0]
 	if !strings.Contains(body, `"reasoning":{"effort":"low"}`) {
-		t.Errorf("в теле нет reasoning-объекта: %s", body)
+		t.Errorf("the body has no reasoning object: %s", body)
 	}
 	if strings.Contains(body, "reasoning_effort") {
-		t.Errorf("тело содержит reasoning_effort: %s", body)
+		t.Errorf("the body contains reasoning_effort: %s", body)
 	}
 }
 
@@ -332,6 +332,6 @@ func TestNoEffort(t *testing.T) {
 	}
 	body := reqs()[0].body
 	if strings.Contains(body, "reasoning_effort") || strings.Contains(body, `"reasoning"`) {
-		t.Errorf("тело содержит reasoning без Effort: %s", body)
+		t.Errorf("the body contains reasoning without Effort: %s", body)
 	}
 }

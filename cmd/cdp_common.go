@@ -45,12 +45,18 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 	var stopRPC func()
 
 	go func() {
-		if exe := updater.CheckAndUpdate(version.Version, noUpdate, func(msg string) {
+		res := updater.CheckAndUpdate(version.Version, noUpdate, func(msg string) {
 			prog.Send(tui.InitStatusMsg(msg))
-		}); exe != "" {
-			restartExe <- exe
+		})
+		if res.Exe != "" {
+			restartExe <- res.Exe
 			prog.Send(tui.RestartMsg{})
 			return
+		}
+		// A newer release this build left alone is the one thing the listener
+		// would never hear about; the toast names it.
+		if res.Available() {
+			prog.Send(tui.UpdateNoticeMsg{Tag: res.Tag})
 		}
 
 		devTokenRejected := false

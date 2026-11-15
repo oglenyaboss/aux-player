@@ -67,13 +67,13 @@ func TestYeezusRule(t *testing.T) {
 	m := New(Options{})
 	e := m.eggOf(yeezusSkin)
 	if e == nil || e.theme != &yeezusTheme || e.layout == nil || e.knob != '■' {
-		t.Fatalf("eggOf(skin) = %+v, ждём тему, раскладку и ручку ■", e)
+		t.Fatalf("eggOf(skin) = %+v, want the theme, the layout and the ■ knob", e)
 	}
 	if gr := m.eggOf(Track{Artist: "Kanye West", Title: "Power", Album: "Graduation", Dur: 264}); gr != nil && gr.theme == &yeezusTheme {
-		t.Errorf("Graduation поймал тему Yeezus")
+		t.Errorf("Graduation picked up the Yeezus theme")
 	}
 	if e := m.eggOf(Track{Artist: "Kanye", Title: "Black Skinhead", Album: "Yeezus"}); e != nil {
-		t.Errorf("артист Kanye без West не должен ловить Yeezus: %+v", e)
+		t.Errorf("an artist Kanye without West must not catch Yeezus: %+v", e)
 	}
 }
 
@@ -85,10 +85,10 @@ func TestYeezusCase(t *testing.T) {
 	m, f := yeezusFrame(t, Options{}, 60, 9)
 	b, _ := yeezusPlan(m)
 	if g := m.geom(); !g.noCover || !g.noQueue {
-		t.Fatalf("geom %+v, ждём noCover и noQueue", g)
+		t.Fatalf("geom %+v, want noCover and noQueue", g)
 	}
 	if strings.Contains(stripANSI(f.String()), "Queued Next") {
-		t.Errorf("очередь видна в раскладке Yeezus")
+		t.Errorf("the queue is visible in the Yeezus layout")
 	}
 	for py := 0; py < m.h*2; py++ {
 		for px := 0; px < m.w; px++ {
@@ -96,15 +96,15 @@ func TestYeezusCase(t *testing.T) {
 				continue
 			}
 			if c := f.pixelAt(px, py); !yeezusOneBit(c) {
-				t.Fatalf("пиксель (%d, %d) вне кейса: %+v, ждём белый, чёрный или красный", px, py, c)
+				t.Fatalf("pixel (%d, %d) outside the case: %+v, want white, black or red", px, py, c)
 			}
 		}
 	}
 	if b.cs < m.h*2*8/10 {
-		t.Errorf("кейс %d пикселей при высоте окна %d, ждём от 80%%", b.cs, m.h*2)
+		t.Errorf("the case is %d pixels with a window height of %d, want 80%% at the least", b.cs, m.h*2)
 	}
 	if c := f.pixelAt(b.cx+b.cs/10, b.cy+b.cs/10); !yeezusBlueOrGreen(c) {
-		t.Errorf("угол кейса %+v, ждём пиксель обложки", c)
+		t.Errorf("corner of the case %+v, want a cover pixel", c)
 	}
 	minX, maxX, minY, maxY := m.w, 0, m.h*2, 0
 	for py := 0; py < m.h*2; py++ {
@@ -115,27 +115,27 @@ func TestYeezusCase(t *testing.T) {
 		}
 	}
 	if span := m.w - b.cx - b.cs; maxX-minX < span*6/10 || maxY-minY < m.h*2/5 {
-		t.Errorf("чёрные буквы в %d..%d × %d..%d, ждём шире %d и выше %d пикселей", minX, maxX, minY, maxY, span*6/10, m.h*2/5)
+		t.Errorf("black letters within %d..%d × %d..%d, want wider than %d and taller than %d pixels", minX, maxX, minY, maxY, span*6/10, m.h*2/5)
 	}
 	if !strings.Contains(stripANSI(f.String()), "Kanye West") {
-		t.Errorf("артиста нет в кадре")
+		t.Errorf("the artist is not in the frame")
 	}
 }
 
 func TestYeezusFallback(t *testing.T) {
 	m, f := yeezusModel(t, Options{}, 80, 40, 60, 9)
 	if g := m.geom(); g.noCover || g.noQueue {
-		t.Fatalf("портрет 80x40: geom %+v, ждём обычную раскладку", g)
+		t.Fatalf("portrait 80x40: geom %+v, want the usual layout", g)
 	}
 	if !strings.Contains(stripANSI(f.String()), "Queued Next") {
-		t.Errorf("портрет 80x40: очереди нет")
+		t.Errorf("portrait 80x40: no queue")
 	}
 	m = New(Options{SelfPlay: true})
 	m.SetSize(160, 45)
 	m.JumpPlay([]Track{{Artist: "Kanye West", Title: "Send It Up ★", Album: "Yeezus", Dur: 178}}, 0, 0)
 	steps(m, 2)
 	if g := m.geom(); g.noCover {
-		t.Errorf("заголовок вне шрифта: раскладка Yeezus, ждём обычную")
+		t.Errorf("the title is outside the font: Yeezus layout, want the usual one")
 	}
 }
 
@@ -143,11 +143,11 @@ func TestYeezusFallback(t *testing.T) {
 func TestYeezusEntrance(t *testing.T) {
 	m, f := yeezusFrame(t, Options{}, 60, 0.05)
 	if lum := f.at(m.w-4, 3).bg.lum(); lum >= 0.1 {
-		t.Errorf("на 0.05 с экран не чёрный: lum %.3f", lum)
+		t.Errorf("at 0.05 s the screen is not black: lum %.3f", lum)
 	}
 	m, _ = yeezusFrame(t, Options{}, 60, 1)
 	if lum := m.render().at(m.w-4, 3).bg.lum(); lum <= 0.9 {
-		t.Errorf("на 1 с кейс не белый: lum %.3f", lum)
+		t.Errorf("at 1 s the case is not white: lum %.3f", lum)
 	}
 }
 
@@ -161,7 +161,7 @@ func TestYeezusCoverTapeHidden(t *testing.T) {
 			for px := b.cx; px < b.cx+b.cs; px++ {
 				onTape := px >= b.tapeX0 && py >= b.tapeY0 && py <= b.tapeY1
 				if c := f.pixelAt(px, py); !onTape && yeezusRedish(c) {
-					t.Fatalf("на %.0f с красный пиксель обложки (%d, %d) вне нашей ленты", secs, px, py)
+					t.Fatalf("at %.0f s a red cover pixel (%d, %d) lies outside our tape", secs, px, py)
 				}
 			}
 		}
@@ -182,13 +182,13 @@ func TestYeezusSpin(t *testing.T) {
 	for range 16 {
 		c := yeezusDiscProbe(m, m.render())
 		if !yeezusBlueOrGreen(c) {
-			t.Fatalf("диск %+v, ждём пиксель обложки", c)
+			t.Fatalf("disc %+v, want a cover pixel", c)
 		}
 		seen[c.b > 0.8] = true
 		steps(m, 0.5)
 	}
 	if len(seen) < 2 {
-		t.Errorf("за 8 с точка диска не сменила половину обложки: диск не крутится")
+		t.Errorf("in 8 s the disc point did not cross half the cover: the disc does not spin")
 	}
 	m.Now(yeezusSkin.Key(), m.pos, false)
 	m.o.SelfPlay = false
@@ -196,7 +196,7 @@ func TestYeezusSpin(t *testing.T) {
 	a := yeezusSpin(m)
 	steps(m, 1)
 	if b := yeezusSpin(m); b != a {
-		t.Errorf("на паузе диск крутится: %.3f → %.3f", a, b)
+		t.Errorf("the disc spins on pause: %.3f → %.3f", a, b)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestYeezusSpinUp(t *testing.T) {
 	steps(m, 0.5)
 	late := yeezusSpin(m) - a
 	if early < 3*late {
-		t.Errorf("раскрутка %.3f рад за 0.5 с в начале против %.3f потом, ждём втрое больше", early, late)
+		t.Errorf("spin-up %.3f rad in 0.5 s at the start against %.3f later, want three times more", early, late)
 	}
 }
 
@@ -222,7 +222,7 @@ func TestYeezusTape(t *testing.T) {
 		f := m.render()
 		b, _ := yeezusPlan(m)
 		if b.tapeY1-b.tapeY0 < m.h*2/4 {
-			t.Errorf("лента %d пикселей, ждём толщину от %d", b.tapeY1-b.tapeY0, m.h*2/4)
+			t.Errorf("the tape is %d pixels, want a thickness of %d at the least", b.tapeY1-b.tapeY0, m.h*2/4)
 		}
 		mid := (b.tapeY0 + b.tapeY1) / 2
 		left, right := -1, -1
@@ -236,10 +236,10 @@ func TestYeezusTape(t *testing.T) {
 		}
 		want := b.tapeX1 + int(tc.at*float64(m.w-b.tapeX1))
 		if left != b.tapeX0 || right < want-3 || right > want+1 {
-			t.Errorf("pos %.0f: лента %d..%d, ждём %d..%d", tc.pos, left, right, b.tapeX0, want)
+			t.Errorf("pos %.0f: tape %d..%d, want %d..%d", tc.pos, left, right, b.tapeX0, want)
 		}
 		if !strings.Contains(stripANSI(f.String()), fmtDur(m.pos)) {
-			t.Errorf("pos %.0f: времени %s нет в кадре", tc.pos, fmtDur(m.pos))
+			t.Errorf("pos %.0f: the time %s is not in the frame", tc.pos, fmtDur(m.pos))
 		}
 	}
 }
@@ -247,10 +247,10 @@ func TestYeezusTape(t *testing.T) {
 func TestYeezusNoEggs(t *testing.T) {
 	m, f := yeezusFrame(t, Options{NoEggs: true}, 60, 9)
 	if lum := f.at(150, 30).bg.lum(); lum >= 0.3 {
-		t.Errorf("NoEggs: фон %.3f, ждём тёмный (< 0.3)", lum)
+		t.Errorf("NoEggs: backdrop %.3f, want it dark (< 0.3)", lum)
 	}
 	if g := m.geom(); g.noCover {
-		t.Errorf("NoEggs: раскладка Yeezus")
+		t.Errorf("NoEggs: Yeezus layout")
 	}
 }
 

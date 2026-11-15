@@ -74,11 +74,11 @@ func TestParseSongSearchReleased(t *testing.T) {
 		t.Fatalf("unexpected err %v", err)
 	}
 	if len(got) != 1 {
-		t.Fatalf("%d песен, ждём 1", len(got))
+		t.Fatalf("%d songs, want 1", len(got))
 	}
 	s := got[0]
 	if s.Released != "2020-12-25" || s.Album != "Whole Lotta Red" || s.Year != "2020" {
-		t.Errorf("Released/Album/Year: %q %q %q, ждём 2020-12-25 / Whole Lotta Red / 2020", s.Released, s.Album, s.Year)
+		t.Errorf("Released/Album/Year: %q %q %q, want 2020-12-25 / Whole Lotta Red / 2020", s.Released, s.Album, s.Year)
 	}
 }
 

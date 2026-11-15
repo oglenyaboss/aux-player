@@ -25,7 +25,7 @@ type fakeChatter struct {
 func (f *fakeChatter) Chat(ctx context.Context, msgs []llm.Message, tools []llm.Tool, jsonMode bool) (llm.Response, error) {
 	f.got = append(f.got, append([]llm.Message(nil), msgs...))
 	if len(f.resps) == 0 {
-		return llm.Response{}, errors.New("фейк: ответы кончились")
+		return llm.Response{}, errors.New("fake: out of responses")
 	}
 	r := f.resps[0]
 	f.resps = f.resps[1:]
@@ -123,15 +123,15 @@ func TestTurnPlanDescribeSubmit(t *testing.T) {
 		}
 	}
 	if len(ch.got) != 2 {
-		t.Fatalf("Chat вызван %d раз, want 2", len(ch.got))
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
 	}
 	tail := ch.got[1][len(ch.got[1])-2:]
 	if len(tail) != 2 || tail[0].Role != "tool" || tail[1].Role != "tool" ||
 		tail[0].ToolCallID != "c1" || tail[1].ToolCallID != "c2" {
-		t.Fatalf("второй вызов должен заканчиваться tool-сообщениями c1 и c2, got %+v", tail)
+		t.Fatalf("the second call must end with the tool messages c1 and c2, got %+v", tail)
 	}
 	if ch.got[0][0].Role != "system" {
-		t.Errorf("первое сообщение не system: %q", ch.got[0][0].Role)
+		t.Errorf("the first message is not system: %q", ch.got[0][0].Role)
 	}
 	found := false
 	for _, d := range be.describeCalls {
@@ -140,7 +140,7 @@ func TestTurnPlanDescribeSubmit(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("describe не получил album/Don Toliver/HARDSTONE PSYCHO: %v", be.describeCalls)
+		t.Errorf("describe did not get album/Don Toliver/HARDSTONE PSYCHO: %v", be.describeCalls)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestSubmitBeforePlan(t *testing.T) {
 	res := a.dispatch(context.Background(), call("x", "submit_candidates",
 		`{"tracks":[{"artist":"A","title":"T","why":"w"}]}`))
 	if !strings.Contains(res, "call set_plan first") {
-		t.Errorf("got %q, want подстрока «сначала set_plan»", res)
+		t.Errorf("got %q, want the substring \"call set_plan first\"", res)
 	}
 }
 
@@ -165,7 +165,7 @@ func TestTurnTextOnlyTwoHints(t *testing.T) {
 		t.Fatalf("entries: %d, want 0", len(entries))
 	}
 	if len(ch.got) != 3 {
-		t.Fatalf("Chat вызван %d раз, want 3", len(ch.got))
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
 	}
 	hints := 0
 	for _, m := range ch.got[2] {
@@ -174,7 +174,7 @@ func TestTurnTextOnlyTwoHints(t *testing.T) {
 		}
 	}
 	if hints != 2 {
-		t.Errorf("подсказок в msgs: %d, want 2", hints)
+		t.Errorf("hints in msgs: %d, want 2", hints)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestAskUserOnceAndResolveAnswer(t *testing.T) {
 		Taken   []string    `json:"taken"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	want := []answerRow{{Question: "q1", Answer: "o1 (A — T1)"}, {Question: "q2", Answer: "x2 (X — T2)"}}
 	if len(out.Answers) != 2 || out.Answers[0] != want[0] || out.Answers[1] != want[1] {
@@ -202,18 +202,18 @@ func TestAskUserOnceAndResolveAnswer(t *testing.T) {
 	}
 	res2 := a.dispatch(context.Background(), call("q2", "ask_user", args))
 	if !strings.Contains(res2, "questions were already asked") {
-		t.Errorf("повтор: got %q", res2)
+		t.Errorf("repeat: got %q", res2)
 	}
 	q := Question{Question: "q", Options: []string{"o1", "o2"},
 		Tracks: []Track{{Artist: "A", Title: "T1"}, {Artist: "B", Title: "T2"}}, Default: "1"}
 	if got := resolveAnswer(q, ""); got != "o1 (A — T1)" {
-		t.Errorf("resolveAnswer(пусто) = %q", got)
+		t.Errorf("resolveAnswer(empty) = %q", got)
 	}
 	if got := resolveAnswer(q, "2"); got != "o2 (B — T2)" {
 		t.Errorf("resolveAnswer(2) = %q", got)
 	}
 	if got := resolveAnswer(q, "своё"); got != "my own pick: своё" {
-		t.Errorf("resolveAnswer(своё) = %q", got)
+		t.Errorf("resolveAnswer(own text) = %q", got)
 	}
 	if got := resolveAnswer(q, "9"); got != "my own pick: 9" {
 		t.Errorf("resolveAnswer(9) = %q", got)
@@ -230,10 +230,10 @@ func TestResolveAnswerNone(t *testing.T) {
 		t.Errorf("resolveAnswer(« none ») = %q", got)
 	}
 	if got := pickedOptions(q, "none"); len(got) != 0 {
-		t.Errorf("pickedOptions(none) = %v, want пусто", got)
+		t.Errorf("pickedOptions(none) = %v, want empty", got)
 	}
 	if got := resolveAnswer(q, ""); got != "o1 (A — T1)" {
-		t.Errorf("resolveAnswer(пусто) = %q, want вариант по умолчанию", got)
+		t.Errorf("resolveAnswer(empty) = %q, want the default option", got)
 	}
 }
 
@@ -242,11 +242,11 @@ func TestMemoryAddDuplicate(t *testing.T) {
 	args := `{"text":"не нравится Gunna","evidence":"«Gunna нет»"}`
 	res := a.dispatch(context.Background(), call("m1", "memory_add", args))
 	if !strings.HasPrefix(res, "ok: memory") {
-		t.Errorf("первый add: got %q", res)
+		t.Errorf("first add: got %q", res)
 	}
 	res2 := a.dispatch(context.Background(), call("m2", "memory_add", args))
 	if !strings.HasPrefix(res2, "error: a similar entry already exists") {
-		t.Errorf("повтор: got %q", res2)
+		t.Errorf("repeat: got %q", res2)
 	}
 }
 
@@ -265,17 +265,17 @@ func TestTurnStopsAtMaxSteps(t *testing.T) {
 		t.Fatalf("entries: %d, want 0", len(entries))
 	}
 	if len(ch.got) != 4 {
-		t.Fatalf("Chat вызван %d раз, want MaxSteps=4", len(ch.got))
+		t.Fatalf("Chat called %d times, want MaxSteps=4", len(ch.got))
 	}
 }
 
 func TestDispatchUnknownToolAndBadArgs(t *testing.T) {
 	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
 	if res := a.dispatch(context.Background(), call("u", "foo", `{}`)); res != "error: no such tool foo" {
-		t.Errorf("неизвестный инструмент: got %q", res)
+		t.Errorf("unknown tool: got %q", res)
 	}
 	if res := a.dispatch(context.Background(), call("u2", "set_plan", `{`)); res != "error: arguments are not JSON" {
-		t.Errorf("плохие аргументы: got %q", res)
+		t.Errorf("bad arguments: got %q", res)
 	}
 }
 
@@ -297,7 +297,7 @@ func TestSubmitAcceptedRejectedOrder(t *testing.T) {
 		Need    int    `json:"need"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Accepted) != 1 || out.Accepted[0] != "A — Y" {
 		t.Errorf("accepted: %v, want [A — Y]", out.Accepted)
@@ -306,10 +306,10 @@ func TestSubmitAcceptedRejectedOrder(t *testing.T) {
 		t.Errorf("rejected: %+v", out.Rejected)
 	}
 	if out.Portion != "1/3" || out.Need != 2 {
-		t.Errorf("portion=%q need=%d, want 1/3 и 2", out.Portion, out.Need)
+		t.Errorf("portion=%q need=%d, want 1/3 and 2", out.Portion, out.Need)
 	}
 	if len(be.findCalls) != 2 {
-		t.Errorf("findSong вызван %d раз, want 2", len(be.findCalls))
+		t.Errorf("findSong called %d times, want 2", len(be.findCalls))
 	}
 }
 
@@ -326,23 +326,23 @@ func TestSystemPromptSections(t *testing.T) {
 		"in English.",
 	} {
 		if !strings.Contains(sp, want) {
-			t.Errorf("systemPrompt не содержит %q", want)
+			t.Errorf("systemPrompt does not contain %q", want)
 		}
 	}
 	if before, _, ok := strings.Cut(sp, "## Memory about the listener"); ok {
 		if cyrillic.MatchString(before) {
-			t.Errorf("кириллица в systemPrompt до секции памяти:\n%s", before)
+			t.Errorf("Cyrillic in systemPrompt before the memory section:\n%s", before)
 		}
 	}
 	ru := systemPrompt(st, nil, "ru")
 	if !strings.Contains(ru, "in Russian.") {
-		t.Error("systemPrompt с lang ru не содержит «in Russian.»")
+		t.Error("systemPrompt with lang ru does not contain \"in Russian.\"")
 	}
 }
 
 func TestPromptRulesNoCyrillic(t *testing.T) {
 	if m := cyrillic.FindString(promptRules); m != "" {
-		t.Errorf("promptRules содержит кириллицу: %q", m)
+		t.Errorf("promptRules contains Cyrillic: %q", m)
 	}
 }
 
@@ -360,14 +360,14 @@ func TestToolResultsNoCyrillic(t *testing.T) {
 		call("u8", "set_plan", `{"seeds":[{"artist":"X","mode":"bad"}],"exclusions":[]}`),
 	} {
 		if res := a.dispatch(ctx, c); cyrillic.MatchString(res) {
-			t.Errorf("%s: кириллица в результате: %q", c.Name, res)
+			t.Errorf("%s: Cyrillic in the result: %q", c.Name, res)
 		}
 	}
 	if res := a.dispatch(ctx, call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)); cyrillic.MatchString(res) {
-		t.Errorf("set_plan: кириллица в результате: %q", res)
+		t.Errorf("set_plan: Cyrillic in the result: %q", res)
 	}
 	if res := a.dispatch(ctx, call("s", "submit_candidates", `{"tracks":[{"artist":"Ghost","title":"T","why":"w"}],"note":""}`)); cyrillic.MatchString(res) {
-		t.Errorf("submit_candidates: кириллица в результате: %q", res)
+		t.Errorf("submit_candidates: Cyrillic in the result: %q", res)
 	}
 }
 
@@ -376,15 +376,15 @@ func TestAgentToolsNineValidSchemas(t *testing.T) {
 	want := []string{"ask_user", "ask_later", "set_plan", "describe", "similar_artists", "submit_candidates",
 		"memory_add", "memory_replace", "memory_remove", "memory_consolidate"}
 	if len(tools) != len(want) {
-		t.Fatalf("инструментов %d, want %d", len(tools), len(want))
+		t.Fatalf("tools %d, want %d", len(tools), len(want))
 	}
 	for i, tool := range tools {
 		if tool.Name != want[i] {
-			t.Errorf("инструмент %d: %q, want %q", i, tool.Name, want[i])
+			t.Errorf("tool %d: %q, want %q", i, tool.Name, want[i])
 		}
 		var m map[string]any
 		if err := json.Unmarshal(tool.Parameters, &m); err != nil {
-			t.Fatalf("%s: параметры не JSON: %v", tool.Name, err)
+			t.Fatalf("%s: parameters are not JSON: %v", tool.Name, err)
 		}
 		if m["type"] != "object" {
 			t.Errorf("%s: type = %v, want object", tool.Name, m["type"])
@@ -398,13 +398,13 @@ func TestDescribeValidation(t *testing.T) {
 		t.Errorf("kind song: got %q", res)
 	}
 	if res := a.dispatch(context.Background(), call("d2", "describe", `{"kind":"album","artist":"X"}`)); res != "error: name is required" {
-		t.Errorf("album без name: got %q", res)
+		t.Errorf("album without name: got %q", res)
 	}
 	if res := a.dispatch(context.Background(), call("d3", "describe", `{"kind":"artist","artist":"X"}`)); strings.HasPrefix(res, "error") {
-		t.Errorf("artist без name: got %q", res)
+		t.Errorf("artist without name: got %q", res)
 	}
 	if res := a.dispatch(context.Background(), call("d4", "describe", `{"kind":"artist"}`)); res != "error: artist is required" {
-		t.Errorf("artist без artist и name: got %q", res)
+		t.Errorf("artist without artist and name: got %q", res)
 	}
 }
 
@@ -412,7 +412,7 @@ func TestDescribeArtistFromName(t *testing.T) {
 	be := &fakeBackend{}
 	a := newTestAgent(t, &fakeChatter{}, be, &fakeUI{})
 	if res := a.dispatch(context.Background(), call("d", "describe", `{"kind":"artist","name":"Westside Gunn"}`)); strings.HasPrefix(res, "error") {
-		t.Fatalf("artist в name: got %q", res)
+		t.Fatalf("artist in name: got %q", res)
 	}
 	if len(be.describeCalls) != 1 || be.describeCalls[0] != "artist|Westside Gunn|" {
 		t.Errorf("describeCalls = %v, want [artist|Westside Gunn|]", be.describeCalls)
@@ -425,7 +425,7 @@ func TestSimilarArtistsCappedAt20(t *testing.T) {
 	res := a.dispatch(context.Background(), call("s", "similar_artists", `{"artist":"Yeat"}`))
 	var got []similarOut
 	if err := json.Unmarshal([]byte(res), &got); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(got) != 1 || got[0].Name != "Neighbor" || got[0].Match != 50 {
 		t.Errorf("similar: %+v, want [{Neighbor 50}]", got)
@@ -455,7 +455,7 @@ func TestTurnDispatchesAllCallsEvenWhenFull(t *testing.T) {
 		t.Fatalf("entries: %d, want 3", len(entries))
 	}
 	if len(ch.got) != 2 {
-		t.Fatalf("Chat вызван %d раз, want 2 — порция заполнилась на первом вызове шага 2", len(ch.got))
+		t.Fatalf("Chat called %d times, want 2 — the portion filled on the first call of step 2", len(ch.got))
 	}
 	toolMsgs := 0
 	for _, m := range a.msgs {
@@ -464,7 +464,7 @@ func TestTurnDispatchesAllCallsEvenWhenFull(t *testing.T) {
 		}
 	}
 	if toolMsgs != 3 {
-		t.Errorf("tool-сообщений %d, want 3 — каждый вызов должен получить ответ", toolMsgs)
+		t.Errorf("tool messages %d, want 3 — every call must get an answer", toolMsgs)
 	}
 	want := "· submit 3 → accepted 3, rejected 0 (portion 3/3)"
 	found := false
@@ -510,26 +510,26 @@ func TestTurnOffersReserve(t *testing.T) {
 
 	entries, err := a.Turn(context.Background(), "в духе X")
 	if err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if len(entries) != 2 || entries[0].Song.Artist != "A" || entries[1].Song.Artist != "B" {
-		t.Fatalf("ход 1: %+v, want [A, B]", entries)
+		t.Fatalf("turn 1: %+v, want [A, B]", entries)
 	}
 
 	start := len(ch.got)
 	entries2, err := a.Turn(context.Background(), "ещё")
 	if err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if len(entries2) != 2 || entries2[0].Song.Artist != "C" || entries2[1].Song.Artist != "D" {
-		t.Fatalf("ход 2: %+v, want [C, D]", entries2)
+		t.Fatalf("turn 2: %+v, want [C, D]", entries2)
 	}
 	user := ch.got[start][len(ch.got[start])-1]
 	if user.Role != "user" {
-		t.Fatalf("ход 2: последнее сообщение %q, want user", user.Role)
+		t.Fatalf("turn 2: the last message is %q, want user", user.Role)
 	}
 	if !strings.Contains(user.Content, "Candidates from the previous turn that did not make it into the portion: C — T3.") {
-		t.Errorf("ход 2: user не содержит список запаса:\n%s", user.Content)
+		t.Errorf("turn 2: user does not contain the reserve list:\n%s", user.Content)
 	}
 	empty := false
 	for _, msgs := range ch.got[start:] {
@@ -540,15 +540,15 @@ func TestTurnOffersReserve(t *testing.T) {
 		}
 	}
 	if !empty {
-		t.Errorf("ход 2: запас попал в порцию до submit_candidates:\n%+v", ch.got[start:])
+		t.Errorf("turn 2: the reserve got into the portion before submit_candidates:\n%+v", ch.got[start:])
 	}
 
 	start = len(ch.got)
 	if _, err := a.Turn(context.Background(), "ещё"); err != nil {
-		t.Fatalf("ход 3: %v", err)
+		t.Fatalf("turn 3: %v", err)
 	}
 	if user := ch.got[start][len(ch.got[start])-1].Content; strings.Contains(user, "Candidates from the previous turn") {
-		t.Errorf("ход 3: список запаса повторился:\n%s", user)
+		t.Errorf("turn 3: the reserve list was repeated:\n%s", user)
 	}
 }
 
@@ -575,12 +575,12 @@ func TestTurnStopsAtSlack(t *testing.T) {
 		t.Fatalf("entries: %d, want 18", len(entries))
 	}
 	if len(ch.got) != 2 {
-		t.Fatalf("Chat вызван %d раз, want 2", len(ch.got))
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
 	}
 	for _, msgs := range ch.got {
 		for _, m := range msgs {
 			if m.Role == "user" && strings.HasPrefix(m.Content, "Portion is not full") {
-				t.Error("есть подсказка «Порция не заполнена», ход должен закончиться на недоборе ≤10%")
+				t.Error("there is a \"Portion is not full\" hint, the turn must end at a shortfall ≤10%")
 			}
 		}
 	}
@@ -600,7 +600,7 @@ func TestRunLogStepsAndCalls(t *testing.T) {
 	out := log.b.String()
 	for _, want := range []string{"### step 1 (", "### step 2 (", "готово", "→ describe {\"kind\":\"artist\",\"artist\":\"Yeat\"}", "← {"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("лог не содержит %q:\n%s", want, out)
+			t.Errorf("log does not contain %q:\n%s", want, out)
 		}
 	}
 }
@@ -621,7 +621,7 @@ func TestSubmitOverLimitAndBadMode(t *testing.T) {
 	tracks.WriteString(`]}`)
 	res := a.dispatch(context.Background(), call("s", "submit_candidates", tracks.String()))
 	if res != "error: 1–30 tracks" {
-		t.Errorf("31 трек: got %q", res)
+		t.Errorf("31 tracks: got %q", res)
 	}
 	if res := a.dispatch(context.Background(), call("p2", "set_plan", `{"seeds":[{"artist":"X","mode":"bad"}],"exclusions":[]}`)); res != "error: unknown mode bad" {
 		t.Errorf("mode: got %q", res)
@@ -637,7 +637,7 @@ func TestAskUserNilUI(t *testing.T) {
 	],"default":1}]}`
 	res := a.dispatch(context.Background(), call("q", "ask_user", args))
 	if !strings.HasPrefix(res, "error:") {
-		t.Fatalf("ask_user с nil UI: got %q, want error", res)
+		t.Fatalf("ask_user with nil UI: got %q, want error", res)
 	}
 }
 
@@ -655,14 +655,14 @@ func TestAskUserTracksPick(t *testing.T) {
 		t.Fatalf("ask_user: %s", res)
 	}
 	if ui.asks != 1 {
-		t.Fatalf("UI.Ask вызван %d раз, want 1", ui.asks)
+		t.Fatalf("UI.Ask called %d times, want 1", ui.asks)
 	}
 	if len(ui.asked) != 1 || len(ui.asked[0]) != 1 {
 		t.Fatalf("asked: %+v", ui.asked)
 	}
 	q := ui.asked[0][0]
 	if len(q.Tracks) != 4 || len(q.Options) != 4 {
-		t.Fatalf("вопрос: %d треков, %d вариантов, want по 4", len(q.Tracks), len(q.Options))
+		t.Fatalf("question: %d tracks, %d options, want 4 of each", len(q.Tracks), len(q.Options))
 	}
 	if q.Tracks[1].ID != "B/T2" || q.Tracks[1].ArtworkURL != "https://example.com/B.jpg" || q.Tracks[1].Artist != "B" || q.Tracks[1].Title != "T2" {
 		t.Errorf("Tracks[1]: %+v", q.Tracks[1])
@@ -672,7 +672,7 @@ func TestAskUserTracksPick(t *testing.T) {
 	}
 	portion := a.Session.Portion()
 	if len(portion) != 1 || portion[0].Song.Artist != "B" || portion[0].Song.Title != "T2" {
-		t.Fatalf("порция: %+v, want ровно B — T2", portion)
+		t.Fatalf("portion: %+v, want exactly B — T2", portion)
 	}
 	if len(ui.picks) != 1 || !ui.picks[0].Accepted || ui.picks[0].Name != "B — T2" || ui.picks[0].Track.ID != "B/T2" {
 		t.Fatalf("picks: %+v", ui.picks)
@@ -684,13 +684,13 @@ func TestAskUserTracksPick(t *testing.T) {
 		Need    int         `json:"need"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Taken) != 1 || out.Taken[0] != "B — T2" {
 		t.Errorf("taken: %v, want [B — T2]", out.Taken)
 	}
 	if out.Portion != "1/3" || out.Need != 2 {
-		t.Errorf("portion=%q need=%d, want 1/3 и 2", out.Portion, out.Need)
+		t.Errorf("portion=%q need=%d, want 1/3 and 2", out.Portion, out.Need)
 	}
 	if len(out.Answers) != 1 || out.Answers[0].Answer != "ночной драйв (B — T2)" {
 		t.Errorf("answers: %+v", out.Answers)
@@ -711,13 +711,13 @@ func TestAskUserTracksDefault(t *testing.T) {
 	}
 	portion := a.Session.Portion()
 	if len(portion) != 1 || portion[0].Song.Artist != "C" || portion[0].Song.Title != "T3" {
-		t.Fatalf("порция: %+v, want ровно C — T3", portion)
+		t.Fatalf("portion: %+v, want exactly C — T3", portion)
 	}
 	var out struct {
 		Taken []string `json:"taken"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Taken) != 1 || out.Taken[0] != "C — T3" {
 		t.Errorf("taken: %v, want [C — T3]", out.Taken)
@@ -738,22 +738,22 @@ func TestAskUserTracksAll(t *testing.T) {
 	}
 	portion := a.Session.Portion()
 	if len(portion) != 3 {
-		t.Fatalf("порция: %d треков, want 3", len(portion))
+		t.Fatalf("portion: %d tracks, want 3", len(portion))
 	}
 	for i, want := range []string{"A", "B", "C"} {
 		if portion[i].Song.Artist != want {
-			t.Errorf("порция[%d]: %q, want %q", i, portion[i].Song.Artist, want)
+			t.Errorf("portion[%d]: %q, want %q", i, portion[i].Song.Artist, want)
 		}
 	}
 	var out struct {
 		Answers []answerRow `json:"answers"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	want := "all together: A — T1; B — T2; C — T3"
 	if len(out.Answers) != 1 || !strings.HasPrefix(out.Answers[0].Answer, want) {
-		t.Errorf("answer: %q, want префикс %q", out.Answers[0].Answer, want)
+		t.Errorf("answer: %q, want the prefix %q", out.Answers[0].Answer, want)
 	}
 }
 
@@ -769,20 +769,20 @@ func TestAskUserTracksOwnText(t *testing.T) {
 		t.Fatalf("ask_user: %s", res)
 	}
 	if n := len(a.Session.Portion()); n != 0 {
-		t.Fatalf("порция: %d треков, want 0", n)
+		t.Fatalf("portion: %d tracks, want 0", n)
 	}
 	if len(ui.picks) != 0 {
-		t.Errorf("picks: %+v, want пусто", ui.picks)
+		t.Errorf("picks: %+v, want empty", ui.picks)
 	}
 	var out struct {
 		Answers []answerRow `json:"answers"`
 		Taken   []string    `json:"taken"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Taken) != 0 {
-		t.Errorf("taken: %v, want пусто", out.Taken)
+		t.Errorf("taken: %v, want empty", out.Taken)
 	}
 	if len(out.Answers) != 1 || out.Answers[0].Answer != "my own pick: потише" {
 		t.Errorf("answers: %+v", out.Answers)
@@ -803,13 +803,13 @@ func TestAskUserMissReasks(t *testing.T) {
 		Next    string      `json:"next"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Answers) != 1 || out.Answers[0].Answer != "missed: no option fits" {
 		t.Errorf("answers: %+v", out.Answers)
 	}
 	if len(out.Taken) != 0 {
-		t.Errorf("taken: %v, want пусто", out.Taken)
+		t.Errorf("taken: %v, want empty", out.Taken)
 	}
 	if !strings.HasPrefix(out.Next, "The listener answered \"missed\"") {
 		t.Errorf("next = %q", out.Next)
@@ -819,10 +819,10 @@ func TestAskUserMissReasks(t *testing.T) {
 		{"artist":"D","title":"T4","label":"o4"}
 	],"default":1}]}`
 	if res2 := a.dispatch(context.Background(), call("q2", "ask_user", args2)); strings.Contains(res2, "questions were already asked in this turn") {
-		t.Errorf("второй ask_user отклонён: %s", res2)
+		t.Errorf("the second ask_user was rejected: %s", res2)
 	}
 	if len(a.Warmup) != 2 || a.Warmup[0].Question != "q" || a.Warmup[1].Question != "q2" {
-		t.Errorf("Warmup: %+v, want ответы на обе карточки", a.Warmup)
+		t.Errorf("Warmup: %+v, want answers to both cards", a.Warmup)
 	}
 }
 
@@ -834,7 +834,7 @@ func TestAskUserSecondMissStops(t *testing.T) {
 		{"artist":"B","title":"T2","label":"o2"}
 	],"default":1}]}`
 	if res := a.dispatch(context.Background(), call("q", "ask_user", first)); strings.HasPrefix(res, "error") {
-		t.Fatalf("первый ask_user: %s", res)
+		t.Fatalf("first ask_user: %s", res)
 	}
 	second := `{"questions":[{"question":"q2","options":[
 		{"artist":"C","title":"T3","label":"o3"},
@@ -845,13 +845,13 @@ func TestAskUserSecondMissStops(t *testing.T) {
 		Next string `json:"next"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if !strings.HasPrefix(out.Next, "The listener answered \"missed\" again") {
 		t.Errorf("next = %q", out.Next)
 	}
 	if res3 := a.dispatch(context.Background(), call("q3", "ask_user", first)); !strings.Contains(res3, "error: questions were already asked in this turn") {
-		t.Errorf("третий ask_user: got %q", res3)
+		t.Errorf("third ask_user: got %q", res3)
 	}
 }
 
@@ -868,13 +868,13 @@ func TestAskUserPickHasNoNext(t *testing.T) {
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(res), &fields); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if _, ok := fields["next"]; ok {
-		t.Errorf("в ответе есть next: %s", res)
+		t.Errorf("the answer has next: %s", res)
 	}
 	if res2 := a.dispatch(context.Background(), call("q2", "ask_user", args)); !strings.Contains(res2, "error: questions were already asked in this turn") {
-		t.Errorf("повтор ask_user: got %q", res2)
+		t.Errorf("repeat ask_user: got %q", res2)
 	}
 
 	own := &fakeUI{answers: []string{"потише"}}
@@ -884,13 +884,13 @@ func TestAskUserPickHasNoNext(t *testing.T) {
 		Answers []answerRow `json:"answers"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if len(out.Answers) != 1 || out.Answers[0].Answer != "my own pick: потише" {
 		t.Errorf("answers: %+v", out.Answers)
 	}
 	if strings.Contains(res, `"next"`) {
-		t.Errorf("в ответе на свой текст есть next: %s", res)
+		t.Errorf("the answer to own text has next: %s", res)
 	}
 }
 
@@ -907,10 +907,10 @@ func TestAskUserMixedMissNoReask(t *testing.T) {
 		Taken   []string    `json:"taken"`
 	}
 	if err := json.Unmarshal([]byte(res), &out); err != nil {
-		t.Fatalf("результат не JSON: %v\n%s", err, res)
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
 	}
 	if strings.Contains(res, `"next"`) {
-		t.Errorf("в ответе есть next: %s", res)
+		t.Errorf("the answer has next: %s", res)
 	}
 	if len(out.Answers) != 2 || !strings.HasPrefix(out.Answers[0].Answer, "missed") {
 		t.Errorf("answers: %+v", out.Answers)
@@ -929,13 +929,13 @@ func TestAskUserNotFound(t *testing.T) {
 	],"default":1}]}`
 	res := a.dispatch(context.Background(), call("q", "ask_user", args))
 	if !strings.Contains(res, "Ghost — X") {
-		t.Errorf("ошибка без Ghost — X: %q", res)
+		t.Errorf("error without Ghost — X: %q", res)
 	}
 	if !strings.Contains(res, "not found in Apple Music") {
-		t.Errorf("ошибка без «не нашлись»: %q", res)
+		t.Errorf("error without \"not found in Apple Music\": %q", res)
 	}
 	if ui.asks != 0 {
-		t.Errorf("UI.Ask вызван %d раз, want 0", ui.asks)
+		t.Errorf("UI.Ask called %d times, want 0", ui.asks)
 	}
 	fixed := `{"questions":[{"question":"q","options":[
 		{"artist":"A","title":"T1","label":"o1"},
@@ -943,10 +943,10 @@ func TestAskUserNotFound(t *testing.T) {
 	],"default":1}]}`
 	res2 := a.dispatch(context.Background(), call("q2", "ask_user", fixed))
 	if strings.HasPrefix(res2, "error") {
-		t.Fatalf("повторный ask_user: %s", res2)
+		t.Fatalf("retried ask_user: %s", res2)
 	}
 	if ui.asks != 1 {
-		t.Errorf("UI.Ask вызван %d раз, want 1", ui.asks)
+		t.Errorf("UI.Ask called %d times, want 1", ui.asks)
 	}
 }
 
@@ -955,20 +955,20 @@ func TestAskUserShapeValidation(t *testing.T) {
 		name string
 		args string
 	}{
-		{"один вариант", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T","label":"l"}],"default":1}]}`},
-		{"пять вариантов", `{"questions":[{"question":"q","options":[
+		{"one option", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T","label":"l"}],"default":1}]}`},
+		{"five options", `{"questions":[{"question":"q","options":[
 			{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"},
 			{"artist":"C","title":"T3","label":"l"},{"artist":"D","title":"T4","label":"l"},
 			{"artist":"E","title":"T5","label":"l"}],"default":1}]}`},
-		{"три вопроса", `{"questions":[
+		{"three questions", `{"questions":[
 			{"question":"q1","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":1},
 			{"question":"q2","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":1},
 			{"question":"q3","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":1}
 		]}`},
 		{"default 0", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":0}]}`},
-		{"default за диапазоном", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":3}]}`},
-		{"пустой label", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T1","label":""},{"artist":"B","title":"T2","label":"l"}],"default":1}]}`},
-		{"пустой вопрос", `{"questions":[{"question":"","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":1}]}`},
+		{"default out of range", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":3}]}`},
+		{"empty label", `{"questions":[{"question":"q","options":[{"artist":"A","title":"T1","label":""},{"artist":"B","title":"T2","label":"l"}],"default":1}]}`},
+		{"empty question", `{"questions":[{"question":"","options":[{"artist":"A","title":"T1","label":"l"},{"artist":"B","title":"T2","label":"l"}],"default":1}]}`},
 	}
 	for _, tc := range cases {
 		a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
@@ -997,10 +997,10 @@ func TestAskUserTakesLibraryTrack(t *testing.T) {
 	}
 	portion := a.Session.Portion()
 	if len(portion) != 1 || portion[0].Song.Artist != "A" || portion[0].Song.Title != "T1" {
-		t.Fatalf("порция: %+v, want библиотечный A — T1", portion)
+		t.Fatalf("portion: %+v, want the library track A — T1", portion)
 	}
 	if portion[0].Favorite {
-		t.Errorf("трек не из Favorites, Favorite = true")
+		t.Errorf("the track is not from Favorites, Favorite = true")
 	}
 }
 
@@ -1070,16 +1070,16 @@ func TestNoteKeptUntilNextTurn(t *testing.T) {
 	}}
 	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
 	if _, err := a.Turn(context.Background(), "запрос"); err != nil {
-		t.Fatalf("ход 1: %v", err)
+		t.Fatalf("turn 1: %v", err)
 	}
 	if a.Note != "держу рэйдж" {
-		t.Errorf("Note после хода = %q, want «держу рэйдж»", a.Note)
+		t.Errorf("Note after the turn = %q, want the submitted note", a.Note)
 	}
 	if _, err := a.Turn(context.Background(), "ещё"); err != nil {
-		t.Fatalf("ход 2: %v", err)
+		t.Fatalf("turn 2: %v", err)
 	}
 	if a.Note != "" {
-		t.Errorf("Note после второго хода = %q, want пусто", a.Note)
+		t.Errorf("Note after the second turn = %q, want empty", a.Note)
 	}
 }
 
@@ -1106,21 +1106,21 @@ func TestAskLaterLifecycle(t *testing.T) {
 	res2 := a.dispatch(context.Background(), call("l2", "ask_later",
 		`{"question":"другое?","options":[{"n":1,"label":"один"},{"n":2,"label":"два"}],"default":1}`))
 	if !strings.HasPrefix(res2, "error") {
-		t.Errorf("второй ask_later: got %q, want ошибка", res2)
+		t.Errorf("second ask_later: got %q, want an error", res2)
 	}
 	if a.Later == nil || a.Later.Question != "ядро или редкости?" {
-		t.Errorf("Later после второго: %+v", a.Later)
+		t.Errorf("Later after the second one: %+v", a.Later)
 	}
 	res3 := a.dispatch(context.Background(), call("l3", "ask_later",
 		`{"question":"один вариант?","options":[{"n":1,"label":"только один"}],"default":1}`))
 	if !strings.HasPrefix(res3, "error") {
-		t.Errorf("один вариант: got %q, want ошибка", res3)
+		t.Errorf("one option: got %q, want an error", res3)
 	}
 	if _, err := a.Turn(context.Background(), "поток"); err != nil {
 		t.Fatalf("Turn: %v", err)
 	}
 	if a.Later != nil {
-		t.Errorf("Turn не обнулил Later: %+v", a.Later)
+		t.Errorf("Turn did not reset Later: %+v", a.Later)
 	}
 }
 
@@ -1133,7 +1133,7 @@ func TestAskLaterTrackOptions(t *testing.T) {
 		t.Fatalf("ask_later: %q", res)
 	}
 	if a.Later == nil || len(a.Later.Tracks) != 2 || a.Later.Tracks[0].Artist != "A" || a.Later.Tracks[1].Artist != "C" {
-		t.Fatalf("Later.Tracks: %+v, want треки 1 и 3", a.Later)
+		t.Fatalf("Later.Tracks: %+v, want tracks 1 and 3", a.Later)
 	}
 	if a.Later.Options[0] != "дрим-поп" || a.Later.Options[1] != "шугейз" || a.Later.Default != "1" {
 		t.Errorf("Options/Default: %v %q", a.Later.Options, a.Later.Default)
@@ -1142,13 +1142,13 @@ func TestAskLaterTrackOptions(t *testing.T) {
 	res2 := a.dispatch(context.Background(), call("l2", "ask_later",
 		`{"question":"дальше?","options":[{"n":4,"label":"за пределом"}],"default":1}`))
 	if !strings.HasPrefix(res2, "error") {
-		t.Errorf("n за пределом History: got %q, want ошибка", res2)
+		t.Errorf("n out of History: got %q, want an error", res2)
 	}
 	a.History = nil
 	res3 := a.dispatch(context.Background(), call("l3", "ask_later",
 		`{"question":"дальше?","options":[{"n":1,"label":"дрим-поп"},{"n":2,"label":"шугейз"}],"default":1}`))
 	if !strings.HasPrefix(res3, "error") {
-		t.Errorf("пустая History: got %q, want ошибка", res3)
+		t.Errorf("empty History: got %q, want an error", res3)
 	}
 }
 
@@ -1163,16 +1163,16 @@ func TestSubmitSchemaRequiresNoteAndAskLaterTool(t *testing.T) {
 		}
 	}
 	if later == nil {
-		t.Fatal("нет инструмента ask_later")
+		t.Fatal("no ask_later tool")
 	}
 	if submit == nil {
-		t.Fatal("нет инструмента submit_candidates")
+		t.Fatal("no submit_candidates tool")
 	}
 	var schema struct {
 		Required []string `json:"required"`
 	}
 	if err := json.Unmarshal(submit.Parameters, &schema); err != nil {
-		t.Fatalf("submitSchema не JSON: %v", err)
+		t.Fatalf("submitSchema is not JSON: %v", err)
 	}
 	note := false
 	for _, r := range schema.Required {
@@ -1181,18 +1181,18 @@ func TestSubmitSchemaRequiresNoteAndAskLaterTool(t *testing.T) {
 		}
 	}
 	if !note {
-		t.Errorf("submitSchema required не содержит note: %v", schema.Required)
+		t.Errorf("submitSchema required does not contain note: %v", schema.Required)
 	}
 }
 
 func TestPromptRulesCardNoteLater(t *testing.T) {
 	for _, want := range []string{"ask_user", "ask_later", "note in submit_candidates", "duel"} {
 		if !strings.Contains(promptRules, want) {
-			t.Errorf("promptRules не содержит %q", want)
+			t.Errorf("promptRules does not contain %q", want)
 		}
 	}
 	if strings.Contains(promptRules, "kind=scale") {
-		t.Error("осталась шкала kind=scale")
+		t.Error("the kind=scale scale is still there")
 	}
 }
 
@@ -1209,12 +1209,12 @@ func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 		`Do not repeat questions from the "Questions already asked" list`,
 	} {
 		if !strings.Contains(promptRules, want) {
-			t.Errorf("promptRules не содержит %q", want)
+			t.Errorf("promptRules does not contain %q", want)
 		}
 	}
 	for _, gone := range []string{"The listener likes to be asked", "with vocals or without"} {
 		if strings.Contains(promptRules, gone) {
-			t.Errorf("осталась старая формулировка %q", gone)
+			t.Errorf("the old wording is still there %q", gone)
 		}
 	}
 }
@@ -1231,26 +1231,26 @@ func TestPromptRulesWantItShare(t *testing.T) {
 		"in batches of 5–8",
 	} {
 		if !strings.Contains(promptRules, want) {
-			t.Errorf("promptRules не содержит %q", want)
+			t.Errorf("promptRules does not contain %q", want)
 		}
 	}
 }
 
 func TestPromptMissAndNudge(t *testing.T) {
 	if !strings.Contains(promptRules, `"missed" — no option fit: follow the next field in the answer.`) {
-		t.Error("promptRules не содержит строку про «missed» и поле next")
+		t.Error("promptRules does not contain the line about \"missed\" and the next field")
 	}
 	if !strings.Contains(promptRules, "2+ tracks skipped since the last question while something was played to the end") {
-		t.Error("promptRules не содержит новую формулировку развилки")
+		t.Error("promptRules does not contain the new fork wording")
 	}
 	if strings.Contains(promptRules, "of one direction, and the other played to the end") {
-		t.Error("осталась старая формулировка развилки")
+		t.Error("the old fork wording is still there")
 	}
 }
 
 func TestPromptRulesAskLaterPlayedTracks(t *testing.T) {
 	if !strings.Contains(promptRules, `an option is the number n of a played-through track from the "Served" list`) {
-		t.Error("ask_later в промпте не про номера дослушанных треков")
+		t.Error("ask_later in the prompt is not about the numbers of played-through tracks")
 	}
 }
 
@@ -1261,17 +1261,17 @@ func TestAskUserOnlyOnFirstTurn(t *testing.T) {
 	a.turns = 2
 	want := "error: ask_user is allowed only in the first turn of the session; ask a fork in the skips through ask_later"
 	if res := a.dispatch(context.Background(), call("q2", "ask_user", args)); res != want {
-		t.Errorf("ход 2: got %q, want %q", res, want)
+		t.Errorf("turn 2: got %q, want %q", res, want)
 	}
 	if ui.asks != 0 {
-		t.Errorf("UI.Ask вызван %d раз, want 0", ui.asks)
+		t.Errorf("UI.Ask called %d times, want 0", ui.asks)
 	}
 	a.turns = 1
 	if res := a.dispatch(context.Background(), call("q1", "ask_user", args)); strings.HasPrefix(res, "error") {
-		t.Errorf("ход 1: got %q", res)
+		t.Errorf("turn 1: got %q", res)
 	}
 	if ui.asks != 1 {
-		t.Errorf("UI.Ask вызван %d раз, want 1", ui.asks)
+		t.Errorf("UI.Ask called %d times, want 1", ui.asks)
 	}
 }
 
@@ -1284,6 +1284,134 @@ func TestDispatchSetPlanFromFavorites(t *testing.T) {
 	a2 := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
 	res = a2.dispatch(context.Background(), call("p2", "set_plan", `{"seeds":[],"exclusions":[]}`))
 	if res != "plan accepted: referents 0, exclusions 0" {
-		t.Errorf("без поля: got %q", res)
+		t.Errorf("without the field: got %q", res)
+	}
+}
+
+func TestTurnRetriesFailedMemoryWhenFull(t *testing.T) {
+	long := strings.Repeat("x", 301)
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", fmt.Sprintf(`{"text":%q,"evidence":"e"}`, long)),
+		),
+		toolResp(call("m2", "memory_add", `{"text":"short pref","evidence":"e"}`)),
+		textResp("done"),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 3 {
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
+	}
+	found := false
+	for _, m := range ch.got[2] {
+		if m.Role == "tool" && strings.HasPrefix(m.Content, "error: text is too long") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the retry call's messages do not contain the memory_add error")
+	}
+	found = false
+	for _, e := range a.Memory.Entries() {
+		if strings.Contains(e.Text, "short pref") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("memory does not contain %q: %+v", "short pref", a.Memory.Entries())
+	}
+}
+
+func TestTurnRetriesMemoryOnlyOnce(t *testing.T) {
+	long := strings.Repeat("x", 301)
+	bad := fmt.Sprintf(`{"text":%q,"evidence":"e"}`, long)
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", bad),
+		),
+		toolResp(call("m2", "memory_add", bad)),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(ch.got) != 3 {
+		t.Fatalf("Chat called %d times, want 3", len(ch.got))
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+}
+
+func TestTurnNoExtraStepWhenMemoryOK(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("m1", "memory_add", `{"text":"short pref","evidence":"e"}`),
+		),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
+	}
+}
+
+func TestTurnNoExtraStepOnOtherErrors(t *testing.T) {
+	ch := &fakeChatter{resps: []llm.Response{
+		toolResp(call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)),
+		toolResp(
+			call("s", "submit_candidates", `{"tracks":[
+				{"artist":"A","title":"T1","why":"w"},
+				{"artist":"B","title":"T2","why":"w"},
+				{"artist":"C","title":"T3","why":"w"}
+			]}`),
+			call("d1", "describe", `{"kind":"song","artist":"X"}`),
+		),
+	}}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+
+	entries, err := a.Turn(context.Background(), "request")
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries: %d, want 3", len(entries))
+	}
+	if len(ch.got) != 2 {
+		t.Fatalf("Chat called %d times, want 2", len(ch.got))
 	}
 }

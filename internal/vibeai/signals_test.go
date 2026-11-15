@@ -42,7 +42,7 @@ func TestOpenSignalsEmptyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
-		t.Errorf("пустой path записал файлы на диск: %v", entries)
+		t.Errorf("an empty path wrote files to disk: %v", entries)
 	}
 }
 
@@ -65,14 +65,14 @@ func TestOpenSignalsMissingFileAndAppend(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(lines) != 2 {
-		t.Fatalf("файл: %d строк, want 2", len(lines))
+		t.Fatalf("file: %d lines, want 2", len(lines))
 	}
 	sig2, err := OpenSignals(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(sig2.recs) != 2 {
-		t.Errorf("повторное открытие: recs = %d, want 2", len(sig2.recs))
+		t.Errorf("reopening: recs = %d, want 2", len(sig2.recs))
 	}
 }
 
@@ -99,10 +99,10 @@ func TestSkippedBeforeOtherSession(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
 	if !sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
-		t.Error("skip в другой сессии: want true")
+		t.Error("skip in another session: want true")
 	}
 	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s1") {
-		t.Error("skip в той же сессии: want false")
+		t.Error("skip in the same session: want false")
 	}
 }
 
@@ -113,10 +113,10 @@ func TestSkippedBeforeOldRecordsIgnored(t *testing.T) {
 		signalRec{Time: testNow.Add(-13 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Overseas"},
 	)
 	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
-		t.Error("skip 15 дней назад: want false")
+		t.Error("skip 15 days ago: want false")
 	}
 	if !sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Overseas"}, "s2") {
-		t.Error("skip 13 дней назад: want true")
+		t.Error("skip 13 days ago: want true")
 	}
 }
 
@@ -127,7 +127,7 @@ func TestSkippedBeforePlayedCancels(t *testing.T) {
 		signalRec{Time: testNow, Kind: "played", Session: "s1", PosSec: 10, DurSec: 190, Artist: "Ken Carson", Title: "Yale"},
 	)
 	if sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
-		t.Error("played снимает запрет: want false")
+		t.Error("played lifts the block: want false")
 	}
 }
 
@@ -136,10 +136,10 @@ func TestBlockedArtistSessionSkip(t *testing.T) {
 	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Mercury: Retrograde"})
 	key := songArtists(Song{Artist: "Ghostemane", Title: "Mercury: Retrograde"})[0]
 	if got := sig.blockedArtist(key, "s2"); got != "skipped in this session" {
-		t.Errorf("ta же сессия: got %q, want \"скипнут в этой сессии\"", got)
+		t.Errorf("the same session: got %q, want \"skipped in this session\"", got)
 	}
 	if got := sig.blockedArtist(key, "s3"); got != "" {
-		t.Errorf("другая сессия: got %q, want \"\"", got)
+		t.Errorf("another session: got %q, want \"\"", got)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestBlockedArtistGlobalTwoSessions(t *testing.T) {
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
 	)
 	if got := sig.blockedArtist("ghostemane", "s3"); got != "the listener skips (2 sessions)" {
-		t.Errorf("got %q, want \"владелец скипает (2 сессий)\"", got)
+		t.Errorf("got %q, want \"the listener skips (2 sessions)\"", got)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestBlockedArtistGlobalOldRecordsIgnored(t *testing.T) {
 		signalRec{Time: old, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
 	)
 	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("записи старше 60 дней: got %q, want \"\"", got)
+		t.Errorf("records older than 60 days: got %q, want \"\"", got)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestBlockedArtistGlobalPlayedCancels(t *testing.T) {
 		signalRec{Time: testNow, Kind: "played", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
 	)
 	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("played 2 не < early 2: got %q, want \"\"", got)
+		t.Errorf("played 2 is not < early 2: got %q, want \"\"", got)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestBlockedArtistGlobalOneSession(t *testing.T) {
 		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Rapture"},
 	)
 	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("два скипа из одной сессии: got %q, want \"\"", got)
+		t.Errorf("two skips from one session: got %q, want \"\"", got)
 	}
 }
 
@@ -203,7 +203,7 @@ func TestGlobalSkipsOrderAndSingleSession(t *testing.T) {
 	)
 	stats := sig.globalSkips()
 	if len(stats) != 2 {
-		t.Fatalf("stats = %+v, want 2 записи", stats)
+		t.Fatalf("stats = %+v, want 2 records", stats)
 	}
 	ghost := songArtists(Song{Artist: "Ghostemane", Title: "T3"})[0]
 	scar := songArtists(Song{Artist: "Scarlxrd", Title: "T1"})[0]
@@ -248,10 +248,10 @@ func TestLastOutcomeLatestWins(t *testing.T) {
 	)
 	r, ok := sig.lastOutcome("s1", "1")
 	if !ok || r.Kind != "played" {
-		t.Errorf("got (%+v, %v), want последнюю — played", r, ok)
+		t.Errorf("got (%+v, %v), want the last one — played", r, ok)
 	}
 	if _, ok := sig.lastOutcome("s2", "1"); ok {
-		t.Error("другая сессия: want false")
+		t.Error("another session: want false")
 	}
 }
 
@@ -279,10 +279,10 @@ func TestEngineRecord(t *testing.T) {
 	}
 	logText := e.log.b.String()
 	if !strings.Contains(logText, "signal: Ken Carson — Yale: played 30/120 s") {
-		t.Errorf("нет строки сигнала в логе: %q", logText)
+		t.Errorf("no signal line in the log: %q", logText)
 	}
 	if strings.Contains(logText, "pause") {
-		t.Errorf("лог содержит пропущенный kind: %q", logText)
+		t.Errorf("the log contains a skipped kind: %q", logText)
 	}
 }
 
@@ -392,9 +392,9 @@ func TestSkippedBeforeNeedsSkip(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig, signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
 	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
-		t.Error("трек только стоял в порции, до него не дошли: want false")
+		t.Error("the track was only in the portion, it was never reached: want false")
 	}
 	if got := sig.skippedElsewhere("s2"); len(got) != 0 {
-		t.Errorf("skippedElsewhere = %+v, want пусто", got)
+		t.Errorf("skippedElsewhere = %+v, want empty", got)
 	}
 }

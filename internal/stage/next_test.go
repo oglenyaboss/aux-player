@@ -34,7 +34,7 @@ func TestNextOffByDefault(t *testing.T) {
 	m.Progress("читаю про Blonde")
 	steps(m, 0.3)
 	if row := nextRow(m); row != "" {
-		t.Errorf("строка под полосой %q, ждём пустую", row)
+		t.Errorf("line under the bar %q, want it empty", row)
 	}
 }
 
@@ -44,11 +44,11 @@ func TestNextGatheringLine(t *testing.T) {
 	m.NextGathering("")
 	steps(m, 0.3)
 	if row := nextRow(m); row != "собираю следующие 5" {
-		t.Errorf("строка %q, ждём «собираю следующие 5»", row)
+		t.Errorf("line %q, want «собираю следующие 5»", row)
 	}
 	m.Progress("читаю про Blonde")
 	if row := nextRow(m); row != "собираю следующие 5 · читаю про Blonde" {
-		t.Errorf("строка %q, ждём слова агента через ·", row)
+		t.Errorf("line %q, want the agent words after ·", row)
 	}
 }
 
@@ -57,11 +57,11 @@ func TestNextReplyLine(t *testing.T) {
 	m := playStart(t)
 	m.NextGathering("потише")
 	if row := nextRow(m); row != "учитываю «потише», пересобираю следующие 5" {
-		t.Errorf("строка %q, ждём «учитываю «потише», пересобираю следующие 5»", row)
+		t.Errorf("line %q, want «учитываю «потише», пересобираю следующие 5»", row)
 	}
 	m.Progress("ищу похожее")
 	if row := nextRow(m); row != "учитываю «потише» · ищу похожее" {
-		t.Errorf("строка %q, ждём «учитываю «потише» · ищу похожее»", row)
+		t.Errorf("line %q, want «учитываю «потише» · ищу похожее»", row)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestNextReadyLine(t *testing.T) {
 	m.NextReady([]Track{pk(1), pk(2)})
 	steps(m, 0.5)
 	if row := nextRow(m); row != "✓ следующие 2 готовы" {
-		t.Errorf("строка %q, ждём «✓ следующие 2 готовы»", row)
+		t.Errorf("line %q, want «✓ следующие 2 готовы»", row)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestNextFailedLine(t *testing.T) {
 	m.NextGathering("")
 	m.NextFailed()
 	if row := nextRow(m); row != "✗ следующие не собрались" {
-		t.Errorf("строка %q, ждём «✗ следующие не собрались»", row)
+		t.Errorf("line %q, want «✗ следующие не собрались»", row)
 	}
 }
 
@@ -97,10 +97,10 @@ func TestNextLineTrunc(t *testing.T) {
 	barY := m.barBox.Min.Y
 	row := strings.TrimSpace(rowText(f, barY+1, g.px, g.pw))
 	if !strings.HasPrefix(row, "собираю следующие 5 ·") || !strings.HasSuffix(row, "…") {
-		t.Fatalf("строка %q, ждём начало «собираю следующие 5 ·» и обрезку многоточием", row)
+		t.Fatalf("line %q, want the start «собираю следующие 5 ·» and a cut with an ellipsis", row)
 	}
 	if c := f.at(g.px+g.pw, barY+1); c != nil && c.ch != ' ' && strings.ContainsRune(row, c.ch) {
-		t.Errorf("клетка (%d,%d) за строкой %q держит руну %q", g.px+g.pw, barY+1, row, c.ch)
+		t.Errorf("cell (%d,%d) after the line %q holds the rune %q", g.px+g.pw, barY+1, row, c.ch)
 	}
 }
 
@@ -110,19 +110,19 @@ func TestNextStripCount(t *testing.T) {
 	m := playStart(t)
 	m.NextGathering("")
 	if s := stripANSI(m.View()); !strings.Contains(s, "0 из 5") {
-		t.Fatalf("кадр без «0 из 5»")
+		t.Fatalf("frame without «0 из 5»")
 	}
 	m.NextPick(pk(1))
 	m.NextPick(pk(1))
 	m.NextPick(pk(2))
 	if s := stripANSI(m.View()); !strings.Contains(s, "2 из 5") {
-		t.Fatalf("кадр без «2 из 5»: дубль не игнорируется")
+		t.Fatalf("frame without «2 из 5»: the duplicate is not ignored")
 	}
 	for i := 3; i <= 6; i++ {
 		m.NextPick(pk(i))
 	}
 	if s := stripANSI(m.View()); !strings.Contains(s, "5 из 5") {
-		t.Fatalf("кадр без «5 из 5»: лишний трек не игнорируется")
+		t.Fatalf("frame without «5 из 5»: the extra track is not ignored")
 	}
 }
 
@@ -152,21 +152,21 @@ func TestNextStripThumb(t *testing.T) {
 		}
 	}
 	if y < 0 {
-		t.Fatalf("подпись «1 из 5» не найдена в кадре")
+		t.Fatalf("the «1 из 5» label is not found in the frame")
 	}
 	sx := lx - 1 - 5*5
 	if sx != g.px {
-		t.Fatalf("лента начинается в колонке %d, ждём %d", sx, g.px)
+		t.Fatalf("the strip starts in column %d, want %d", sx, g.px)
 	}
 	for yy := y; yy <= y+1; yy++ {
 		for xx := sx; xx < sx+4; xx++ {
 			if c := f.at(xx, yy); c == nil || !c.pix {
-				t.Fatalf("миниатюра: клетка (%d,%d) не пиксель", xx, yy)
+				t.Fatalf("thumbnail: cell (%d,%d) is not a pixel", xx, yy)
 			}
 		}
 	}
 	if c := f.pixelAt(sx, y*2); c.r <= c.g {
-		t.Errorf("пиксель %v, ждём красный", c)
+		t.Errorf("pixel %v, want red", c)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestNextReadyNoCount(t *testing.T) {
 	m.NextReady([]Track{pk(1), pk(2)})
 	steps(m, 0.5)
 	if s := stripANSI(m.View()); strings.Contains(s, " из 5") {
-		t.Errorf("в кадре осталась подпись счёта: %q", s)
+		t.Errorf("the count label stayed in the frame: %q", s)
 	}
 }
 
@@ -190,11 +190,11 @@ func TestNextRegatherResets(t *testing.T) {
 	m.NextPick(pk(2))
 	m.NextGathering("тише")
 	if s := stripANSI(m.View()); !strings.Contains(s, "0 из 5") {
-		t.Fatalf("кадр без «0 из 5» после нового сбора")
+		t.Fatalf("frame without «0 из 5» after a new gathering")
 	}
 	m.NextPick(pk(3))
 	if s := stripANSI(m.View()); !strings.Contains(s, "1 из 5") {
-		t.Fatalf("кадр без «1 из 5» после первого пика")
+		t.Fatalf("frame without «1 из 5» after the first pick")
 	}
 }
 
@@ -209,15 +209,15 @@ func TestNextStripFitsLongQueue(t *testing.T) {
 	m.JumpPlay(tr, 0, 0)
 	steps(m, 1)
 	if s := stripANSI(m.View()); strings.Contains(s, " из 5") {
-		t.Fatalf("лента нарисована до сбора")
+		t.Fatalf("the strip is drawn before the gathering")
 	}
 	m.NextGathering("")
 	s := stripANSI(m.View())
 	if !strings.Contains(s, "0 из 5") {
-		t.Fatalf("кадр без ленты «0 из 5»")
+		t.Fatalf("frame without the strip «0 из 5»")
 	}
 	if !strings.Contains(s, "T1") {
-		t.Errorf("длинная очередь потеряла строку T1")
+		t.Errorf("the long queue lost the T1 row")
 	}
 }
 
@@ -229,10 +229,10 @@ func TestNextClear(t *testing.T) {
 	m.NextClear()
 	steps(m, 0.5)
 	if row := nextRow(m); row != "" {
-		t.Errorf("строка %q, ждём пустую", row)
+		t.Errorf("line %q, want it empty", row)
 	}
 	if s := stripANSI(m.View()); strings.Contains(s, " из 5") {
-		t.Errorf("лента осталась в кадре")
+		t.Errorf("the strip stayed in the frame")
 	}
 }
 
@@ -244,7 +244,7 @@ func TestNextMini(t *testing.T) {
 	m.NextPick(pk(1))
 	steps(m, 0.5)
 	if s := stripANSI(m.View()); strings.Contains(s, " из 5") {
-		t.Errorf("лента в mini-раскладке")
+		t.Errorf("the strip in the mini layout")
 	}
 }
 
@@ -255,7 +255,7 @@ func TestNextPickIgnoredWhenReady(t *testing.T) {
 	m.NextReady([]Track{pk(1)})
 	m.NextPick(pk(2))
 	if row := nextRow(m); row != "✓ следующие 1 готовы" {
-		t.Errorf("строка %q, ждём «✓ следующие 1 готовы»", row)
+		t.Errorf("line %q, want «✓ следующие 1 готовы»", row)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestNextSizeAfterShortPortion(t *testing.T) {
 	m.slots = m.slots[:3]
 	m.NextGathering("")
 	if row := nextRow(m); row != "собираю следующие 5" {
-		t.Errorf("строка %q, ждём «собираю следующие 5»", row)
+		t.Errorf("line %q, want «собираю следующие 5»", row)
 	}
 	for i := range 5 {
 		m.NextPick(pk(i))
@@ -276,7 +276,7 @@ func TestNextSizeAfterShortPortion(t *testing.T) {
 	}
 	m.NextReady(tracks)
 	if row := nextRow(m); row != "✓ следующие 5 готовы" {
-		t.Errorf("строка %q, ждём «✓ следующие 5 готовы»", row)
+		t.Errorf("line %q, want «✓ следующие 5 готовы»", row)
 	}
 }
 
@@ -287,6 +287,6 @@ func TestNextFailedFades(t *testing.T) {
 	m.NextFailed()
 	steps(m, 8)
 	if row := nextRow(m); row != "" {
-		t.Errorf("строка %q через 8 с, ждём пустую", row)
+		t.Errorf("line %q after 8 s, want it empty", row)
 	}
 }

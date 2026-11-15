@@ -18,6 +18,8 @@ import (
 	demoProvider "github.com/oglenyaboss/aux-player/internal/provider/demo"
 	localProvider "github.com/oglenyaboss/aux-player/internal/provider/local"
 	"github.com/oglenyaboss/aux-player/internal/tui"
+	"github.com/oglenyaboss/aux-player/internal/updater"
+	"github.com/oglenyaboss/aux-player/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -69,6 +71,12 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	}
 
 	opts := tui.Options{}
+	// The tag an update recorded before re-exec: this is the first start of
+	// the new build, so it gets its one-shot notice. Anything else — no record,
+	// or one for a build that is not running — consumes it silently.
+	if tag := updater.InstalledNotice(version.Version); tag != "" {
+		opts.UpdateNotice = &tui.UpdateNoticeMsg{Installed: true, Tag: tag}
+	}
 	if debug {
 		logFile, err := openDebugLog()
 		if err != nil {

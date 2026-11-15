@@ -57,7 +57,7 @@ func TestDragonRule(t *testing.T) {
 	}
 }
 
-// R3 (кейсы 2 и 3): after 6 s there is a compass — edges, points of the world,
+// R3 (cases 2 and 3): after 6 s there is a compass — edges, points of the world,
 // quest marker, the bar gone — and the points drift along the track position.
 // One render of the rest position feeds both checks.
 func TestDragonCompass(t *testing.T) {
@@ -94,7 +94,7 @@ func TestDragonCompass(t *testing.T) {
 	}
 }
 
-// R3 (кейс 4): up to 6 s the bar row is still the usual bar.
+// R3 (case 4): up to 6 s the bar row is still the usual bar.
 func TestDragonBarBeforeReveal(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{}, dragonborn, 20, 3)
 	row := dragonBarRow(m, f)
@@ -103,7 +103,7 @@ func TestDragonBarBeforeReveal(t *testing.T) {
 	}
 }
 
-// R2 (кейс 5): at 6.3 s a wave is visible in pixels; after 7.6 s it's gone, even outside the cover.
+// R2 (case 5): at 6.3 s a wave is visible in pixels; after 7.6 s it's gone, even outside the cover.
 func TestDragonThuum(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{}, dragonborn, 20, 6.3)
 	_, plain := eggTrackFrame(t, Options{NoEggs: true}, dragonborn, 20, 6.3)
@@ -136,7 +136,7 @@ func TestDragonThuum(t *testing.T) {
 	}
 }
 
-// R4 (кейс 6): at 35% of the track a dragon silhouette flies, at a rest position there are none.
+// R4 (case 6): at 35% of the track a dragon silhouette flies, at a rest position there are none.
 func TestDragonFlyby(t *testing.T) {
 	_, f := eggTrackFrame(t, Options{}, dragonborn, 64.15, 8)
 	if n := dragonDarkPixels(f); n < 15 {
@@ -148,7 +148,7 @@ func TestDragonFlyby(t *testing.T) {
 	}
 }
 
-// R3 (кейс 7): the compass line with a marker lives even in the mini layout.
+// R3 (case 7): the compass line with a marker lives even in the mini layout.
 func TestDragonMini(t *testing.T) {
 	o := Options{SelfPlay: true}
 	m := New(o)

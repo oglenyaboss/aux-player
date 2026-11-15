@@ -32,10 +32,10 @@ func utopiaLit(m *Model, f *fb) (lit, dark int) {
 func TestUtopiaRule(t *testing.T) {
 	m := New(Options{})
 	if e := m.eggOf(utopiaFein); e == nil || e.theme != &utopiaTheme || e.over == nil {
-		t.Fatalf("egg %+v, ждём UTOPIA", e)
+		t.Fatalf("egg %+v, want UTOPIA", e)
 	}
 	if e := m.eggOf(Track{Artist: "Travis Scott", Title: "SICKO MODE", Album: "ASTROWORLD"}); e != nil {
-		t.Errorf("ASTROWORLD поймал пасхалку: %+v", e)
+		t.Errorf("ASTROWORLD caught the egg: %+v", e)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestUtopiaRule(t *testing.T) {
 func TestUtopiaDarkStart(t *testing.T) {
 	m, f := utopiaFrame(t, Options{}, 0.5)
 	if lit, _ := utopiaLit(m, f); lit > 0 {
-		t.Errorf("на 0.5 с освещено %d ячеек, ждём темноту", lit)
+		t.Errorf("at 0.5 s %d cells are lit, want darkness", lit)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestUtopiaBeam(t *testing.T) {
 	m, f := utopiaFrame(t, Options{}, 9)
 	lit, dark := utopiaLit(m, f)
 	if lit < 250 || dark < 2000 {
-		t.Errorf("освещено %d, в темноте %d ячеек; ждём луч и пустоту вокруг", lit, dark)
+		t.Errorf("%d lit, %d cells in the dark; want a beam and emptiness around it", lit, dark)
 	}
 	g := m.geom()
 	seen := false
@@ -62,12 +62,12 @@ func TestUtopiaBeam(t *testing.T) {
 		if c.ch != ' ' && !c.pix && utopiaLight(m, x, 2*g.py+1) == 0 {
 			seen = true
 			if c.fg.lum() < 0.15 {
-				t.Errorf("буква в темноте почти не видна: %s", c.fg.css())
+				t.Errorf("the letter in the dark is barely visible: %s", c.fg.css())
 			}
 		}
 	}
 	if !seen {
-		t.Skip("заголовок целиком в луче")
+		t.Skip("the title is entirely in the beam")
 	}
 }
 
@@ -88,21 +88,21 @@ func TestUtopiaSweep(t *testing.T) {
 	steps(m, 6)
 	b := at()
 	if a == b {
-		t.Fatalf("луч не движется во время игры, pos %.1f", m.pos)
+		t.Fatalf("the beam does not move during playback, pos %.1f", m.pos)
 	}
 	m.Now(utopiaFein.Key(), m.pos, false)
 	steps(m, 0.2)
 	c := at()
 	steps(m, 3)
 	if at() != c {
-		t.Errorf("на паузе луч ходит")
+		t.Errorf("the beam moves on pause")
 	}
 }
 
 func TestUtopiaNoEggs(t *testing.T) {
 	m, f := utopiaFrame(t, Options{NoEggs: true}, 9)
 	if _, dark := utopiaLit(m, f); dark > 2000 {
-		t.Errorf("NoEggs: %d ячеек в темноте", dark)
+		t.Errorf("NoEggs: %d cells in the dark", dark)
 	}
 }
 
