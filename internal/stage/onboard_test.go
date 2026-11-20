@@ -51,7 +51,7 @@ func TestOnboardKeyVariants(t *testing.T) {
 	o := m.ob
 	o.t, o.stepT, o.step, o.sub = 10, 10, 1, SubKey
 	o.langDone = true
-	o.prov, o.errT = 5, o.t-0.4
+	o.prov, o.errT = 6, o.t-0.4
 	frame := dump(m.render())
 	for _, s := range []string{"ключ, если нужен", "нужен ключ"} {
 		if !strings.Contains(frame, s) {

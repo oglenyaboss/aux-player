@@ -73,7 +73,7 @@ func (c Config) Validate() error {
 		return errors.New("vibe: no Apple tokens — sign in to Apple Music")
 	}
 	if c.LLM.APIKey == "" {
-		return errors.New("vibe: no LLM key (vibe_llm_api_key in config.json)")
+		return errors.New("vibe: no LLM key (choose a provider in the settings)")
 	}
 	return nil
 }

@@ -180,12 +180,13 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	if lang == "" {
 		lang = stage.DefaultLang()
 	}
+	_, profile, baseURL := cfg.ActiveLLM()
 	return vibeai.Config{
 		AppleDeveloperToken: cfg.AppleDeveloperToken,
 		AppleUserToken:      cfg.AppleUserToken,
 		Storefront:          cfg.StoreFront,
 		LastfmKey:           cfg.LastfmAPIKey,
-		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel, Effort: cfg.VibeLLMEffort},
+		LLM:                 llm.Config{BaseURL: baseURL, APIKey: profile.APIKey, Model: profile.Model, Effort: profile.Effort},
 		PortionSize:         vibeAIPortion,
 		Lang:                lang,
 		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),

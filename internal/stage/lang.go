@@ -66,12 +66,13 @@ func SetLang(l string) {
 	lang = l
 
 	providers = []provider{
-		{"OpenRouter", "openrouter.ai/api/v1", "openrouter.ai/keys"},
-		{"OpenCode Go", "opencode.ai/zen/go/v1", "opencode.ai"},
-		{"OpenAI", "api.openai.com/v1", "platform.openai.com/api-keys"},
-		{"Anthropic", "api.anthropic.com/v1", "console.anthropic.com"},
-		{"DeepSeek", "api.deepseek.com", "platform.deepseek.com"},
-		{tr("свой адрес", "custom address"), tr("OpenAI-совместимый", "OpenAI-compatible"), ""},
+		{"opencode-go", "OpenCode Go", "opencode.ai/inference/go/v1", "opencode.ai"},
+		{"commandcode", "Command Code", "api.commandcode.ai/provider/v1", "commandcode.ai"},
+		{"openrouter", "OpenRouter", "openrouter.ai/api/v1", "openrouter.ai/keys"},
+		{"openai", "OpenAI", "api.openai.com/v1", "platform.openai.com/api-keys"},
+		{"anthropic", "Anthropic", "api.anthropic.com/v1", "console.anthropic.com"},
+		{"deepseek", "DeepSeek", "api.deepseek.com", "platform.deepseek.com"},
+		{"custom", tr("свой адрес", "custom address"), tr("OpenAI-совместимый", "OpenAI-compatible"), ""},
 	}
 	efforts = []string{tr("низкий", "low"), tr("средний", "medium"), tr("высокий", "high")}
 }

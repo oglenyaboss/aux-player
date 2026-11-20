@@ -123,15 +123,17 @@ func TestAUXQuit(t *testing.T) {
 }
 
 func TestStageOptionsApple(t *testing.T) {
-	o := stageOptions(&config.Config{VibeLLMAPIKey: "k"}, true)
+	o := stageOptions(llmConfig("k"), true)
 	if !o.Onboard || o.Connected != [3]bool{false, true, false} {
 		t.Fatalf("waiting for the sign-in: onboard=%v connected=%v, want true/[false true false]",
 			o.Onboard, o.Connected)
 	}
-	if o := stageOptions(&config.Config{VibeLLMAPIKey: "k", AppleUserToken: "t"}, true); o.Onboard {
+	cfg := llmConfig("k")
+	cfg.AppleUserToken = "t"
+	if o := stageOptions(cfg, true); o.Onboard {
 		t.Error("a signed-in Apple step must not re-onboard")
 	}
-	if o := stageOptions(&config.Config{VibeLLMAPIKey: "k"}, false); o.Onboard {
+	if o := stageOptions(llmConfig("k"), false); o.Onboard {
 		t.Error("without the sign-in wait a filled config must not onboard")
 	}
 }
@@ -139,7 +141,7 @@ func TestStageOptionsApple(t *testing.T) {
 func TestAUXConnectApple(t *testing.T) {
 	ch := make(chan struct{}, 1)
 	cfg := testCfg()
-	cfg.VibeLLMAPIKey = ""
+	cfg.VibeProvider, cfg.VibeProviders = "", nil
 	m := auxModel(t, nil, cfg, Options{AppleLogin: ch})
 	st := m.vibeAIP.m.st
 	obStepUntil(st, 8, func() bool { _, _, tt, ok := st.Onboarding(); return ok && tt >= 5.6 })
@@ -161,7 +163,7 @@ func TestAUXConnectApple(t *testing.T) {
 func TestAUXConnectAppleFail(t *testing.T) {
 	ch := make(chan struct{}, 1)
 	cfg := testCfg()
-	cfg.VibeLLMAPIKey = ""
+	cfg.VibeProvider, cfg.VibeProviders = "", nil
 	m := auxModel(t, nil, cfg, Options{AppleLogin: ch})
 	st := m.vibeAIP.m.st
 	obStepUntil(st, 8, func() bool { _, _, tt, ok := st.Onboarding(); return ok && tt >= 5.6 })

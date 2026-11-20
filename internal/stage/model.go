@@ -94,12 +94,13 @@ type LoadModels struct{ URL, Key string }
 
 // Setup is what the onboarding settled, sent once when the needle drops.
 type Setup struct {
-	Lang   string // "ru" or "en"
-	URL    string // agent API base URL with scheme
-	Key    string
-	Model  string
-	Effort string // "low", "medium", "high"; "" when the model has no effort step
-	Lastfm bool   // Last.fm connected (not skipped)
+	Lang     string // "ru" or "en"
+	Provider string // provider id; "" when no model was picked
+	URL      string // agent API base URL with scheme
+	Key      string
+	Model    string
+	Effort   string // "low", "medium", "high"; "" when the model has no effort step
+	Lastfm   bool   // Last.fm connected (not skipped)
 }
 
 // Quit is esc / q where the screen used to quit the program.

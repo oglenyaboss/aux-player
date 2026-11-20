@@ -68,14 +68,16 @@ func newStageScreen(host *Model) *stageScreen {
 // the steps already connected, the eggs opt-out.
 func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 	apple := !appleLogin || cfg.AppleUserToken != ""
+	_, profile, _ := cfg.ActiveLLM()
+	key := profile.APIKey
 	return stage.Options{
-		Onboard:       !apple || (cfg.VibeLang == "" && cfg.VibeLLMAPIKey == ""),
-		Connected:     [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
+		Onboard:       !apple || (cfg.VibeLang == "" && key == ""),
+		Connected:     [3]bool{apple, key != "", cfg.LastfmSessionKey != ""},
 		Slots:         vibeAIPortion,
 		LastfmAskKeys: cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "",
 		LastfmKey:     cfg.LastfmAPIKey,
 		NoEggs:        cfg.VibeEggs != nil && !*cfg.VibeEggs,
-		NoAgent:       cfg.VibeLLMAPIKey == "",
+		NoAgent:       key == "",
 		Example:       func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
 	}
 }
@@ -324,15 +326,16 @@ func (s *stageScreen) act(a stage.Action) {
 		})
 	case stage.Setup:
 		cfg := s.host.cfg
-		if a.URL != "" {
-			cfg.VibeLLMBaseURL = a.URL
-		}
-		if a.Key != "" {
-			cfg.VibeLLMAPIKey = a.Key
-		}
-		if a.Model != "" {
-			cfg.VibeLLMModel = a.Model
-			cfg.VibeLLMEffort = a.Effort
+		if a.Model != "" && a.Provider != "" {
+			p := cfg.VibeProviders[a.Provider]
+			if a.Key != "" {
+				p.APIKey = a.Key
+			}
+			p.Model, p.Effort = a.Model, a.Effort
+			if a.Provider == config.CustomProvider {
+				p.BaseURL = a.URL
+			}
+			cfg.SetLLM(a.Provider, p)
 		}
 		cfg.VibeLang = a.Lang
 		if err := cfg.Save(""); err != nil {

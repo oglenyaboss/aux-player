@@ -200,7 +200,7 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 		return Response{}, retryableError{fmt.Errorf("llm: %w", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	setHeaders(req, c.cfg.APIKey, c.session)
+	setHeaders(req, c.cfg.APIKey, c.session, c.cfg.BaseURL)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -291,10 +291,12 @@ func parseMessage(raw json.RawMessage) (Message, error) {
 	return m, nil
 }
 
-func setHeaders(req *http.Request, apiKey, session string) {
+func setHeaders(req *http.Request, apiKey, session, baseURL string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", "aux/"+version.Version)
-	req.Header["x-opencode-session"] = []string{session}
+	if isOpenCode(baseURL) {
+		req.Header.Set("x-opencode-session", session)
+	}
 }
 
 func bodySnippet(b []byte) string {

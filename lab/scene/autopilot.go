@@ -54,7 +54,7 @@ func (s *scene) onboardWalk() {
 	m.At(0, 6.0, func() { m.Key("enter", "") })
 	m.At(1, 6.4, func() { m.Key("enter", "") })
 	m.At(2, 8.9, func() { m.Key("down", "") })
-	m.At(3, 9.3, func() { m.Key("up", "") })
+	m.At(3, 9.3, func() { m.Key("down", "") })
 	m.At(4, 9.8, func() { m.Key("enter", "") })
 	if step, sub, t, ok := m.Onboarding(); ok && step == 1 && sub == stage.SubKey && t > 10.2 {
 		rs := []rune(demoKey)

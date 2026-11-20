@@ -110,12 +110,11 @@ func TestListModelsOpenRouterOK(t *testing.T) {
 
 func TestListModelsHeaders(t *testing.T) {
 	var got http.Header
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		got = r.Header.Clone()
-		_, _ = w.Write([]byte(`{"data":[]}`))
-	}))
-	t.Cleanup(srv.Close)
-	if _, err := ListModels(context.Background(), srv.Client(), srv.URL, "k"); err != nil {
+		return httpResponse(http.StatusOK, `{"data":[]}`), nil
+	})
+	if _, err := ListModels(context.Background(), &http.Client{Transport: rt}, "https://opencode.ai", "k"); err != nil {
 		t.Fatal(err)
 	}
 	if got.Get("Authorization") != "Bearer k" {

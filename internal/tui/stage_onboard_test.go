@@ -71,7 +71,9 @@ func TestStageOptions(t *testing.T) {
 			o.Onboard, o.Connected, o.NoEggs)
 	}
 	off := false
-	o = stageOptions(&config.Config{VibeLLMAPIKey: "k", LastfmSessionKey: "s", VibeEggs: &off}, false)
+	cfg := llmConfig("k")
+	cfg.LastfmSessionKey, cfg.VibeEggs = "s", &off
+	o = stageOptions(cfg, false)
 	if o.Onboard || o.Connected != [3]bool{true, true, true} || !o.NoEggs {
 		t.Fatalf("filled config: onboard=%v connected=%v noEggs=%v, want false/[true true true]/true",
 			o.Onboard, o.Connected, o.NoEggs)
@@ -81,7 +83,7 @@ func TestStageOptions(t *testing.T) {
 func TestStageOnboardGate(t *testing.T) {
 	isolatedHome(t)
 	cfg := testCfg()
-	cfg.VibeLLMAPIKey = ""
+	cfg.VibeProvider, cfg.VibeProviders = "", nil
 	m := New(cfg, &mockProvider{}, nil, Options{})
 	if phase := m.vibeAIP.m.st.Phase(); phase != stage.PhOnboard {
 		t.Fatalf("phase without an agent key = %v, want onboarding", phase)
@@ -191,7 +193,7 @@ func TestStageModelsReachScene(t *testing.T) {
 		return []llm.ModelInfo{{ID: "a/x", Tools: true, Known: true}}, nil
 	})
 	cfg := testCfg()
-	cfg.VibeLLMAPIKey = ""
+	cfg.VibeProvider, cfg.VibeProviders = "", nil
 	m := New(cfg, &mockProvider{}, nil, Options{})
 	s := m.vibeAIP.m
 	st := s.st
@@ -207,7 +209,7 @@ func TestStageModelsReachScene(t *testing.T) {
 	if !ok || step != 1 {
 		t.Fatalf("step after the language enter = %d (ok %v), want 1", step, ok)
 	}
-	st.Key("enter", "") // the provider list, OpenRouter is first
+	st.Key("enter", "") // the provider list, OpenCode Go is first
 	st.Key("", "k")     // the agent key
 	st.Key("enter", "") // confirm → LoadModels
 	cmd := s.flush()
@@ -228,10 +230,11 @@ func TestStageSetupSaves(t *testing.T) {
 	isolatedHome(t)
 	m := newModel(nil)
 	s := m.vibeAIP.m
-	s.act(stage.Setup{Lang: "en", URL: "https://openrouter.ai/api/v1", Key: "k1", Model: "a/x", Effort: "high"})
-	if m.cfg.VibeLLMBaseURL != "https://openrouter.ai/api/v1" || m.cfg.VibeLLMAPIKey != "k1" ||
-		m.cfg.VibeLLMModel != "a/x" || m.cfg.VibeLLMEffort != "high" || m.cfg.VibeLang != "en" {
-		t.Fatalf("config after setup = %+v", m.cfg)
+	s.act(stage.Setup{Lang: "en", Provider: "openrouter", URL: "https://openrouter.ai/api/v1", Key: "k1", Model: "a/x", Effort: "high"})
+	want := config.LLMProvider{APIKey: "k1", Model: "a/x", Effort: "high"}
+	if got := m.cfg.VibeProviders["openrouter"]; got != want || m.cfg.VibeProvider != "openrouter" || m.cfg.VibeLang != "en" {
+		t.Fatalf("profile after setup = %+v (active %q, lang %q), want %+v/openrouter/en",
+			got, m.cfg.VibeProvider, m.cfg.VibeLang, want)
 	}
 	if got := vibeAIConfig(m.cfg).LLM.Effort; got != "high" {
 		t.Fatalf("engine effort = %q, want high", got)
@@ -240,7 +243,7 @@ func TestStageSetupSaves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
-	for _, want := range []string{`"vibe_llm_effort": "high"`, `"vibe_lang": "en"`} {
+	for _, want := range []string{`"vibe_providers"`, `"vibe_lang": "en"`} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("the saved config misses %s:\n%s", want, data)
 		}
@@ -249,14 +252,15 @@ func TestStageSetupSaves(t *testing.T) {
 
 func TestStageSetupKeepsEmpty(t *testing.T) {
 	isolatedHome(t)
-	m := newModel(nil)
-	m.cfg.VibeLLMModel = "old"
+	cfg := testCfg()
+	cfg.SetLLM("opencode-go", config.LLMProvider{APIKey: "test-key", Model: "old"})
+	m := New(cfg, &mockProvider{}, nil, Options{})
 	m.vibeAIP.m.act(stage.Setup{Lang: "ru"})
-	if m.cfg.VibeLLMModel != "old" {
-		t.Fatalf("VibeLLMModel = %q, want old", m.cfg.VibeLLMModel)
+	if got := cfg.VibeProviders["opencode-go"].Model; got != "old" {
+		t.Fatalf("profile model = %q, want old", got)
 	}
-	if m.cfg.VibeLang != "ru" {
-		t.Fatalf("VibeLang = %q, want ru", m.cfg.VibeLang)
+	if cfg.VibeLang != "ru" {
+		t.Fatalf("VibeLang = %q, want ru", cfg.VibeLang)
 	}
 }
 
@@ -272,7 +276,7 @@ func TestStageOptionsAgentOptional(t *testing.T) {
 	if !o.Onboard || !o.NoAgent {
 		t.Fatalf("first run without a key: onboard=%v noAgent=%v, want true/true", o.Onboard, o.NoAgent)
 	}
-	o = stageOptions(&config.Config{VibeLLMAPIKey: "k"}, false)
+	o = stageOptions(llmConfig("k"), false)
 	if o.Onboard || o.NoAgent {
 		t.Fatalf("first run with a key: onboard=%v noAgent=%v, want false/false", o.Onboard, o.NoAgent)
 	}
@@ -281,15 +285,16 @@ func TestStageOptionsAgentOptional(t *testing.T) {
 // A13: a Setup without a model keeps the saved effort; a new model writes it.
 func TestStageSetupKeepsEffort(t *testing.T) {
 	isolatedHome(t)
-	m := newModel(nil)
-	m.cfg.VibeLLMEffort = "high"
+	cfg := testCfg()
+	cfg.SetLLM("opencode-go", config.LLMProvider{APIKey: "test-key", Effort: "high"})
+	m := New(cfg, &mockProvider{}, nil, Options{})
 	m.vibeAIP.m.act(stage.Setup{Lang: "ru"})
-	if m.cfg.VibeLLMEffort != "high" {
-		t.Fatalf("effort after a skipped agent = %q, want high", m.cfg.VibeLLMEffort)
+	if got := cfg.VibeProviders["opencode-go"].Effort; got != "high" {
+		t.Fatalf("effort after a skipped agent = %q, want high", got)
 	}
-	m.vibeAIP.m.act(stage.Setup{Model: "a/x"})
-	if m.cfg.VibeLLMEffort != "" {
-		t.Fatalf("effort after a new model = %q, want empty", m.cfg.VibeLLMEffort)
+	m.vibeAIP.m.act(stage.Setup{Provider: "openrouter", Model: "a/x"})
+	if got := cfg.VibeProviders["openrouter"].Effort; got != "" {
+		t.Fatalf("effort after a new model = %q, want empty", got)
 	}
 }
 

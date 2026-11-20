@@ -72,7 +72,7 @@ const (
 	SubEffort
 )
 
-type provider struct{ name, host, keys string }
+type provider struct{ id, name, host, keys string }
 
 // providers and efforts carry language data and are rebuilt by setLang.
 var providers []provider
@@ -398,15 +398,15 @@ func (o *onboard) pickedInfo() (ModelInfo, bool) {
 // setup is what the onboarding settled, scored over the chosen provider; the agent step
 // closed by the host (Connected) carries no credential.
 func (o *onboard) setup() Setup {
-	url, key, model := "", "", ""
+	url, key, model, provider := "", "", "", ""
 	if o.picked != "" {
-		url, key, model = o.agentURL(), string(o.key), o.picked
+		provider, url, key, model = providers[o.prov].id, o.agentURL(), string(o.key), o.picked
 	}
 	effort := ""
 	if mi, ok := o.pickedInfo(); ok && mi.Reasoning {
 		effort = [...]string{"low", "medium", "high"}[o.effort]
 	}
-	return Setup{Lang: lang, URL: url, Key: key, Model: model, Effort: effort,
+	return Setup{Lang: lang, Provider: provider, URL: url, Key: key, Model: model, Effort: effort,
 		Lastfm: o.done[2] >= 0 && !o.skipped}
 }
 
