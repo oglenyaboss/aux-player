@@ -11,8 +11,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/oglenyaboss/aux-player/internal/auth"
 	"github.com/oglenyaboss/aux-player/internal/config"
-	"github.com/oglenyaboss/aux-player/internal/lastfm"
-	playerpkg "github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/player/cdp"
 	"github.com/oglenyaboss/aux-player/internal/provider/apple"
 	"github.com/oglenyaboss/aux-player/internal/tui"
@@ -36,13 +34,16 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		ask = make(chan struct{}, 1)
 		opts.AppleLogin = ask
 	}
-	lfm := make(chan struct{}, 1)
-	opts.LastfmConnected = lfm
-	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
+	var prog *tea.Program
+	debugLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
+	discordSw := newDiscordSwitch(cfg, debugLog)
+	lastfmSw := newLastfmSwitch(cfg, debugLog)
+	opts.Discord = discordSw.Set
+	opts.Lastfm = lastfmSw.Set
+	prog = tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *cdp.Player, 1)
 	runDone := make(chan struct{})
 	restartExe := make(chan string, 1)
-	var stopRPC func()
 
 	go func() {
 		if exe := updater.CheckAndUpdate(version.Version, noUpdate, func(msg string) {
@@ -166,9 +167,8 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 		if hooks.afterReady != nil {
 			hooks.afterReady(cdpPlayer)
 		}
-		lfmLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
-		go lastfmScrobbleLoop(lfm, cfg, startLastfmScrobbler(cfg, cdpPlayer, lfmLog), cdpPlayer, lfmLog)
-		stopRPC = startDiscordRPC(cfg, cdpPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		lastfmSw.Attach(cdpPlayer)
+		discordSw.Attach(cdpPlayer)
 
 		prog.Send(tui.EngineReadyMsg{
 			Player:      cdpPlayer,
@@ -179,9 +179,7 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 	}()
 
 	_, err := prog.Run()
-	if stopRPC != nil {
-		stopRPC()
-	}
+	discordSw.Close()
 
 	select {
 	case p := <-playerCh:
@@ -199,21 +197,4 @@ func runCDPFlow(cfg *config.Config, opts tui.Options, onUserToken, onStorefront 
 	}
 
 	return err
-}
-
-func startLastfmScrobbler(cfg *config.Config, player interface {
-	Subscribe() <-chan playerpkg.State
-}, log func(string)) bool {
-	if cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "" || cfg.LastfmSessionKey == "" {
-		return false
-	}
-	lfmClient := lastfm.NewClient(cfg.LastfmAPIKey, cfg.LastfmAPISecret, cfg.LastfmSessionKey)
-	scrobbler := lastfm.NewScrobbler(lfmClient)
-	scrobbler.SetLogger(log)
-	go func() {
-		for st := range player.Subscribe() {
-			scrobbler.Update(st)
-		}
-	}()
-	return true
 }

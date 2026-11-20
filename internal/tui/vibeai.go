@@ -401,11 +401,8 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			if err := m.cfg.Save(""); err != nil {
 				m.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 			}
-			if m.lastfmConnected != nil {
-				select {
-				case m.lastfmConnected <- struct{}{}:
-				default:
-				}
+			if m.lastfm != nil {
+				m.lastfm(msg.session)
 			}
 		}
 		v.st.StepDone(msg.step, msg.err)

@@ -58,9 +58,10 @@ type Model struct {
 	vibeAIP *vibeAIPanel
 
 	// appleLogin carries the asks from the Apple Music onboarding step;
-	// lastfmConnected signals a freshly connected Last.fm session.
-	appleLogin      chan<- struct{}
-	lastfmConnected chan<- struct{}
+	// lastfm and discord are the host's switches for scrobbling and presence.
+	appleLogin chan<- struct{}
+	lastfm     func(string)
+	discord    func(bool)
 
 	// Errors / status messages
 	errMsg    string
@@ -81,7 +82,8 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		// on 16-colour/ASCII terminals the scene skips the download entirely.
 		supportsArtColor: art.SupportsColor,
 		appleLogin:       opts.AppleLogin,
-		lastfmConnected:  opts.LastfmConnected,
+		lastfm:           opts.Lastfm,
+		discord:          opts.Discord,
 		saves:            map[string]saveState{},
 	}
 	if plyr != nil {
