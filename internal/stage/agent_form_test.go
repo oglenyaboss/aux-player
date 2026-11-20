@@ -217,7 +217,7 @@ func TestAgentFormChatGPTResult(t *testing.T) {
 		t.Fatalf("effort enter = %v, want formDone", got)
 	}
 	provider, url, key, model, effort := a.result()
-	if provider != "chatgpt" || url != "https://chatgpt.com/backend-api/codex" || key != "" || model != "gpt-6-luna" || effort != "medium" {
+	if provider != "chatgpt" || url != "https://chatgpt.com/backend-api/codex" || key != "" || model != "gpt-6-luna" || effort != "low" {
 		t.Fatalf("result = %q %q %q %q %q", provider, url, key, model, effort)
 	}
 }

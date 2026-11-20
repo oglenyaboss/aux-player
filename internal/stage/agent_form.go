@@ -67,6 +67,9 @@ func (a *agentForm) reply(list []ModelInfo, total int, err string) {
 		return
 	}
 	a.list, a.total, a.replied = list, total, true
+	if providers[a.prov].sign {
+		a.effort = 0
+	}
 	if a.current != "" {
 		if i := slices.IndexFunc(a.models(), func(mi ModelInfo) bool { return mi.ID == a.current }); i >= 0 {
 			a.model = i
