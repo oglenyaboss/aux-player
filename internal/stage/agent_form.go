@@ -58,7 +58,11 @@ func (a *agentForm) models() []ModelInfo {
 
 func (a *agentForm) reply(list []ModelInfo, total int, err string) {
 	if err != "" {
-		a.setSub(SubKey)
+		if providers[a.prov].sign {
+			a.setSub(SubProvider)
+		} else {
+			a.setSub(SubKey)
+		}
 		a.errMsg = err
 		return
 	}
@@ -73,7 +77,7 @@ func (a *agentForm) reply(list []ModelInfo, total int, err string) {
 }
 
 func (a *agentForm) agentURL() string {
-	if p := providers[a.prov]; p.keys != "" {
+	if p := providers[a.prov]; p.id != "custom" {
 		return "https://" + p.host
 	}
 	u := string(a.url)
@@ -81,6 +85,11 @@ func (a *agentForm) agentURL() string {
 		u = "https://" + u
 	}
 	return u
+}
+
+// chatgptNote warns that the subscription sign-in runs through Codex.
+func chatgptNote() string {
+	return tr("неофициально, через вход Codex; OpenAI может ограничить аккаунт", "unofficial, via the Codex sign-in; OpenAI may restrict the account")
 }
 
 func (a *agentForm) pickedInfo() (ModelInfo, bool) {
@@ -126,11 +135,15 @@ func (m *Model) formKey(a *agentForm, k, text string) formResult {
 	if k == "esc" {
 		switch a.sub {
 		case SubLoading:
-			a.setSub(SubKey)
+			if providers[a.prov].sign {
+				a.setSub(SubProvider)
+			} else {
+				a.setSub(SubKey)
+			}
 		case SubURL:
 			a.setSub(SubProvider)
 		case SubKey:
-			if providers[a.prov].keys == "" {
+			if providers[a.prov].id == "custom" {
 				a.setSub(SubURL)
 			} else {
 				a.setSub(SubProvider)
@@ -149,16 +162,22 @@ func (m *Model) formKey(a *agentForm, k, text string) formResult {
 		switch k {
 		case "up", "k":
 			a.prov = max(0, a.prov-1)
+			a.errMsg = ""
 		case "down", "j":
 			a.prov = min(len(providers)-1, a.prov+1)
+			a.errMsg = ""
 		case "enter":
-			id := providers[a.prov].id
-			if a.saved[id] && id != "custom" {
+			p := providers[a.prov]
+			switch {
+			case p.sign:
 				a.setSub(SubLoading)
-				m.send(LoadModels{Provider: id, URL: a.agentURL(), Key: ""})
-			} else if providers[a.prov].keys == "" {
+				m.send(LoadModels{Provider: p.id, URL: a.agentURL(), Key: ""})
+			case a.saved[p.id] && p.id != "custom":
+				a.setSub(SubLoading)
+				m.send(LoadModels{Provider: p.id, URL: a.agentURL(), Key: ""})
+			case p.id == "custom":
 				a.setSub(SubURL)
-			} else {
+			default:
 				a.setSub(SubKey)
 			}
 		}
@@ -177,7 +196,7 @@ func (m *Model) formKey(a *agentForm, k, text string) formResult {
 			return formSave
 		}
 		if k == "enter" {
-			if len(a.key) == 0 && providers[a.prov].keys != "" {
+			if len(a.key) == 0 && providers[a.prov].id != "custom" {
 				a.errT = a.t
 			} else {
 				a.setSub(SubLoading)
@@ -247,6 +266,14 @@ func (m *Model) drawAgentForm(f *fb, a *agentForm, x, y, w, maxH int, intro bool
 			}
 		}
 		ky := top + 1 + len(providers)
+		if p.sign {
+			f.fade(x, ky, trunc(chatgptNote(), w), m.th.dim, al, false)
+			ky++
+			if a.errMsg != "" {
+				f.fade(x, ky, trunc(a.errMsg, w), m.th.bad, al, false)
+				ky++
+			}
+		}
 		dx := key(x, ky, "↑↓", tr("выбрать", "choose"), al)
 		dx += key(x+dx, ky, "enter", tr("дальше", "continue"), al)
 		if intro {
@@ -271,7 +298,7 @@ func (m *Model) drawAgentForm(f *fb, a *agentForm, x, y, w, maxH int, intro bool
 		return 4
 	case SubKey:
 		title, right := tr("ключ ", "key ")+p.name, p.keys
-		if p.keys == "" {
+		if p.id == "custom" {
 			title, right = tr("ключ, если нужен", "key, if needed"), ""
 		}
 		f.fade(x, y, title, m.th.dim, al, false)
@@ -299,7 +326,11 @@ func (m *Model) drawAgentForm(f *fb, a *agentForm, x, y, w, maxH int, intro bool
 		}
 		return 4
 	case SubLoading:
-		m.wave(f, x, y, tr("спрашиваю список моделей", "fetching models"), m.th.a1)
+		text := tr("спрашиваю список моделей", "fetching models")
+		if p.sign && !a.saved[p.id] {
+			text = tr("войди в ChatGPT в браузере", "sign in to ChatGPT in the browser")
+		}
+		m.wave(f, x, y, text, m.th.a1)
 		return 2
 	case SubModel:
 		list := a.models()

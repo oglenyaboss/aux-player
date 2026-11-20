@@ -59,7 +59,10 @@ const (
 	SubEffort
 )
 
-type provider struct{ id, name, host, keys string }
+type provider struct {
+	id, name, host, keys string
+	sign                 bool // the browser sign-in instead of a key
+}
 
 // providers and efforts carry language data and are rebuilt by setLang.
 var providers []provider

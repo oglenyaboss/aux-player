@@ -87,6 +87,7 @@ func TestSettingsProviderFlow(t *testing.T) {
 	m.OpenSettings(settingsInfo())
 	m.Key("enter", "")
 	m.Key("down", "")
+	m.Key("down", "")
 	m.Key("enter", "")
 	if m.settings.form == nil || m.settings.form.sub != SubKey {
 		t.Fatalf("the form is not at the key: %+v", m.settings.form)
@@ -298,5 +299,200 @@ func TestSettingsIgnoredOnOnboard(t *testing.T) {
 	m.OpenSettings(settingsInfo())
 	if m.SettingsOpen() {
 		t.Fatal("OpenSettings opened over the onboarding")
+	}
+}
+
+// G4: the subscription account row, its limits and the two-enter sign-out.
+func TestSettingsChatGPT(t *testing.T) {
+	m, r := settingsSetup(t)
+	m.OpenSettings(SettingsInfo{
+		Provider: "chatgpt",
+		Keys:     map[string]bool{"chatgpt": true},
+		Model:    "gpt-6-luna",
+		Usage:    "5h: 34% · week: 12%",
+		Lang:     "en",
+	})
+	frame := settingsFrame(m)
+	for _, want := range []string{"account", "signed in", "limits", "5h: 34% · week: 12%", "sign out of ChatGPT", "unofficial"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("the settings frame lacks %q:\n%s", want, frame)
+		}
+	}
+	settingsDown(m, 3)
+	m.Key("enter", "")
+	if got := recorded[AgentForget](r); len(got) != 0 {
+		t.Fatalf("the first enter signed out: %v", r.acts)
+	}
+	m.Key("enter", "")
+	forgets := recorded[AgentForget](r)
+	if len(forgets) != 1 || forgets[0].Provider != "chatgpt" {
+		t.Fatalf("AgentForget = %+v, want chatgpt", forgets)
+	}
+}
+
+// G5: Apple signs out only on the second enter, and only when signed in.
+func TestSettingsApple(t *testing.T) {
+	m, r := settingsSetup(t)
+	info := settingsInfo()
+	info.Apple = true
+	m.OpenSettings(info)
+	settingsDown(m, 6)
+	m.Key("enter", "")
+	if len(r.acts) != 0 {
+		t.Fatalf("the first enter sent %v, want nothing", r.acts)
+	}
+	if frame := settingsFrame(m); !strings.Contains(frame, "enter again to sign out and quit") {
+		t.Fatalf("the frame does not ask to confirm:\n%s", frame)
+	}
+	m.Key("enter", "")
+	if got := recorded[AppleSignOut](r); len(got) != 1 {
+		t.Fatalf("AppleSignOut = %+v, want one", got)
+	}
+
+	m2, r2 := settingsSetup(t)
+	m2.OpenSettings(settingsInfo())
+	settingsDown(m2, 6)
+	m2.Key("enter", "")
+	if len(r2.acts) != 0 {
+		t.Fatalf("a signed-out Apple sent %v, want nothing", r2.acts)
+	}
+	if frame := settingsFrame(m2); strings.Contains(frame, "sign out and quit") {
+		t.Errorf("the signed-out frame asks to confirm:\n%s", frame)
+	}
+}
+
+// G6: Last.fm connects once and waits, the refresh clears the wait.
+func TestSettingsLastfmConnect(t *testing.T) {
+	m, r := settingsSetup(t)
+	m.OpenSettings(settingsInfo())
+	settingsDown(m, 7)
+	m.Key("enter", "")
+	connects := recorded[ConnectLastfm](r)
+	if len(connects) != 1 || connects[0] != (ConnectLastfm{}) {
+		t.Fatalf("ConnectLastfm = %+v, want one empty", connects)
+	}
+	if frame := settingsFrame(m); !strings.Contains(frame, "waiting for the browser") {
+		t.Fatalf("the frame does not show the wait:\n%s", frame)
+	}
+	m.Key("enter", "")
+	if got := recorded[ConnectLastfm](r); len(got) != 1 {
+		t.Fatalf("the second enter sent another connect: %v", r.acts)
+	}
+	info := settingsInfo()
+	info.Lastfm = true
+	m.OpenSettings(info)
+	frame := settingsFrame(m)
+	if !strings.Contains(frame, "connected") || strings.Contains(frame, "waiting") {
+		t.Errorf("the refreshed frame lacks connected or keeps waiting:\n%s", frame)
+	}
+}
+
+// G7: Last.fm disconnects on the second enter.
+func TestSettingsLastfmDisconnect(t *testing.T) {
+	m, r := settingsSetup(t)
+	info := settingsInfo()
+	info.Lastfm = true
+	m.OpenSettings(info)
+	settingsDown(m, 7)
+	m.Key("enter", "")
+	if len(r.acts) != 0 {
+		t.Fatalf("the first enter sent %v, want nothing", r.acts)
+	}
+	if frame := settingsFrame(m); !strings.Contains(frame, "enter again to disconnect") {
+		t.Fatalf("the frame does not ask to confirm:\n%s", frame)
+	}
+	m.Key("enter", "")
+	if got := recorded[LastfmDisconnect](r); len(got) != 1 {
+		t.Fatalf("LastfmDisconnect = %+v, want one", got)
+	}
+	if frame := settingsFrame(m); !strings.Contains(frame, "not connected") {
+		t.Errorf("the frame does not say not connected:\n%s", frame)
+	}
+}
+
+// G8: the Discord switch flips and ships.
+func TestSettingsDiscord(t *testing.T) {
+	m, r := settingsSetup(t)
+	info := settingsInfo()
+	info.Discord = true
+	m.OpenSettings(info)
+	settingsDown(m, 8)
+	m.Key("enter", "")
+	got := recorded[DiscordSet](r)
+	if len(got) != 1 || got[0].On {
+		t.Fatalf("DiscordSet = %+v, want off", got)
+	}
+	if frame := settingsFrame(m); !strings.Contains(frame, "off") {
+		t.Errorf("the frame does not show off:\n%s", frame)
+	}
+}
+
+// G9: the action error is drawn above the hints.
+func TestSettingsError(t *testing.T) {
+	m, _ := settingsSetup(t)
+	info := settingsInfo()
+	info.Error = "Last.fm did not answer in time"
+	m.OpenSettings(info)
+	if frame := settingsFrame(m); !strings.Contains(frame, info.Error) {
+		t.Errorf("the frame lacks the error:\n%s", frame)
+	}
+}
+
+// G10: the short screen keeps the selected service visible.
+func TestSettingsScrollToDiscord(t *testing.T) {
+	m, _ := settingsSetup(t)
+	m.SetSize(100, 24)
+	m.OpenSettings(SettingsInfo{
+		Provider: "chatgpt",
+		Keys:     map[string]bool{"chatgpt": true},
+		Model:    "gpt-6-luna",
+		Effort:   "high",
+		Usage:    "5h: 34% · week: 12%",
+		Lang:     "en",
+		Eggs:     true,
+		Apple:    true,
+		Lastfm:   true,
+		Discord:  true,
+	})
+	settingsDown(m, 9)
+	if frame := settingsFrame(m); !strings.Contains(frame, "Discord") {
+		t.Errorf("the selected Discord left the frame:\n%s", frame)
+	}
+}
+
+// G11: the inserted provider moves OpenRouter one line down.
+func TestOnboardOpenRouterPosition(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	toAgent(m)
+	for range 3 {
+		m.Key("down", "")
+	}
+	m.Key("enter", "")
+	m.Key("", "k")
+	m.Key("enter", "")
+	loaded := recorded[LoadModels](r)
+	want := LoadModels{Provider: "openrouter", URL: "https://openrouter.ai/api/v1", Key: "k"}
+	if len(loaded) != 1 || loaded[0] != want {
+		t.Fatalf("LoadModels = %+v, want [%+v]", loaded, want)
+	}
+}
+
+// R1: ChatGPT is selectable on the onboarding's agent step and signs in from there.
+func TestOnboardChatGPTProvider(t *testing.T) {
+	r := &recorder{}
+	m := liveOnboard(t, Options{}, r)
+	toAgent(m)
+	for range 2 {
+		m.Key("down", "")
+	}
+	m.Key("enter", "")
+	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubLoading {
+		t.Fatalf("sub = %d (ok=%v), want SubLoading", sub, ok)
+	}
+	loaded := recorded[LoadModels](r)
+	want := LoadModels{Provider: "chatgpt", URL: "https://chatgpt.com/backend-api/codex"}
+	if len(loaded) != 1 || loaded[0] != want {
+		t.Fatalf("LoadModels = %+v, want [%+v]", loaded, want)
 	}
 }

@@ -150,3 +150,74 @@ func TestAgentFormDraw(t *testing.T) {
 		t.Errorf("intro frame lacks the heart line:\n%s", stripANSI(f.String()))
 	}
 }
+
+// formToProvider moves the provider cursor to id.
+func formToProvider(t *testing.T, m *Model, a *agentForm, id string) {
+	t.Helper()
+	for range len(providers) {
+		if providers[a.prov].id == id {
+			return
+		}
+		m.formKey(a, "down", "")
+	}
+	t.Fatalf("the provider cursor is on %q, want %q", providers[a.prov].id, id)
+}
+
+// G1: the subscription provider signs in through the browser, not a key.
+func TestAgentFormChatGPTFlow(t *testing.T) {
+	m, r, a := agentFormAt(t)
+	formToProvider(t, m, a, "chatgpt")
+	f := newFB(70, 24)
+	m.drawAgentForm(f, a, 1, 1, 60, 22, false, 1)
+	if frame := stripANSI(f.String()); !strings.Contains(frame, "unofficial, via the Codex sign-in") {
+		t.Errorf("the form lacks the Codex warning:\n%s", frame)
+	}
+	if got := m.formKey(a, "enter", ""); got != formNone || a.sub != SubLoading {
+		t.Fatalf("provider enter: result %v sub %v, want formNone/SubLoading", got, a.sub)
+	}
+	loaded := recorded[LoadModels](r)
+	want := LoadModels{Provider: "chatgpt", URL: "https://chatgpt.com/backend-api/codex"}
+	if len(loaded) != 1 || loaded[0] != want {
+		t.Fatalf("LoadModels = %+v, want [%+v]", loaded, want)
+	}
+	f = newFB(70, 24)
+	m.drawAgentForm(f, a, 1, 1, 60, 22, false, 1)
+	if frame := stripANSI(f.String()); !strings.Contains(frame, "sign in to ChatGPT in the browser") {
+		t.Errorf("the loading frame lacks the browser sign-in:\n%s", frame)
+	}
+}
+
+// G2: a failed sign-in returns to the provider list with the error under it.
+func TestAgentFormChatGPTReplyError(t *testing.T) {
+	m, _, a := agentFormAt(t)
+	formToProvider(t, m, a, "chatgpt")
+	m.formKey(a, "enter", "")
+	a.reply(nil, 0, "sign-in failed")
+	if a.sub != SubProvider {
+		t.Fatalf("sub = %v, want SubProvider", a.sub)
+	}
+	f := newFB(70, 24)
+	m.drawAgentForm(f, a, 1, 1, 60, 22, false, 1)
+	if frame := stripANSI(f.String()); !strings.Contains(frame, "sign-in failed") {
+		t.Errorf("the provider frame lacks the error:\n%s", frame)
+	}
+}
+
+// G3: the subscription form settles with an empty key and the Codex URL.
+func TestAgentFormChatGPTResult(t *testing.T) {
+	m, _, a := agentFormAt(t)
+	formToProvider(t, m, a, "chatgpt")
+	m.formKey(a, "enter", "")
+	a.reply([]ModelInfo{{ID: "gpt-6-luna", Reasoning: true, Rec: true}}, 1, "")
+	a.step(1.4)
+	if got := m.formKey(a, "enter", ""); got != formNone || a.sub != SubEffort {
+		t.Fatalf("model enter: result %v sub %v, want formNone/SubEffort", got, a.sub)
+	}
+	if got := m.formKey(a, "enter", ""); got != formDone {
+		t.Fatalf("effort enter = %v, want formDone", got)
+	}
+	provider, url, key, model, effort := a.result()
+	if provider != "chatgpt" || url != "https://chatgpt.com/backend-api/codex" || key != "" || model != "gpt-6-luna" || effort != "medium" {
+		t.Fatalf("result = %q %q %q %q %q", provider, url, key, model, effort)
+	}
+}

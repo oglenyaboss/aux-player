@@ -143,7 +143,7 @@ func TestOnboardCustomURL(t *testing.T) {
 	m.Key("enter", "")
 	m.StepDone(0, "")
 	steps(m, 2)
-	for range 6 {
+	for range 7 {
 		m.Key("down", "")
 	}
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubProvider {

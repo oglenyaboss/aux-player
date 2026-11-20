@@ -13,7 +13,7 @@ func TestProviderListOrder(t *testing.T) {
 	for i, p := range providers {
 		ids[i] = p.id
 	}
-	want := []string{"opencode-go", "commandcode", "openrouter", "openai", "anthropic", "deepseek", "custom"}
+	want := []string{"opencode-go", "commandcode", "chatgpt", "openrouter", "openai", "anthropic", "deepseek", "custom"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("provider ids = %v, want %v", ids, want)
 	}
