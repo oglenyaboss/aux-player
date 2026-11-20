@@ -412,7 +412,7 @@ func TestStageAppleConnect(t *testing.T) {
 	}
 }
 
-// R3: tab on the AUX intro reopens the onboarding even with a filled agent.
+// R1: tab on the AUX intro opens the settings overlay over it.
 func TestStageTabOpensSettings(t *testing.T) {
 	isolatedHome(t)
 	m := newModel(nil)
@@ -421,8 +421,11 @@ func TestStageTabOpensSettings(t *testing.T) {
 		t.Fatalf("phase = %d, want intro", st.Phase())
 	}
 	m.vibeAIP.m.HandleKey(tea.KeyPressMsg{Code: tea.KeyTab})
-	if st.Phase() != stage.PhOnboard {
-		t.Fatalf("phase after tab = %d, want onboarding", st.Phase())
+	if !st.SettingsOpen() {
+		t.Fatal("tab did not open the settings overlay")
+	}
+	if st.Phase() != stage.PhIntro {
+		t.Fatalf("phase after tab = %d, want the intro under the overlay", st.Phase())
 	}
 }
 

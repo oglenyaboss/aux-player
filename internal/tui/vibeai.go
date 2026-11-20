@@ -180,13 +180,17 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	if lang == "" {
 		lang = stage.DefaultLang()
 	}
-	_, profile, baseURL := cfg.ActiveLLM()
+	id, profile, baseURL := cfg.ActiveLLM()
+	llmCfg := llm.Config{BaseURL: baseURL, APIKey: profile.APIKey, Model: profile.Model, Effort: profile.Effort}
+	if id == config.ChatGPTProvider {
+		llmCfg = llm.Config{BaseURL: llm.ChatGPTBaseURL, Model: profile.Model, Effort: profile.Effort}
+	}
 	return vibeai.Config{
 		AppleDeveloperToken: cfg.AppleDeveloperToken,
 		AppleUserToken:      cfg.AppleUserToken,
 		Storefront:          cfg.StoreFront,
 		LastfmKey:           cfg.LastfmAPIKey,
-		LLM:                 llm.Config{BaseURL: baseURL, APIKey: profile.APIKey, Model: profile.Model, Effort: profile.Effort},
+		LLM:                 llmCfg,
 		PortionSize:         vibeAIPortion,
 		Lang:                lang,
 		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
@@ -221,7 +225,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.pending = nil
 	saved := r.savedSongs
 	r.savedSongs = nil
-	cfg := vibeAIConfig(m.cfg)
+	cfg := m.agentConfig()
 	cfg.LoadLibrary = m.vibeAILibrary()
 	if fresh {
 		r.tracks, r.portion = nil, 0
@@ -262,6 +266,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 				return vibeAIDoneMsg{gen: gen, err: err, refill: refill}
 			}
 			r.engine = e
+		} else if !fresh {
+			r.engine.SetLLM(cfg)
 		}
 		primeFollow(r.engine, name, given)
 		noteSavedSongs(r.engine, saved)
@@ -406,6 +412,10 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			}
 		}
 		v.st.StepDone(msg.step, msg.err)
+		if v.st.SettingsOpen() {
+			m.settingsErr = msg.err
+			v.refreshSettings()
+		}
 		return nil
 
 	case stageModelsMsg:

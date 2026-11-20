@@ -13,9 +13,13 @@ type LLMProvider struct {
 // CustomProvider is the id of the provider whose address the listener types.
 const CustomProvider = "custom"
 
+// ChatGPTProvider is the subscription provider: it signs in through internal/chatgpt and stores no key.
+const ChatGPTProvider = "chatgpt"
+
 var presets = []struct{ id, url string }{
 	{"opencode-go", "https://opencode.ai/inference/go/v1"},
 	{"commandcode", "https://api.commandcode.ai/provider/v1"},
+	{ChatGPTProvider, "https://chatgpt.com/backend-api/codex"},
 	{"openrouter", "https://openrouter.ai/api/v1"},
 	{"openai", "https://api.openai.com/v1"},
 	{"anthropic", "https://api.anthropic.com/v1"},

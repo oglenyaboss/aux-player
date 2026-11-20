@@ -5,14 +5,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oglenyaboss/aux-player/internal/chatgpt"
 	"github.com/oglenyaboss/aux-player/internal/config"
 	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/tui/art"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 // ── Messages ──────────────────────────────────────────────────────────────
@@ -62,6 +66,14 @@ type Model struct {
 	appleLogin chan<- struct{}
 	lastfm     func(string)
 	discord    func(bool)
+
+	// The settings overlay's ChatGPT state: the sign-in store opens lazily under
+	// its mutex, the usage limits come from the engine goroutine through the
+	// atomic pointer.
+	chatgptMu   sync.Mutex
+	chatgpt     *chatgpt.Store
+	limits      atomic.Pointer[llm.Limits]
+	settingsErr string
 
 	// Errors / status messages
 	errMsg    string

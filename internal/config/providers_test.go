@@ -214,6 +214,21 @@ func TestProviderForURL(t *testing.T) {
 	}
 }
 
+// A9b: the ChatGPT subscription preset resolves by id and by URL, with no key.
+func TestChatGPTPreset(t *testing.T) {
+	want := "https://chatgpt.com/backend-api/codex"
+	if got := config.PresetURL(config.ChatGPTProvider); got != want {
+		t.Fatalf("PresetURL(chatgpt) = %q, want %q", got, want)
+	}
+	if got := config.ProviderForURL(want); got != config.ChatGPTProvider {
+		t.Fatalf("ProviderForURL(%q) = %q, want %q", want, got, config.ChatGPTProvider)
+	}
+	id, p, base := (&config.Config{VibeProvider: config.ChatGPTProvider}).ActiveLLM()
+	if id != config.ChatGPTProvider || p.APIKey != "" || base != want {
+		t.Fatalf("ActiveLLM = (%q, %+v, %q), want (chatgpt, empty, %q)", id, p, base, want)
+	}
+}
+
 // A10 config side: SetLLM keeps the other profiles and makes the id active.
 func TestSetLLMKeepsOtherProfiles(t *testing.T) {
 	cfg := &config.Config{}
