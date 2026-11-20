@@ -126,6 +126,15 @@ type LangSet struct{ Lang string }
 // Eggs is the easter-eggs switch in the settings: On false turns every egg off.
 type Eggs struct{ On bool }
 
+// AppleSignOut drops the Apple Music sign-in; the host quits aux.
+type AppleSignOut struct{}
+
+// LastfmDisconnect drops the Last.fm session.
+type LastfmDisconnect struct{}
+
+// DiscordSet switches Discord Rich Presence.
+type DiscordSet struct{ On bool }
+
 // Phase is what the screen currently draws.
 type Phase int
 

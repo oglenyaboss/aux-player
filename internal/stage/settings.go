@@ -11,6 +11,11 @@ type SettingsInfo struct {
 	Keys     map[string]bool // provider ids with a stored key
 	Lang     string          // "ru" or "en"
 	Eggs     bool
+	Usage    string // ChatGPT subscription usage, e.g. "5h: 34% · week: 12%"; "" unknown
+	Apple    bool   // signed in to Apple Music
+	Lastfm   bool   // Last.fm connected
+	Discord  bool   // Discord Rich Presence on
+	Error    string // why the last settings action failed; "" none
 }
 
 type settingsUI struct {
