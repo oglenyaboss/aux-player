@@ -23,6 +23,8 @@ type agentForm struct {
 	replied bool
 	errMsg  string
 	errT    float64
+	saved   map[string]bool
+	current string
 }
 
 type form = agentForm
@@ -61,6 +63,12 @@ func (a *agentForm) reply(list []ModelInfo, total int, err string) {
 		return
 	}
 	a.list, a.total, a.replied = list, total, true
+	if a.current != "" {
+		if i := slices.IndexFunc(a.models(), func(mi ModelInfo) bool { return mi.ID == a.current }); i >= 0 {
+			a.model = i
+			return
+		}
+	}
 	a.model = max(0, slices.IndexFunc(a.models(), func(mi ModelInfo) bool { return mi.Rec }))
 }
 
@@ -101,6 +109,7 @@ const (
 	formNone formResult = iota
 	formDone
 	formBack
+	formSave
 )
 
 func (m *Model) formKey(a *agentForm, k, text string) formResult {
@@ -143,7 +152,11 @@ func (m *Model) formKey(a *agentForm, k, text string) formResult {
 		case "down", "j":
 			a.prov = min(len(providers)-1, a.prov+1)
 		case "enter":
-			if providers[a.prov].keys == "" {
+			id := providers[a.prov].id
+			if a.saved[id] && id != "custom" {
+				a.setSub(SubLoading)
+				m.send(LoadModels{Provider: id, URL: a.agentURL(), Key: ""})
+			} else if providers[a.prov].keys == "" {
 				a.setSub(SubURL)
 			} else {
 				a.setSub(SubKey)
@@ -160,12 +173,15 @@ func (m *Model) formKey(a *agentForm, k, text string) formResult {
 		}
 		edit(&a.url)
 	case SubKey:
+		if k == "tab" && a.errMsg != "" {
+			return formSave
+		}
 		if k == "enter" {
 			if len(a.key) == 0 && providers[a.prov].keys != "" {
 				a.errT = a.t
 			} else {
 				a.setSub(SubLoading)
-				m.send(LoadModels{URL: a.agentURL(), Key: string(a.key)})
+				m.send(LoadModels{Provider: providers[a.prov].id, URL: a.agentURL(), Key: string(a.key)})
 			}
 			return formNone
 		}
@@ -277,7 +293,10 @@ func (m *Model) drawAgentForm(f *fb, a *agentForm, x, y, w, maxH int, intro bool
 			f.fade(x+w-len([]rune(need)), y+1, need, m.th.bad, al, false)
 		}
 		dx := key(x, y+2, "enter", tr("проверить", "verify"), al)
-		key(x+dx, y+2, "esc", tr("назад", "back"), al)
+		dx += key(x+dx, y+2, "esc", tr("назад", "back"), al)
+		if a.errMsg != "" && a.saved != nil {
+			key(x+dx, y+2, "tab", tr("сохранить всё равно", "save anyway"), al)
+		}
 		return 4
 	case SubLoading:
 		m.wave(f, x, y, tr("спрашиваю список моделей", "fetching models"), m.th.a1)

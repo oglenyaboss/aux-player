@@ -40,7 +40,7 @@ func TestAgentFormKeyFlow(t *testing.T) {
 		t.Fatalf("sub = %v, want SubLoading", a.sub)
 	}
 	loaded := recorded[LoadModels](r)
-	want := LoadModels{URL: "https://opencode.ai/inference/go/v1", Key: "k"}
+	want := LoadModels{Provider: "opencode-go", URL: "https://opencode.ai/inference/go/v1", Key: "k"}
 	if len(loaded) != 1 || loaded[0] != want {
 		t.Fatalf("LoadModels = %+v, want [%+v]", loaded, want)
 	}

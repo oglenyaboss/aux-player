@@ -283,6 +283,10 @@ func (m *Model) StepDone(step int, err string) {
 // Models replies to LoadModels: the models that support tools, how many the provider has
 // in all, or the failure which puts the key substep back on screen with the message.
 func (m *Model) Models(list []ModelInfo, total int, err string) {
+	if m.settings != nil && m.settings.form != nil && m.settings.form.sub == SubLoading {
+		m.settings.form.reply(list, total, err)
+		return
+	}
 	o := m.ob
 	if m.ob == nil || o.step != 1 || o.form.sub != SubLoading {
 		return

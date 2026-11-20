@@ -89,8 +89,9 @@ type ConnectApple struct{}
 // ConnectLastfm is enter on the Last.fm step; Key and Secret are set when the step asked for them.
 type ConnectLastfm struct{ Key, Secret string }
 
-// LoadModels is the agent key confirmed: the host fetches the provider's models.
-type LoadModels struct{ URL, Key string }
+// LoadModels is the agent key confirmed: the host fetches the provider's models;
+// Key "" means the stored key of that provider.
+type LoadModels struct{ Provider, URL, Key string }
 
 // Setup is what the onboarding settled, sent once when the needle drops.
 type Setup struct {
@@ -109,8 +110,18 @@ type Quit struct{}
 // Restart is the r key.
 type Restart struct{}
 
-// Settings is tab on the intro: the host reopens the onboarding with Onboard.
+// Settings is tab on the intro: the host opens the settings overlay with OpenSettings.
 type Settings struct{}
+
+// AgentSet is the settings' change of the agent: Key "" keeps the stored key,
+// Model "" keeps the stored model and effort.
+type AgentSet struct{ Provider, URL, Key, Model, Effort string }
+
+// AgentForget drops the stored key of the provider.
+type AgentForget struct{ Provider string }
+
+// LangSet is the language switch of the settings: "ru" or "en".
+type LangSet struct{ Lang string }
 
 // Eggs is the easter-eggs switch in the settings: On false turns every egg off.
 type Eggs struct{ On bool }
@@ -279,6 +290,7 @@ type Model struct {
 	typing   bool
 	lastShot *fb
 	help     bool
+	settings *settingsUI
 
 	recent     []Track
 	recentOpen bool
@@ -462,6 +474,9 @@ func (m *Model) Step(dt float64) {
 		}
 	case PhPlay:
 		m.playStep(dt)
+	}
+	if m.settings != nil && m.settings.form != nil {
+		m.settings.form.step(dt)
 	}
 	m.musicStep()
 }
@@ -1149,6 +1164,10 @@ func (m *Model) Paste(text string) {
 // own player passes the untaken keys through. Quitting became OnAction(Quit{}); esc
 // never quits, it steps back or clears.
 func (m *Model) Key(k, text string) bool {
+	if m.settings != nil {
+		m.settingsKey(k, text)
+		return true
+	}
 	if m.ph != phOnboard {
 		if m.mu.open {
 			return m.musicKey(k, text)
@@ -1346,6 +1365,8 @@ func (m *Model) playKey(k, text string) bool {
 		m.help = !m.help
 	case "w":
 		m.send(Save{})
+	case "s":
+		m.send(Settings{})
 	case "l":
 		m.send(SaveTrack{})
 	case "f":

@@ -12,6 +12,7 @@ const (
 	mlMenuFavorite
 	mlMenuPlayAll
 	mlMenuFollow
+	mlMenuSettings
 )
 
 type mlMenuEntry struct {
@@ -25,11 +26,13 @@ type mlMenu struct {
 }
 
 // mlMenuItems is what the selected row offers: a song plays, queues and saves, a
-// collection opens and plays whole.
+// collection opens and plays whole; every row, the root and the empty one included,
+// offers the settings.
 func (m *Model) mlMenuItems() []mlMenuEntry {
+	settings := mlMenuEntry{mlMenuSettings, tr("настройки", "settings")}
 	l, ok := m.mlSelected()
 	if !ok || (l.kind != mlSong && l.kind != mlTile) {
-		return nil
+		return []mlMenuEntry{settings}
 	}
 	if l.it.Kind == MusicSong {
 		return []mlMenuEntry{
@@ -38,12 +41,14 @@ func (m *Model) mlMenuItems() []mlMenuEntry {
 			{mlMenuLibrary, tr("в библиотеку", "add to library")},
 			{mlMenuFavorite, tr("в избранное", "add to favorites")},
 			{mlMenuFollow, m.mlFollowLabel()},
+			settings,
 		}
 	}
 	return []mlMenuEntry{
 		{mlMenuOpen, tr("открыть", "open")},
 		{mlMenuPlayAll, tr("играть всё", "play all")},
 		{mlMenuFollow, m.mlFollowLabel()},
+		settings,
 	}
 }
 
@@ -109,8 +114,13 @@ func (m *Model) mlMenuChoose() {
 		return
 	}
 	x := items[max(0, min(m.mu.menu.sel, len(items)-1))]
-	l, ok := m.mlSelected()
 	m.mu.menu.open = false
+	if x.kind == mlMenuSettings {
+		m.closeMusic()
+		m.send(Settings{})
+		return
+	}
+	l, ok := m.mlSelected()
 	if !ok {
 		return
 	}

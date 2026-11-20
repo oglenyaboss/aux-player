@@ -96,7 +96,7 @@ func TestOnboardLoadModels(t *testing.T) {
 	r := &recorder{}
 	m := liveOnboard(t, Options{}, r)
 	modelsStep(t, m)
-	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://opencode.ai/inference/go/v1", Key: "k1"}) {
+	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{Provider: "opencode-go", URL: "https://opencode.ai/inference/go/v1", Key: "k1"}) {
 		t.Fatalf("ждём LoadModels{https://opencode.ai/inference/go/v1, k1}, записано %v", r.acts)
 	}
 	steps(m, 3)
@@ -153,7 +153,7 @@ func TestOnboardCustomURL(t *testing.T) {
 	m.Key("", "localhost:8080/v1")
 	m.Key("enter", "")
 	m.Key("enter", "")
-	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://localhost:8080/v1"}) {
+	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{Provider: "custom", URL: "https://localhost:8080/v1"}) {
 		t.Fatalf("ждём LoadModels{https://localhost:8080/v1}, записано %v", r.acts)
 	}
 }
