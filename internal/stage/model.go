@@ -135,6 +135,30 @@ type LastfmDisconnect struct{}
 // DiscordSet switches Discord Rich Presence.
 type DiscordSet struct{ On bool }
 
+// LoadMemory is enter on the memory row of the settings: the host reads the picker
+// agent's memory and answers with SetMemory.
+type LoadMemory struct{}
+
+// MemoryAdd is a new line typed into the memory sub-screen.
+type MemoryAdd struct{ Text string }
+
+// MemoryEdit is a changed line of the memory sub-screen, Index as SetMemory listed it.
+type MemoryEdit struct {
+	Index int
+	Text  string
+}
+
+// MemoryDelete drops the memory line at Index, as SetMemory listed it.
+type MemoryDelete struct{ Index int }
+
+// LoadRated is enter on the ratings row of the settings: the host reads the liked and
+// disliked tracks and answers with SetRated.
+type LoadRated struct{}
+
+// RatedSet moves a track between liked ("more") and disliked ("less"), or clears the
+// rating with Kind "rate_clear".
+type RatedSet struct{ ID, Artist, Title, Kind string }
+
 // Phase is what the screen currently draws.
 type Phase int
 

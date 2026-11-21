@@ -1,21 +1,26 @@
 package stage
 
-import "slices"
+import (
+	"slices"
+	"strconv"
+)
 
 // SettingsInfo is what the settings overlay shows: the active agent and the preferences.
 type SettingsInfo struct {
-	Provider string // active provider id; "" when none
-	URL      string // active base URL (prefills the custom address)
-	Model    string
-	Effort   string          // "", "low", "medium", "high"
-	Keys     map[string]bool // provider ids with a stored key
-	Lang     string          // "ru" or "en"
-	Eggs     bool
-	Usage    string // ChatGPT subscription usage, e.g. "5h: 34% · week: 12%"; "" unknown
-	Apple    bool   // signed in to Apple Music
-	Lastfm   bool   // Last.fm connected
-	Discord  bool   // Discord Rich Presence on
-	Error    string // why the last settings action failed; "" none
+	Provider    string // active provider id; "" when none
+	URL         string // active base URL (prefills the custom address)
+	Model       string
+	Effort      string          // "", "low", "medium", "high"
+	Keys        map[string]bool // provider ids with a stored key
+	Lang        string          // "ru" or "en"
+	Eggs        bool
+	Usage       string // ChatGPT subscription usage, e.g. "5h: 34% · week: 12%"; "" unknown
+	Apple       bool   // signed in to Apple Music
+	Lastfm      bool   // Last.fm connected
+	Discord     bool   // Discord Rich Presence on
+	MemoryCount int    // lines in the picker agent's memory
+	RatedCount  int    // liked and disliked tracks
+	Error       string // why the last settings action failed; "" none
 }
 
 type settingsUI struct {
@@ -25,6 +30,8 @@ type settingsUI struct {
 	armed   settingsRow // the row the confirm belongs to
 	waiting bool        // Last.fm connect sent, the browser sign-in is pending
 	form    *agentForm
+	mem     *memUI
+	rated   *ratedUI
 }
 
 type settingsRow int
@@ -40,6 +47,8 @@ const (
 	setRowApple
 	setRowLastfm
 	setRowDiscord
+	setRowMemory
+	setRowRated
 )
 
 const (
@@ -76,6 +85,14 @@ func (m *Model) SettingsOpen() bool { return m.settings != nil }
 
 func (m *Model) settingsKey(k, text string) {
 	s := m.settings
+	if s.mem != nil {
+		m.settingsMemKey(k, text)
+		return
+	}
+	if s.rated != nil {
+		m.settingsRatedKey(k, text)
+		return
+	}
 	if s.form != nil {
 		m.settingsFormKey(k, text)
 		return
@@ -181,6 +198,12 @@ func (m *Model) settingsAct() {
 	case setRowDiscord:
 		s.info.Discord = !s.info.Discord
 		m.send(DiscordSet{On: s.info.Discord})
+	case setRowMemory:
+		s.mem = &memUI{loading: true}
+		m.send(LoadMemory{})
+	case setRowRated:
+		s.rated = &ratedUI{loading: true, tab: "more"}
+		m.send(LoadRated{})
 	}
 }
 
@@ -305,6 +328,10 @@ func (s *settingsUI) lines() []settingsLine {
 		discord = tr("вкл", "on")
 	}
 	out = append(out, settingsLine{row: setRowDiscord, label: "Discord", value: discord})
+	out = append(out, settingsLine{row: setGapLine})
+	out = append(out, settingsLine{row: setHeadLine, label: tr("вкус", "taste")})
+	out = append(out, settingsLine{row: setRowMemory, label: tr("память", "memory"), value: strconv.Itoa(s.info.MemoryCount), arrow: true})
+	out = append(out, settingsLine{row: setRowRated, label: tr("оценки", "ratings"), value: strconv.Itoa(s.info.RatedCount), arrow: true})
 	return out
 }
 
@@ -387,6 +414,12 @@ func (m *Model) drawSettings(f *fb) {
 	if s.form != nil {
 		need = settingsFormNeed(s.form) + 4
 	}
+	if s.mem != nil {
+		need = 18
+	}
+	if s.rated != nil {
+		need = 16
+	}
 	h := min(need, max(1, m.h-2))
 	x, y := (m.w-w)/2, (m.h-h)/2
 	bg := m.th.bg.lerp(m.th.text, 0.07)
@@ -398,6 +431,14 @@ func (m *Model) drawSettings(f *fb) {
 	f.textS(x+2, y+1, trunc(tr("настройки", "settings"), w-4), m.th.a1, true, false)
 	if s.form != nil {
 		m.drawAgentForm(f, s.form, x+2, y+2, w-4, h-4, false, 1)
+		return
+	}
+	if s.mem != nil {
+		m.drawMemUI(f, x+2, y+2, w-4, h-4)
+		return
+	}
+	if s.rated != nil {
+		m.drawRatedUI(f, x+2, y+2, w-4, h-4)
 		return
 	}
 	m.drawSettingsRows(f, x, y, w, h)
