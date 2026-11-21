@@ -122,6 +122,42 @@ func (s *Store) Replace(old, text, evidence string) error {
 	return s.commitWithinLimit(newEntries)
 }
 
+func (s *Store) ReplaceAt(index int, text, evidence string) error {
+	if index < 0 || index >= len(s.entries) {
+		return fmt.Errorf("entry index out of range: %d of %d", index, len(s.entries))
+	}
+	e, err := checkEntry(text, evidence)
+	if err != nil {
+		return err
+	}
+	others := make([]Entry, 0, len(s.entries)-1)
+	for i, en := range s.entries {
+		if i != index {
+			others = append(others, en)
+		}
+	}
+	if other, dup := findDup(others, e.Text); dup {
+		return fmt.Errorf("a similar entry already exists: \"%s\" — use replace", other.Text)
+	}
+	newEntries := s.Entries()
+	newEntries[index] = Entry{
+		Text:     e.Text,
+		Evidence: e.Evidence,
+		Created:  newEntries[index].Created,
+		Updated:  s.today(),
+	}
+	return s.commitWithinLimit(newEntries)
+}
+
+func (s *Store) RemoveAt(index int) error {
+	if index < 0 || index >= len(s.entries) {
+		return fmt.Errorf("entry index out of range: %d of %d", index, len(s.entries))
+	}
+	newEntries := s.Entries()
+	newEntries = append(newEntries[:index], newEntries[index+1:]...)
+	return s.commit(newEntries)
+}
+
 func (s *Store) Remove(old, reason string) error {
 	if strings.TrimSpace(reason) == "" {
 		return errors.New("give a reason for the removal")
@@ -175,16 +211,37 @@ func checkEntry(text, evidence string) (Entry, error) {
 	if text == "" {
 		return Entry{}, errors.New("give the entry text")
 	}
+	if err := checkNoDelimiters(text, "text"); err != nil {
+		return Entry{}, err
+	}
 	if n := utf8.RuneCountInString(text); n > maxTextLen {
 		return Entry{}, fmt.Errorf("text is too long: %d characters, maximum %d — shorten it", n, maxTextLen)
 	}
 	if evidence == "" {
 		return Entry{}, errors.New("give evidence — what the preference is based on")
 	}
+	if err := checkNoDelimiters(evidence, "evidence"); err != nil {
+		return Entry{}, err
+	}
 	if n := utf8.RuneCountInString(evidence); n > maxEvidenceLen {
 		return Entry{}, fmt.Errorf("evidence is too long: %d characters, maximum %d — shorten it", n, maxEvidenceLen)
 	}
 	return Entry{Text: text, Evidence: evidence}, nil
+}
+
+// checkNoDelimiters keeps manual edits from corrupting the file on reload: a line
+// that is just "§" or starts with "<!--" would break parse(render(...)).
+func checkNoDelimiters(s, what string) error {
+	for line := range strings.SplitSeq(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "§" {
+			return fmt.Errorf("%s must not have a line that is just \"§\" — it separates entries in the file", what)
+		}
+		if strings.HasPrefix(line, "<!--") {
+			return fmt.Errorf("%s must not have a line starting with \"<!--\" — it is the metadata marker", what)
+		}
+	}
+	return nil
 }
 
 func findDup(entries []Entry, text string) (Entry, bool) {
@@ -250,8 +307,6 @@ func (s *Store) save(entries []Entry) error {
 	return os.Rename(tmp, s.path)
 }
 
-// ponytail: an entry text that holds a "§" line or a line like "<!-- ... -->"
-// breaks the parsing of the file on read; add a ban to checkEntry when needed.
 func render(entries []Entry) string {
 	var b strings.Builder
 	for i, e := range entries {

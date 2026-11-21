@@ -154,6 +154,36 @@ func (e *Engine) SetLLM(c Config) {
 	e.cfg.LLM, e.cfg.Tokens, e.cfg.OnLimits = c.LLM, c.Tokens, c.OnLimits
 }
 
+// ReloadMemory re-reads the memory file after an edit outside the engine (the
+// settings overlay) and hands the fresh store to the agent.
+func (e *Engine) ReloadMemory() error {
+	if e == nil || e.cfg.MemoryPath == "" {
+		return nil
+	}
+	mem, err := memory.Open(e.cfg.MemoryPath, memory.DefaultLimit)
+	if err != nil {
+		return err
+	}
+	e.mem = mem
+	if e.agent != nil {
+		e.agent.Memory = mem
+	}
+	return nil
+}
+
+// ReloadSignals re-reads the signals log after an edit outside the engine.
+func (e *Engine) ReloadSignals() error {
+	if e == nil || e.cfg.SignalsPath == "" {
+		return nil
+	}
+	sig, err := OpenSignals(e.cfg.SignalsPath)
+	if err != nil {
+		return err
+	}
+	e.sig = sig
+	return nil
+}
+
 func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 	message := text
 	if e.query == "" {
