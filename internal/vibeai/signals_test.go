@@ -398,3 +398,138 @@ func TestSkippedBeforeNeedsSkip(t *testing.T) {
 		t.Errorf("skippedElsewhere = %+v, want пусто", got)
 	}
 }
+
+func TestRated(t *testing.T) {
+	sig := testSignals(t, "")
+	t1 := testNow.Add(-3 * time.Hour)
+	t2 := testNow.Add(-2 * time.Hour)
+	t3 := testNow.Add(-1 * time.Hour)
+	addSignals(t, sig,
+		signalRec{Time: t1, Kind: "more", Session: "s1", ID: "1", Artist: "Ken Carson", Title: "Yale"},
+		signalRec{Time: t1, Kind: "more", Session: "s1", ID: "3", Artist: "SoFaygo", Title: "Knock Knock"},
+		signalRec{Time: t2, Kind: "more", Session: "s3", ID: "4", Artist: "C", Title: "Cleared"},
+		signalRec{Time: t3, Kind: "less", Session: "s2", ID: "2", Artist: "KEN CARSON", Title: "Yale"},
+		signalRec{Time: t3, Kind: "rate_clear", Session: "s3", ID: "4", Artist: "C", Title: "Cleared"},
+		signalRec{Time: t3, Kind: "played", Session: "s1", ID: "5", Artist: "D", Title: "Played"},
+		signalRec{Time: t3, Kind: "skip_early", Session: "s1", ID: "6", Artist: "E", Title: "Skipped"},
+	)
+	want := []RatedTrack{
+		{ID: "2", Artist: "KEN CARSON", Title: "Yale", Kind: "less", Time: t3},
+		{ID: "3", Artist: "SoFaygo", Title: "Knock Knock", Kind: "more", Time: t1},
+	}
+	got := sig.Rated()
+	if len(got) != len(want) {
+		t.Fatalf("Rated = %+v, want %+v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("Rated[%d] = %+v, want %+v", i, got[i], w)
+		}
+	}
+}
+
+func TestRatedTieBreak(t *testing.T) {
+	sig := testSignals(t, "")
+	addSignals(t, sig,
+		signalRec{Time: testNow, Kind: "less", Session: "s1", ID: "1", Artist: "B", Title: "T2"},
+		signalRec{Time: testNow, Kind: "more", Session: "s2", ID: "2", Artist: "A", Title: "T2"},
+		signalRec{Time: testNow, Kind: "more", Session: "s3", ID: "3", Artist: "A", Title: "T1"},
+	)
+	got := sig.Rated()
+	want := []struct{ artist, title, kind string }{
+		{"A", "T1", "more"}, {"A", "T2", "more"}, {"B", "T2", "less"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Rated = %+v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i].Artist != w.artist || got[i].Title != w.title || got[i].Kind != w.kind {
+			t.Errorf("Rated[%d] = %+v, want %v", i, got[i], w)
+		}
+	}
+}
+
+func TestSetRatingClearsAcrossSessions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sig.jsonl")
+	sig := testSignals(t, path)
+	a := songArtists(Song{Artist: "A", Title: "T1"})[0]
+	addSignals(t, sig,
+		signalRec{Time: testNow.Add(-2 * time.Hour), Kind: "less", Session: "s1", Query: "q1", ID: "1", Artist: "A", Title: "T1"},
+		signalRec{Time: testNow.Add(-2 * time.Hour), Kind: "less", Session: "s2", Query: "q2", ID: "2", Artist: "a", Title: "T1 (feat. B)"},
+	)
+	if early, played, sessions, _ := sig.skipCounts(a); early != 2 || played != 0 || sessions != 2 {
+		t.Fatalf("skipCounts = (%d, %d, %d), want (2, 0, 2)", early, played, sessions)
+	}
+	if err := sig.SetRating("1", "A", "T1", "rate_clear"); err != nil {
+		t.Fatalf("SetRating: %v", err)
+	}
+	if rated := sig.Rated(); len(rated) != 0 {
+		t.Fatalf("Rated after clear = %+v, want empty", rated)
+	}
+	if early, _, sessions, _ := sig.skipCounts(a); early != 0 || sessions != 0 {
+		t.Fatalf("skipCounts after clear = (%d, _, %d), want (0, _, 0)", early, sessions)
+	}
+	reopened, err := OpenSignals(path)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	reopened.now = func() time.Time { return testNow }
+	if len(reopened.recs) != 4 {
+		t.Fatalf("reopened recs = %d, want 4 (2 original + 2 rate_clear)", len(reopened.recs))
+	}
+	if rated := reopened.Rated(); len(rated) != 0 {
+		t.Fatalf("Rated after reopen = %+v, want empty", rated)
+	}
+	if early, _, sessions, _ := reopened.skipCounts(a); early != 0 || sessions != 0 {
+		t.Fatalf("skipCounts after reopen = (%d, _, %d), want (0, _, 0)", early, sessions)
+	}
+}
+
+func TestSetRatingFlipToMore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sig.jsonl")
+	sig := testSignals(t, path)
+	a := songArtists(Song{Artist: "A", Title: "T1"})[0]
+	addSignals(t, sig, signalRec{Time: testNow.Add(-time.Hour), Kind: "less", Session: "s1", Query: "q1", ID: "1", Artist: "A", Title: "T1"})
+	if err := sig.SetRating("1", "A", "T1", "more"); err != nil {
+		t.Fatalf("SetRating: %v", err)
+	}
+	want := []RatedTrack{{ID: "1", Artist: "A", Title: "T1", Kind: "more", Time: testNow}}
+	if rated := sig.Rated(); len(rated) != 1 || rated[0] != want[0] {
+		t.Fatalf("Rated = %+v, want %+v", rated, want)
+	}
+	if early, played, sessions, _ := sig.skipCounts(a); early != 0 || played != 1 || sessions != 0 {
+		t.Fatalf("skipCounts = (%d, %d, %d), want (0, 1, 0)", early, played, sessions)
+	}
+	reopened, err := OpenSignals(path)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	if rated := reopened.Rated(); len(rated) != 1 || rated[0].Kind != "more" {
+		t.Fatalf("Rated after reopen = %+v, want one more", rated)
+	}
+}
+
+func TestSetRatingInvalidKindAndNoop(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sig.jsonl")
+	sig := testSignals(t, path)
+	addSignals(t, sig, signalRec{Time: testNow, Kind: "less", Session: "s1", ID: "1", Artist: "A", Title: "T1"})
+	if err := sig.SetRating("1", "A", "T1", "played"); err == nil {
+		t.Fatal("SetRating with an invalid kind passed, want an error")
+	}
+	if len(sig.recs) != 1 {
+		t.Fatalf("recs after invalid kind = %d, want 1", len(sig.recs))
+	}
+	if err := sig.SetRating("", "X", "Y", "rate_clear"); err != nil {
+		t.Fatalf("SetRating with nothing to clear: %v", err)
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file the test just wrote under its temp dir
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n"); len(lines) != 1 {
+		t.Fatalf("file after the noop clear: %d lines, want 1", len(lines))
+	}
+	if len(sig.recs) != 1 {
+		t.Fatalf("recs after noop clear = %d, want 1", len(sig.recs))
+	}
+}

@@ -2,9 +2,12 @@ package vibeai
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 type fakeTokens struct{}
@@ -39,6 +42,88 @@ func TestNewChatter(t *testing.T) {
 	tok := newChatter(Config{LLM: llm.Config{Model: "m"}, Tokens: fakeTokens{}})
 	if _, ok := tok.(*llm.ResponsesClient); !ok {
 		t.Fatalf("newChatter with tokens = %T, want *llm.ResponsesClient", tok)
+	}
+}
+
+// D6: ReloadMemory and ReloadSignals pick up edits made on disk outside the engine,
+// and stay no-ops on a nil engine or without configured paths.
+func TestEngineReloadMemoryAndSignals(t *testing.T) {
+	dir := t.TempDir()
+	memPath := filepath.Join(dir, "memory.md")
+	sigPath := filepath.Join(dir, "signals.jsonl")
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, nil)
+	sig, err := OpenSignals(sigPath)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	e := &Engine{
+		agent:     a,
+		session:   a.Session,
+		mem:       a.Memory,
+		log:       &runLog{},
+		sig:       sig,
+		cfg:       Config{MemoryPath: memPath, SignalsPath: sigPath},
+		sessionID: "s1",
+		start:     time.Now(),
+	}
+	if used, _ := e.MemorySize(); used != 0 {
+		t.Fatalf("memory used: %d, want 0", used)
+	}
+	if rated := e.sig.Rated(); len(rated) != 0 {
+		t.Fatalf("rated: %+v, want empty", rated)
+	}
+
+	extMem, err := memory.Open(memPath, memory.DefaultLimit)
+	if err != nil {
+		t.Fatalf("memory.Open: %v", err)
+	}
+	if err := extMem.Add("dislikes Gunna", "owner's words"); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	extSig, err := OpenSignals(sigPath)
+	if err != nil {
+		t.Fatalf("OpenSignals: %v", err)
+	}
+	if err := extSig.SetRating("1", "A", "T1", "more"); err != nil {
+		t.Fatalf("SetRating: %v", err)
+	}
+
+	if err := e.ReloadMemory(); err != nil {
+		t.Fatalf("ReloadMemory: %v", err)
+	}
+	used, limit := e.MemorySize()
+	if used == 0 || limit != memory.DefaultLimit {
+		t.Fatalf("memory after reload: (%d, %d), want non-zero and %d", used, limit, memory.DefaultLimit)
+	}
+	entries := e.agent.Memory.Entries()
+	if len(entries) != 1 || entries[0].Text != "dislikes Gunna" {
+		t.Fatalf("agent memory after reload: %+v", entries)
+	}
+
+	if err := e.ReloadSignals(); err != nil {
+		t.Fatalf("ReloadSignals: %v", err)
+	}
+	rated := e.sig.Rated()
+	if len(rated) != 1 || rated[0].Kind != "more" || rated[0].ID != "1" {
+		t.Fatalf("rated after reload: %+v", rated)
+	}
+
+	var nilEngine *Engine
+	if err := nilEngine.ReloadMemory(); err != nil {
+		t.Fatalf("nil ReloadMemory: %v", err)
+	}
+	if err := nilEngine.ReloadSignals(); err != nil {
+		t.Fatalf("nil ReloadSignals: %v", err)
+	}
+	plain := &Engine{agent: a, mem: e.mem, sig: e.sig, log: &runLog{}}
+	if err := plain.ReloadMemory(); err != nil {
+		t.Fatalf("ReloadMemory without a path: %v", err)
+	}
+	if err := plain.ReloadSignals(); err != nil {
+		t.Fatalf("ReloadSignals without a path: %v", err)
+	}
+	if plain.mem != e.mem || plain.sig != e.sig {
+		t.Fatal("a reload without a path replaced the store or the signals")
 	}
 }
 

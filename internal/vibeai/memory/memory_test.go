@@ -92,6 +92,90 @@ func TestAddDuplicate(t *testing.T) {
 	}
 }
 
+func TestReplaceAt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "memory.md")
+	st := openStore(t, path, DefaultLimit)
+	mustAdd(t, st, "dislikes Gunna", "owner: no Gunna")
+	mustAdd(t, st, "Tecca is weak", "owner's words")
+	for _, idx := range []int{-1, 2} {
+		if err := st.ReplaceAt(idx, "new text", "e"); err == nil {
+			t.Fatalf("ReplaceAt(%d) passed, want an out-of-range error", idx)
+		}
+	}
+	st.now = func() time.Time { return fixedNow().Add(24 * time.Hour) }
+	if err := st.ReplaceAt(0, "dislikes Gunna and Lil Tecca", "chat on Oct 20"); err != nil {
+		t.Fatalf("ReplaceAt: %v", err)
+	}
+	entries := st.Entries()
+	if len(entries) != 2 {
+		t.Fatalf("entries: %d, want 2", len(entries))
+	}
+	if e := entries[0]; e.Text != "dislikes Gunna and Lil Tecca" || e.Evidence != "chat on Oct 20" ||
+		e.Created != "2026-10-21" || e.Updated != "2026-10-22" {
+		t.Fatalf("entry: %+v", e)
+	}
+	err := st.ReplaceAt(1, "dislikes Gunna and Lil Tecca", "e")
+	if err == nil || !strings.Contains(err.Error(), "a similar entry already exists") {
+		t.Fatalf("dup err: %v", err)
+	}
+	if err := st.ReplaceAt(1, "Tecca is weak!", "e"); err != nil {
+		t.Fatalf("minor edit of the entry itself: %v", err)
+	}
+	reloaded := openStore(t, path, DefaultLimit)
+	got := reloaded.Entries()
+	if len(got) != 2 || got[0].Text != "dislikes Gunna and Lil Tecca" || got[1].Text != "Tecca is weak!" {
+		t.Fatalf("reloaded: %+v", got)
+	}
+}
+
+func TestRemoveAt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "memory.md")
+	st := openStore(t, path, DefaultLimit)
+	mustAdd(t, st, "first", "e1")
+	mustAdd(t, st, "second", "e2")
+	mustAdd(t, st, "third", "e3")
+	for _, idx := range []int{-1, 3} {
+		if err := st.RemoveAt(idx); err == nil {
+			t.Fatalf("RemoveAt(%d) passed, want an out-of-range error", idx)
+		}
+	}
+	if err := st.RemoveAt(1); err != nil {
+		t.Fatalf("RemoveAt: %v", err)
+	}
+	if entries := st.Entries(); len(entries) != 2 || entries[0].Text != "first" || entries[1].Text != "third" {
+		t.Fatalf("entries: %+v", entries)
+	}
+	reloaded := openStore(t, path, DefaultLimit)
+	if got := reloaded.Entries(); len(got) != 2 || got[0].Text != "first" || got[1].Text != "third" {
+		t.Fatalf("reloaded: %+v", got)
+	}
+}
+
+func TestCheckEntryDelimiterGuard(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "memory.md")
+	st := openStore(t, path, DefaultLimit)
+	if err := st.Add("foo\n\u00a7\nbar", "ev"); err == nil {
+		t.Fatal("a \u00a7 line in text must be rejected")
+	}
+	if err := st.Add("foo\n<!-- comment -->", "ev"); err == nil {
+		t.Fatal("a <!-- line in text must be rejected")
+	}
+	if err := st.Add("foo", "ev\n<!-- meta -->"); err == nil {
+		t.Fatal("a <!-- line in evidence must be rejected")
+	}
+	if err := st.Add("foo", "ev\n  \u00a7  "); err == nil {
+		t.Fatal("a padded \u00a7 line in evidence must be rejected")
+	}
+	mustAdd(t, st, "section \u00a7 2 of the chat", "see \u00a7 3")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the valid entry must persist: %v", err)
+	}
+	reloaded := openStore(t, path, DefaultLimit)
+	if got := reloaded.Entries()[0].Text; got != "section \u00a7 2 of the chat" {
+		t.Fatalf("text: %q", got)
+	}
+}
+
 func TestReplaceKeepsCreated(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "memory.md"), DefaultLimit)
 	mustAdd(t, st, "не нравится Gunna", "владелец: «Gunna нет»")
