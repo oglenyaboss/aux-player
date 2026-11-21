@@ -248,7 +248,7 @@ func TestLoginStoresTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat credentials: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	if got := info.Mode().Perm(); got != 0o600 && runtime.GOOS != "windows" {
 		t.Errorf("credentials mode = %o, want 600", got)
 	}
 	disk := readTokensFile(t, s.path)
