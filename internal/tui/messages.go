@@ -11,9 +11,10 @@ import (
 type Options struct {
 	// AppleLogin, when set, holds the Apple Music sign-in until the onboarding asks for it.
 	AppleLogin chan<- struct{}
-	// LastfmConnected, when set, gets a signal each time the onboarding connects Last.fm,
-	// so the scrobbler can start without a restart.
-	LastfmConnected chan<- struct{}
+	// Lastfm, when set, switches scrobbling to the session ("" stops it).
+	Lastfm func(session string)
+	// Discord, when set, switches Rich Presence on or off.
+	Discord func(on bool)
 	// IconPath is the absolute path of the installed app icon (may be empty).
 	IconPath string
 	// Backend is a human-readable description of the audio backend, logged on

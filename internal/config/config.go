@@ -18,12 +18,8 @@ type Config struct {
 
 	AppleDeveloperToken string `json:"apple_developer_token"`
 	AppleUserToken      string `json:"apple_user_token"`
-	AppleKeyID          string `json:"apple_key_id"`
-	AppleTeamID         string `json:"apple_team_id"`
 	StoreFront          string `json:"storefront"`
 	AuthPort            int    `json:"auth_port"`
-	Provider            string `json:"provider"`
-	Theme               string `json:"theme"`
 	AudioQuality        string `json:"audio_quality,omitempty"`
 	// on-disk cache of encrypted audio segments in MB; 0 = 2048, negative = off
 	AudioCacheMB int `json:"audio_cache_mb,omitempty"`
@@ -41,9 +37,6 @@ type Config struct {
 	// WSL enables audio tuning workarounds for WSL2 environments where Hyper-V
 	// scheduler jitter causes audio underruns with default Chrome buffer sizes.
 	WSL bool `json:"wsl,omitempty"`
-	// AlbumArt starts the now-playing panel in the album-art view (the :art
-	// command toggles it at runtime and persists the choice here).
-	AlbumArt bool `json:"album_art,omitempty"`
 	// MusicDir is the local directory to scan for audio files
 	// Supports MP3, FLAC, M4A. Scanned recursively.
 	MusicDir string `json:"music_dir,omitempty"`
@@ -51,7 +44,10 @@ type Config struct {
 	DiscordRPC *bool `json:"discord_rpc,omitempty"`
 	// DiscordClientID overrides the default Discord application client ID.
 	DiscordClientID string `json:"discord_client_id,omitempty"`
-	// Vibe AI: OpenAI-compatible chat completions endpoint for the vibe agent.
+	// Vibe AI: the active picker-agent provider and one stored profile per provider.
+	VibeProvider  string                 `json:"vibe_provider,omitempty"`
+	VibeProviders map[string]LLMProvider `json:"vibe_providers,omitempty"`
+	// Legacy single-provider fields: read by normalize, migrated and then cleared so Save never writes them.
 	VibeLLMBaseURL string `json:"vibe_llm_base_url,omitempty"`
 	VibeLLMAPIKey  string `json:"vibe_llm_api_key,omitempty"`
 	VibeLLMModel   string `json:"vibe_llm_model,omitempty"`
@@ -90,8 +86,6 @@ func (c *Config) SetVolume(v float64) {
 func defaults() *Config {
 	return &Config{
 		AuthPort:     7777,
-		Provider:     "apple",
-		Theme:        "default",
 		AudioQuality: "high",
 	}
 }
@@ -162,18 +156,26 @@ func (c *Config) normalize() {
 	if c.AuthPort == 0 {
 		c.AuthPort = 7777
 	}
-	if c.Provider == "" {
-		c.Provider = "apple"
-	}
 	if c.AudioQuality == "" {
 		c.AudioQuality = "high"
 	}
-	if c.VibeLLMBaseURL == "" {
-		c.VibeLLMBaseURL = "https://opencode.ai/zen/go/v1"
+	if len(c.VibeProviders) == 0 && c.VibeLLMAPIKey != "" {
+		url := c.VibeLLMBaseURL
+		if url == "" {
+			url = "https://opencode.ai/zen/go/v1"
+		}
+		id := ProviderForURL(url)
+		model := c.VibeLLMModel
+		if model == "" {
+			model = "deepseek-v4.1-flash"
+		}
+		p := LLMProvider{APIKey: c.VibeLLMAPIKey, Model: model, Effort: c.VibeLLMEffort}
+		if id == CustomProvider {
+			p.BaseURL = url
+		}
+		c.SetLLM(id, p)
 	}
-	if c.VibeLLMModel == "" {
-		c.VibeLLMModel = "deepseek-v4.1-flash"
-	}
+	c.VibeLLMBaseURL, c.VibeLLMAPIKey, c.VibeLLMModel, c.VibeLLMEffort = "", "", "", ""
 }
 
 func (c *Config) Save(override string) error {

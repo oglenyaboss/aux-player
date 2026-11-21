@@ -18,10 +18,12 @@ type Config struct {
 	Storefront          string
 	LastfmKey           string // empty → similar_artists and tags answer with an error, the agent still works
 	LLM                 llm.Config
-	MemoryPath          string // memory file
-	CacheDir            string // library and Favorites cache
-	RunsDir             string // session logs; "" — do not write
-	SignalsPath         string // signals log; "" — in memory only
+	Tokens              llm.Tokens       // a subscription sign-in instead of an API key
+	OnLimits            func(llm.Limits) // usage headers from the subscription client
+	MemoryPath          string           // memory file
+	CacheDir            string           // library and Favorites cache
+	RunsDir             string           // session logs; "" — do not write
+	SignalsPath         string           // signals log; "" — in memory only
 	CacheMaxAge         time.Duration
 	PortionSize         int
 	Lang                string
@@ -72,10 +74,20 @@ func (c Config) Validate() error {
 	if c.AppleDeveloperToken == "" || c.AppleUserToken == "" {
 		return errors.New("vibe: no Apple tokens — sign in to Apple Music")
 	}
-	if c.LLM.APIKey == "" {
-		return errors.New("vibe: no LLM key (vibe_llm_api_key in config.json)")
+	if c.LLM.APIKey == "" && c.Tokens == nil {
+		return errors.New("vibe: no LLM key (choose a provider in the settings)")
 	}
 	return nil
+}
+
+// newChatter builds the client the agent talks to: a subscription sign-in speaks the
+// Responses API, a stored key the OpenAI-compatible chat API.
+func newChatter(cfg Config) chatter {
+	h := &http.Client{Timeout: 120 * time.Second}
+	if cfg.Tokens != nil {
+		return llm.NewResponses(cfg.LLM, cfg.Tokens, h, cfg.OnLimits)
+	}
+	return llm.New(cfg.LLM, h)
 }
 
 func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
@@ -107,7 +119,6 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		return nil, err
 	}
 	lfm := &lastfmClient{http: api.http, key: cfg.LastfmKey}
-	client := llm.New(cfg.LLM, &http.Client{Timeout: 120 * time.Second})
 	mem, err := memory.Open(cfg.MemoryPath, memory.DefaultLimit)
 	if err != nil {
 		return nil, err
@@ -129,8 +140,18 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 		sessionID: start.Format(time.RFC3339Nano),
 	}
 	session.SetSignals(sig, e.sessionID)
-	e.agent = NewAgent(client, &liveBackend{api: api, lfm: lfm, sf: cfg.Storefront}, session, mem, ui, e.log, favs, cfg.Lang)
+	e.agent = NewAgent(newChatter(cfg), &liveBackend{api: api, lfm: lfm, sf: cfg.Storefront}, session, mem, ui, e.log, favs, cfg.Lang)
 	return e, nil
+}
+
+// SetLLM swaps the chatter of a running session when the listener changed the agent
+// settings; an unchanged agent keeps its client, and the session itself stays.
+func (e *Engine) SetLLM(c Config) {
+	if c.LLM == e.cfg.LLM && c.Tokens == e.cfg.Tokens {
+		return
+	}
+	e.agent.LLM = newChatter(c)
+	e.cfg.LLM, e.cfg.Tokens, e.cfg.OnLimits = c.LLM, c.Tokens, c.OnLimits
 }
 
 func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {

@@ -54,8 +54,9 @@ func (s *scene) onboardWalk() {
 	m.At(0, 6.0, func() { m.Key("enter", "") })
 	m.At(1, 6.4, func() { m.Key("enter", "") })
 	m.At(2, 8.9, func() { m.Key("down", "") })
-	m.At(3, 9.3, func() { m.Key("up", "") })
-	m.At(4, 9.8, func() { m.Key("enter", "") })
+	m.At(3, 9.1, func() { m.Key("down", "") })
+	m.At(4, 9.3, func() { m.Key("down", "") })
+	m.At(5, 9.8, func() { m.Key("enter", "") })
 	if step, sub, t, ok := m.Onboarding(); ok && step == 1 && sub == stage.SubKey && t > 10.2 {
 		rs := []rune(demoKey)
 		want := min(len(rs), int((t-10.2)/0.025))
@@ -64,7 +65,7 @@ func (s *scene) onboardWalk() {
 			s.keyTyped++
 		}
 	}
-	m.At(5, 11.2, func() { m.Key("enter", "") })
+	m.At(6, 11.2, func() { m.Key("enter", "") })
 	if step, sub, t, ok := m.Onboarding(); ok && step == 1 && sub == stage.SubModel && t > 13.0 {
 		rs := []rune("flash")
 		want := min(len(rs), int((t-13.0)/0.09))
@@ -73,11 +74,11 @@ func (s *scene) onboardWalk() {
 			s.filterTyped++
 		}
 	}
-	m.At(6, 13.9, func() { m.Key("down", "") })
-	m.At(7, 14.3, func() { m.Key("up", "") })
-	m.At(8, 14.8, func() { m.Key("enter", "") })
-	m.At(9, 15.3, func() { m.Key("left", "") })
-	m.At(10, 15.7, func() { m.Key("right", "") })
-	m.At(11, 16.2, func() { m.Key("enter", "") })
-	m.At(12, 17.0, func() { m.Key("enter", "") })
+	m.At(7, 13.9, func() { m.Key("down", "") })
+	m.At(8, 14.3, func() { m.Key("up", "") })
+	m.At(9, 14.8, func() { m.Key("enter", "") })
+	m.At(10, 15.3, func() { m.Key("left", "") })
+	m.At(11, 15.7, func() { m.Key("right", "") })
+	m.At(12, 16.2, func() { m.Key("enter", "") })
+	m.At(13, 17.0, func() { m.Key("enter", "") })
 }

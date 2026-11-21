@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oglenyaboss/aux-player/internal/chatgpt"
 	"github.com/oglenyaboss/aux-player/internal/config"
 	"github.com/oglenyaboss/aux-player/internal/lastfm"
 	"github.com/oglenyaboss/aux-player/internal/openurl"
@@ -68,14 +69,15 @@ func newStageScreen(host *Model) *stageScreen {
 // the steps already connected, the eggs opt-out.
 func stageOptions(cfg *config.Config, appleLogin bool) stage.Options {
 	apple := !appleLogin || cfg.AppleUserToken != ""
+	_, ready := agentReady(cfg)
 	return stage.Options{
-		Onboard:       !apple || (cfg.VibeLang == "" && cfg.VibeLLMAPIKey == ""),
-		Connected:     [3]bool{apple, cfg.VibeLLMAPIKey != "", cfg.LastfmSessionKey != ""},
+		Onboard:       !apple || (cfg.VibeLang == "" && !ready),
+		Connected:     [3]bool{apple, ready, cfg.LastfmSessionKey != ""},
 		Slots:         vibeAIPortion,
 		LastfmAskKeys: cfg.LastfmAPIKey == "" || cfg.LastfmAPISecret == "",
 		LastfmKey:     cfg.LastfmAPIKey,
 		NoEggs:        cfg.VibeEggs != nil && !*cfg.VibeEggs,
-		NoAgent:       cfg.VibeLLMAPIKey == "",
+		NoAgent:       !ready,
 		Example:       func() string { return stage.Tr("в духе HARDSTONE PSYCHO", "like HARDSTONE PSYCHO") },
 	}
 }
@@ -163,7 +165,19 @@ func (s *stageScreen) NextClear() { s.st.NextClear() }
 
 // SetError reports a failed turn; the bridge trims the open portion in the feed.
 func (s *stageScreen) SetError(err error) {
-	s.st.Fail(err.Error())
+	var limit *llm.LimitError
+	switch {
+	case errors.As(err, &limit):
+		text := stage.Tr("лимит подписки ChatGPT исчерпан", "the ChatGPT subscription limit is reached")
+		if limit.ResetsIn > 0 {
+			text += stage.Tr(", сброс через ", ", resets in ") + limit.ResetsIn.Round(time.Minute).String()
+		}
+		s.st.Fail(text)
+	case errors.Is(err, chatgpt.ErrSignedOut):
+		s.st.Fail(stage.Tr("вход в ChatGPT истёк — войди снова в настройках (s)", "the ChatGPT sign-in expired, sign in again in the settings (s)"))
+	default:
+		s.st.Fail(err.Error())
+	}
 }
 
 func (s *stageScreen) SetNotice(text string) { s.st.Toast(text) }
@@ -264,9 +278,65 @@ func (s *stageScreen) act(a stage.Action) {
 	case stage.Restart:
 		s.out = append(s.out, VibeAICancelMsg{}) // the bridge trims the feed on cancel
 	case stage.Settings:
-		c := stageOptions(s.host.cfg, s.host.appleLogin != nil).Connected
-		c[1] = false
-		s.st.Onboard(c)
+		s.st.OpenSettings(s.host.settingsInfo())
+	case stage.AgentSet:
+		cfg := s.host.cfg
+		p := cfg.VibeProviders[a.Provider]
+		if a.Key != "" {
+			p.APIKey = a.Key
+		}
+		if a.Model != "" {
+			p.Model, p.Effort = a.Model, a.Effort
+		}
+		if a.Provider == config.CustomProvider && a.URL != "" {
+			p.BaseURL = a.URL
+		}
+		cfg.SetLLM(a.Provider, p)
+		s.host.saveConfig()
+		s.refreshSettings()
+	case stage.AgentForget:
+		cfg := s.host.cfg
+		if a.Provider == config.ChatGPTProvider {
+			store, err := s.host.chatGPT()
+			if err == nil {
+				err = store.Logout()
+			}
+			if err != nil {
+				s.host.appendLog(fmt.Sprintf("[vibe] chatgpt sign-out: %v", err))
+			}
+		} else if p, ok := cfg.VibeProviders[a.Provider]; ok {
+			p.APIKey = ""
+			if cfg.VibeProvider == a.Provider {
+				cfg.SetLLM(a.Provider, p)
+			} else {
+				cfg.VibeProviders[a.Provider] = p
+			}
+		}
+		s.host.saveConfig()
+		s.refreshSettings()
+	case stage.LangSet:
+		s.host.cfg.VibeLang = a.Lang
+		s.host.saveConfig()
+		s.refreshSettings()
+	case stage.LastfmDisconnect:
+		s.host.cfg.LastfmSessionKey = ""
+		s.host.saveConfig()
+		if s.host.lastfm != nil {
+			s.host.lastfm("")
+		}
+		s.refreshSettings()
+	case stage.DiscordSet:
+		on := a.On
+		s.host.cfg.DiscordRPC = &on
+		s.host.saveConfig()
+		if s.host.discord != nil {
+			s.host.discord(on)
+		}
+		s.refreshSettings()
+	case stage.AppleSignOut:
+		s.host.cfg.AppleUserToken = ""
+		s.host.saveConfig()
+		s.quitProgram()
 	case stage.Eggs:
 		on := a.On
 		cfg := s.host.cfg
@@ -315,7 +385,20 @@ func (s *stageScreen) act(a stage.Action) {
 			}
 		})
 	case stage.LoadModels:
+		if a.Provider == config.ChatGPTProvider {
+			s.cmds = append(s.cmds, s.host.chatgptModelsCmd())
+			break
+		}
 		url, key := a.URL, a.Key
+		if key == "" {
+			key = s.host.cfg.VibeProviders[a.Provider].APIKey
+		}
+		if key == "" {
+			s.cmds = append(s.cmds, func() tea.Msg {
+				return stageModelsMsg{err: stage.Tr("ключ не подошёл", "key rejected")}
+			})
+			break
+		}
 		s.cmds = append(s.cmds, func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
@@ -324,31 +407,36 @@ func (s *stageScreen) act(a stage.Action) {
 		})
 	case stage.Setup:
 		cfg := s.host.cfg
-		if a.URL != "" {
-			cfg.VibeLLMBaseURL = a.URL
-		}
-		if a.Key != "" {
-			cfg.VibeLLMAPIKey = a.Key
-		}
-		if a.Model != "" {
-			cfg.VibeLLMModel = a.Model
-			cfg.VibeLLMEffort = a.Effort
+		if a.Model != "" && a.Provider != "" {
+			p := cfg.VibeProviders[a.Provider]
+			if a.Key != "" {
+				p.APIKey = a.Key
+			}
+			p.Model, p.Effort = a.Model, a.Effort
+			if a.Provider == config.CustomProvider {
+				p.BaseURL = a.URL
+			}
+			cfg.SetLLM(a.Provider, p)
 		}
 		cfg.VibeLang = a.Lang
 		if err := cfg.Save(""); err != nil {
 			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 		}
 	case stage.Quit:
-		// The AUX is the whole app: leaving it leaves the program.
-		s.quit = true
-		s.ticking = false
-		s.host.vibeAINoteLeave()
-		s.host.vibeAI.close()
-		if s.host.player != nil {
-			_ = s.host.player.Close()
-		}
-		s.cmds = append(s.cmds, tea.Quit)
+		s.quitProgram()
 	}
+}
+
+// quitProgram leaves aux: the AUX is the whole app.
+func (s *stageScreen) quitProgram() {
+	s.quit = true
+	s.ticking = false
+	s.host.vibeAINoteLeave()
+	s.host.vibeAI.close()
+	if s.host.player != nil {
+		_ = s.host.player.Close()
+	}
+	s.cmds = append(s.cmds, tea.Quit)
 }
 
 // stageModelsReply maps the provider's answer onto the model step: only the

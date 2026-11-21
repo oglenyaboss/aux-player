@@ -40,7 +40,7 @@ func ListModels(ctx context.Context, h *http.Client, baseURL, apiKey string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("llm: models: %w", err)
 	}
-	setHeaders(req, apiKey, session)
+	setHeaders(req, apiKey, session, base)
 	resp, err := h.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("llm: models: %w", err)
@@ -61,7 +61,7 @@ func verifyKey(ctx context.Context, h *http.Client, base, apiKey, session string
 	if err != nil {
 		return fmt.Errorf("llm: models: %w", err)
 	}
-	setHeaders(req, apiKey, session)
+	setHeaders(req, apiKey, session, base)
 	resp, err := h.Do(req)
 	if err != nil {
 		return fmt.Errorf("llm: models: %w", err)
@@ -122,4 +122,9 @@ func newSession() string {
 func isOpenRouter(baseURL string) bool {
 	u, err := url.Parse(baseURL)
 	return err == nil && u.Hostname() == "openrouter.ai"
+}
+
+func isOpenCode(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	return err == nil && u.Hostname() == "opencode.ai"
 }

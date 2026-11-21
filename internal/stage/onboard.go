@@ -1,9 +1,7 @@
 package stage
 
 import (
-	"fmt"
 	"math"
-	"slices"
 	"strings"
 )
 
@@ -22,17 +20,15 @@ const (
 )
 
 type onboard struct {
+	*form
 	t       float64
 	step    int // 0 Apple Music, 1 agent, 2 Last.fm, 3 needle
 	stepT   float64
 	waitT   float64
-	replied bool // answered by the host: the browser or the model list
+	replied bool // answered by the host: the browser
 	errMsg  string
-	list    []ModelInfo
-	total   int
 	done    [3]float64
 	skipped bool
-	errT    float64
 	needleT float64
 	spin    float64
 	spinV   float64
@@ -42,15 +38,6 @@ type onboard struct {
 	agentOnly bool  // the agent step alone: the agent opened the onboarding
 	back      Phase // the phase the needle returns to
 
-	sub      agentSub
-	subT     float64
-	prov     int
-	url      []rune
-	key      []rune
-	filter   []rune
-	model    int
-	effort   int
-	picked   string
 	langDone bool
 	eggsAsk  bool // the eggs switch on screen: the settings, not the first run
 	eggsOn   bool
@@ -72,7 +59,10 @@ const (
 	SubEffort
 )
 
-type provider struct{ name, host, keys string }
+type provider struct {
+	id, name, host, keys string
+	sign                 bool // the browser sign-in instead of a key
+}
 
 // providers and efforts carry language data and are rebuilt by setLang.
 var providers []provider
@@ -87,31 +77,17 @@ type ModelInfo struct {
 var efforts []string
 
 func newOnboard() *onboard {
-	return &onboard{waitT: -1, done: [3]float64{-1, -1, -1}, errT: -1, needleT: -1, stepT: obReady, effort: 1}
+	return &onboard{form: newAgentForm(), waitT: -1, done: [3]float64{-1, -1, -1}, needleT: -1, stepT: obReady}
 }
 
 // prefsDone gates the connected steps: the language now, and the eggs in the settings.
 func (o *onboard) prefsDone() bool { return o.langDone && (!o.eggsAsk || o.eggsDone) }
 
-func (o *onboard) models() []ModelInfo {
-	q := strings.ToLower(string(o.filter))
-	var out []ModelInfo
-	for _, mi := range o.list {
-		if strings.Contains(strings.ToLower(mi.ID), q) {
-			out = append(out, mi)
-		}
-	}
-	return out
-}
-
-func (o *onboard) setSub(s agentSub) {
-	o.sub, o.subT, o.errT = s, o.t, -1
-	o.replied, o.errMsg = false, ""
-}
-
 func (m *Model) onboardStep(dt float64) {
 	o := m.ob
 	o.t += dt
+	o.form.step(dt)
+	o.form.t = o.t
 	target := 0.0
 	switch {
 	case o.needleT >= 0 && o.t > o.needleT+obDrop:
@@ -123,9 +99,6 @@ func (m *Model) onboardStep(dt float64) {
 	}
 	o.spinV += (target - o.spinV) * (1 - math.Exp(-dt*1.5))
 	o.spin += o.spinV * dt
-	if o.step == 1 && o.sub == SubLoading && o.replied && o.t-o.subT > 1.2 {
-		o.setSub(SubModel)
-	}
 	if o.waitT >= 0 && o.replied && o.t-o.waitT > obBrowser {
 		o.waitT = -1
 		m.completeStep()
@@ -174,6 +147,7 @@ func (m *Model) onboardKey(k, text string) {
 		return
 	}
 	o.errMsg = ""
+	o.form.errMsg = ""
 	switch o.step {
 	case 0:
 		if !o.langDone {
@@ -271,142 +245,24 @@ func (m *Model) agentKey(k, text string) {
 		}
 		return
 	}
-	if k == "tab" && o.sub != SubLoading {
+	if k == "tab" && o.form.sub != SubLoading {
 		o.agentAsk = true
 		return
 	}
-	edit := func(buf *[]rune) {
-		switch {
-		case k == "backspace":
-			if len(*buf) > 0 {
-				*buf = (*buf)[:len(*buf)-1]
-			}
-		case len(text) > 0:
-			*buf = append(*buf, []rune(text)...)
-		}
+	o.form.t = o.t
+	if m.formKey(o.form, k, text) == formDone {
+		m.completeStep()
 	}
-	if k == "esc" {
-		switch o.sub {
-		case SubLoading:
-			o.setSub(SubKey)
-		case SubURL:
-			o.setSub(SubProvider)
-		case SubKey:
-			if providers[o.prov].keys == "" {
-				o.setSub(SubURL)
-			} else {
-				o.setSub(SubProvider)
-			}
-		case SubModel:
-			o.setSub(SubKey)
-		case SubEffort:
-			o.setSub(SubModel)
-		}
-		return
-	}
-	switch o.sub {
-	case SubProvider:
-		switch k {
-		case "up", "k":
-			o.prov = max(0, o.prov-1)
-		case "down", "j":
-			o.prov = min(len(providers)-1, o.prov+1)
-		case "enter":
-			if providers[o.prov].keys == "" {
-				o.setSub(SubURL)
-			} else {
-				o.setSub(SubKey)
-			}
-		}
-	case SubURL:
-		if k == "enter" {
-			if len(o.url) == 0 {
-				o.errT = o.t
-			} else {
-				o.setSub(SubKey)
-			}
-			return
-		}
-		edit(&o.url)
-	case SubKey:
-		if k == "enter" {
-			if len(o.key) == 0 && providers[o.prov].keys != "" {
-				o.errT = o.t
-			} else {
-				o.setSub(SubLoading)
-				m.send(LoadModels{URL: o.agentURL(), Key: string(o.key)})
-			}
-			return
-		}
-		edit(&o.key)
-	case SubModel:
-		list := o.models()
-		switch k {
-		case "up":
-			o.model = max(0, o.model-1)
-		case "down":
-			o.model = max(0, min(len(list)-1, o.model+1))
-		case "enter":
-			if len(list) == 0 {
-				return
-			}
-			o.picked = list[o.model].ID
-			if list[o.model].Reasoning {
-				o.setSub(SubEffort)
-			} else {
-				m.completeStep()
-			}
-		default:
-			edit(&o.filter)
-			o.model = 0
-		}
-	case SubEffort:
-		switch k {
-		case "left", "h":
-			o.effort = max(0, o.effort-1)
-		case "right", "l":
-			o.effort = min(len(efforts)-1, o.effort+1)
-		case "enter":
-			m.completeStep()
-		}
-	}
-}
-
-// agentURL is the API base of the chosen provider: scheme for the fixed ones, the
-// entered address with a scheme added when the custom one lacks it.
-func (o *onboard) agentURL() string {
-	if p := providers[o.prov]; p.keys != "" {
-		return "https://" + p.host
-	}
-	u := string(o.url)
-	if !strings.Contains(u, "://") {
-		u = "https://" + u
-	}
-	return u
-}
-
-// pickedInfo is the model chosen on the model step.
-func (o *onboard) pickedInfo() (ModelInfo, bool) {
-	for _, mi := range o.list {
-		if mi.ID == o.picked {
-			return mi, true
-		}
-	}
-	return ModelInfo{}, false
 }
 
 // setup is what the onboarding settled, scored over the chosen provider; the agent step
 // closed by the host (Connected) carries no credential.
 func (o *onboard) setup() Setup {
-	url, key, model := "", "", ""
-	if o.picked != "" {
-		url, key, model = o.agentURL(), string(o.key), o.picked
+	provider, url, key, model, effort := "", "", "", "", ""
+	if o.form != nil {
+		provider, url, key, model, effort = o.form.result()
 	}
-	effort := ""
-	if mi, ok := o.pickedInfo(); ok && mi.Reasoning {
-		effort = [...]string{"low", "medium", "high"}[o.effort]
-	}
-	return Setup{Lang: lang, URL: url, Key: key, Model: model, Effort: effort,
+	return Setup{Lang: lang, Provider: provider, URL: url, Key: key, Model: model, Effort: effort,
 		Lastfm: o.done[2] >= 0 && !o.skipped}
 }
 
@@ -430,17 +286,15 @@ func (m *Model) StepDone(step int, err string) {
 // Models replies to LoadModels: the models that support tools, how many the provider has
 // in all, or the failure which puts the key substep back on screen with the message.
 func (m *Model) Models(list []ModelInfo, total int, err string) {
+	if m.settings != nil && m.settings.form != nil && m.settings.form.sub == SubLoading {
+		m.settings.form.reply(list, total, err)
+		return
+	}
 	o := m.ob
-	if m.ob == nil || o.step != 1 || o.sub != SubLoading {
+	if m.ob == nil || o.step != 1 || o.form.sub != SubLoading {
 		return
 	}
-	if err != "" {
-		o.setSub(SubKey)
-		o.errMsg = err
-		return
-	}
-	o.list, o.total, o.replied = list, total, true
-	o.model = max(0, slices.IndexFunc(o.models(), func(mi ModelInfo) bool { return mi.Rec }))
+	o.form.reply(list, total, err)
 }
 
 // Onboarding reports where the onboarding stands: the current step, the agent step's
@@ -449,7 +303,7 @@ func (m *Model) Onboarding() (step, sub int, t float64, ok bool) {
 	if m.ob == nil {
 		return 0, 0, 0, false
 	}
-	return m.ob.step, int(m.ob.sub), m.ob.t, true
+	return m.ob.step, int(m.ob.form.sub), m.ob.t, true
 }
 
 // ---------- layout ----------
@@ -1084,7 +938,7 @@ func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {
 			f.fade(x, y+2, trunc(o.errMsg, w), m.th.bad, a, false)
 		}
 	case 1:
-		return m.drawAgentBody(f, x, y, w, a*easeOut(prog(o.t, o.subT, 0.3)))
+		return m.drawAgentBody(f, x, y, w, a*easeOut(prog(o.t, o.form.subT, 0.3)))
 
 	case 2:
 		if !m.o.LastfmAskKeys {
@@ -1140,154 +994,27 @@ func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {
 
 func (m *Model) drawAgentBody(f *fb, x, y, w int, a float64) int {
 	o := m.ob
-	key := func(x, y int, k, label string, al float64) int {
-		n := f.fade(x, y, k, m.th.a1, al, true)
-		return n + 1 + f.fade(x+n+1, y, label, m.th.dim, al, false) + 3
-	}
-	p := providers[o.prov]
 	if o.agentAsk {
+		key := func(x, y int, k, label string, al float64) int {
+			n := f.fade(x, y, k, m.th.a1, al, true)
+			return n + 1 + f.fade(x+n+1, y, label, m.th.dim, al, false) + 3
+		}
 		ask := tr("без агента останется только ручной выбор музыки", "without the agent only manual music picking is left")
 		f.fade(x, y, trunc(ask, w), m.th.text, a, false)
 		dx := key(x, y+1, "enter", tr("подключить", "connect"), a)
 		key(x+dx, y+1, "tab", tr("всё равно пропустить", "skip anyway"), a)
 		return 3
 	}
-	switch o.sub {
-	case SubProvider:
-		f.fade(x, y, trunc(tr("агент — сердце AUX: подбирает музыку под настроение,", "the agent is the heart of AUX: it picks music for your mood,"), w), m.th.text, a, false)
-		f.fade(x, y+1, trunc(tr("учится на твоих + и − и ведёт поток дальше", "learns from your + and − and keeps the stream going"), w), m.th.text, a, false)
-		f.fade(x, y+3, tr("откуда брать модель", "where the model comes from"), m.th.dim, a, false)
-		for i, pr := range providers {
-			if i == o.prov {
-				f.fade(x, y+4+i, "›", m.th.a1, a, true)
-				f.fade(x+2, y+4+i, pr.name, m.th.text, a, false)
-			} else {
-				f.fade(x+2, y+4+i, pr.name, m.th.dim, a, false)
-			}
-			if len([]rune(pr.name))+len([]rune(pr.host))+4 <= w {
-				f.fade(x+w-len([]rune(pr.host)), y+4+i, pr.host, m.th.dim, a*0.7, false)
-			}
-		}
-		dx := key(x, y+4+len(providers), "↑↓", tr("выбрать", "choose"), a)
-		dx += key(x+dx, y+4+len(providers), "enter", tr("дальше", "continue"), a)
-		key(x+dx, y+4+len(providers), "tab", tr("без агента", "skip the agent"), a*0.5)
-		return len(providers) + 6
-	case SubURL:
-		f.fade(x, y, tr("адрес OpenAI-совместимого API", "OpenAI-compatible API address"), m.th.dim, a, false)
-		f.fade(x, y+1, "›", m.th.a1, a, true)
-		url := o.url
-		if n := max(0, w-6); len(url) > n {
-			url = url[len(url)-n:]
-		}
-		n := f.fade(x+2, y+1, string(url), m.th.text, a, false)
-		f.fade(x+2+n, y+1, "▎", m.th.a1, a*(0.35+0.65*(0.5+0.5*math.Sin(m.t*6))), false)
-		if o.errT >= 0 && o.t-o.errT < 1.6 && len(o.url) == 0 {
-			need := tr("нужен адрес", "address needed")
-			f.fade(x+w-len([]rune(need)), y+1, need, m.th.bad, a, false)
-		}
-		dx := key(x, y+2, "enter", tr("дальше", "continue"), a)
-		key(x+dx, y+2, "esc", tr("назад", "back"), a)
-		return 4
-	case SubKey:
-		title, right := tr("ключ ", "key ")+p.name, p.keys
-		if p.keys == "" {
-			title, right = tr("ключ, если нужен", "key, if needed"), ""
-		}
-		f.fade(x, y, title, m.th.dim, a, false)
-		if len([]rune(title))+len([]rune(right))+2 <= w {
-			f.fade(x+w-len([]rune(right)), y, right, m.th.dim, a*0.7, false)
-		}
-		f.fade(x, y+1, "›", m.th.a1, a, true)
-		masked := []rune(string(o.key[:min(6, len(o.key))]) + strings.Repeat("•", max(0, len(o.key)-6)))
-		if n := max(0, w-6); len(masked) > n {
-			masked = masked[len(masked)-n:]
-		}
-		n := f.fade(x+2, y+1, string(masked), m.th.text, a, false)
-		f.fade(x+2+n, y+1, "▎", m.th.a1, a*(0.35+0.65*(0.5+0.5*math.Sin(m.t*6))), false)
-		switch {
-		case o.errMsg != "":
-			f.fade(x+w-len([]rune(trunc(o.errMsg, w))), y+1, trunc(o.errMsg, w), m.th.bad, a, false)
-		case o.errT >= 0 && o.t-o.errT < 1.6 && len(o.key) == 0:
-			need := tr("нужен ключ", "key needed")
-			f.fade(x+w-len([]rune(need)), y+1, need, m.th.bad, a, false)
-		}
-		dx := key(x, y+2, "enter", tr("проверить", "verify"), a)
-		key(x+dx, y+2, "esc", tr("назад", "back"), a)
-		return 4
-	case SubLoading:
-		m.wave(f, x, y, tr("спрашиваю список моделей", "fetching models"), m.th.a1)
-		return 2
-	case SubModel:
-		list := o.models()
-		f.fade(x, y, tr("модель", "model"), m.th.dim, a, false)
-		cnt := fmt.Sprintf(tr("%d с инструментами из %d", "%d with tools of %d"), len(o.list), o.total)
-		f.fade(x+w-len([]rune(cnt)), y, cnt, m.th.dim, a*0.7, false)
-		f.fade(x, y+1, "/", m.th.a1, a, true)
-		f.fade(x+1, y+1, string(o.filter), m.th.text, a, false)
-		f.fade(x+1+len(o.filter), y+1, "▎", m.th.a1, a*(0.35+0.65*(0.5+0.5*math.Sin(m.t*6))), false)
-		if len(o.filter) == 0 {
-			f.fade(x+2+len(o.filter), y+1, tr("поиск", "search"), m.th.dim, a*0.5, false)
-		}
-		rows := max(2, min(6, m.h-y-7))
-		start := max(0, min(o.model-rows/2, len(list)-rows))
-		if len(list) == 0 {
-			f.fade(x, y+2, tr("ничего не нашлось", "nothing found"), m.th.dim, a, false)
-		}
-		for k := 0; k < rows && start+k < len(list); k++ {
-			idx, mi := start+k, list[start+k]
-			id, idc := mi.ID, m.th.dim
-			if idx == o.model {
-				f.fade(x, y+2+k, "›", m.th.a1, a, true)
-				idc = m.th.text
-			}
-			if mi.Rec {
-				mark := tr("рекомендуем", "recommended")
-				id = trunc(mi.ID, w-2-len([]rune(mark))-2)
-				f.fade(x+w-len([]rune(mark)), y+2+k, mark, m.th.a1, a*0.8, false)
-			}
-			f.fade(x+2, y+2+k, id, idc, a, false)
-		}
-		dx := key(x, y+2+rows, "enter", tr("выбрать", "choose"), a)
-		key(x+dx, y+2+rows, "esc", tr("назад", "back"), a)
-		return rows + 4
-	case SubEffort:
-		short := o.picked
-		if i := strings.LastIndex(short, "/"); i >= 0 {
-			short = short[i+1:]
-		}
-		f.fade(x, y, tr("рассуждение", "reasoning"), m.th.dim, a, false)
-		f.fade(x+w-len([]rune(short)), y, short, m.th.dim, a*0.7, false)
-		ux, sx := x, x
-		for i, e := range efforts {
-			if i == o.effort {
-				sx = ux
-				f.fade(ux, y+1, e, m.th.a1, a, true)
-			} else {
-				f.fade(ux, y+1, e, m.th.dim, a, false)
-			}
-			ux += len([]rune(e)) + 3
-		}
-		f.fade(sx, y+2, strings.Repeat("▔", len([]rune(efforts[o.effort]))), m.th.a1, a*0.8, false)
-		ex := [...]string{
-			tr("быстрее, подборки проще", "faster, simpler picks"),
-			tr("баланс скорости и точности", "balanced"),
-			tr("точнее, но дольше", "sharper, but slower"),
-		}[o.effort]
-		f.fade(x, y+3, ex, m.th.dim, a, false)
-		dx := key(x, y+4, "←→", tr("выбрать", "choose"), a)
-		key(x+dx, y+4, "enter", tr("готово", "done"), a)
-		return 6
-	}
-	return 0
+	return m.drawAgentForm(f, o.form, x, y, w, m.h-y, true, a)
 }
 
 func (m *Model) agentStatus() string {
-	o := m.ob
-	p := providers[o.prov]
-	if o.picked == "" {
+	a := m.ob.form
+	p := providers[a.prov]
+	if a.picked == "" {
 		return p.name
 	}
-	short := o.picked
+	short := a.picked
 	if i := strings.LastIndex(short, "/"); i >= 0 {
 		short = short[i+1:]
 	}

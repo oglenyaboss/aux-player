@@ -143,18 +143,25 @@ type wireFormat struct {
 }
 
 type wireMessage struct {
-	Role       string `json:"role"`
-	Content    string `json:"content"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
+	Role       string         `json:"role"`
+	Content    string         `json:"content"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
 }
 
 func marshalMessage(m Message) (json.RawMessage, error) {
-	if len(m.Raw) > 0 {
+	if len(m.Raw) > 0 && !(m.Role == "assistant" && isJSONArray(m.Raw)) {
 		return m.Raw, nil
 	}
 	wm := wireMessage{Role: m.Role, Content: m.Content}
 	if m.Role == "tool" {
 		wm.ToolCallID = m.ToolCallID
+	}
+	for _, tc := range m.ToolCalls {
+		wc := wireToolCall{ID: tc.ID, Type: "function"}
+		wc.Function.Name = tc.Name
+		wc.Function.Arguments = tc.Arguments
+		wm.ToolCalls = append(wm.ToolCalls, wc)
 	}
 	return json.Marshal(wm)
 }
@@ -200,7 +207,7 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 		return Response{}, retryableError{fmt.Errorf("llm: %w", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	setHeaders(req, c.cfg.APIKey, c.session)
+	setHeaders(req, c.cfg.APIKey, c.session, c.cfg.BaseURL)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -273,6 +280,7 @@ type wireMessageResp struct {
 
 type wireToolCall struct {
 	ID       string `json:"id"`
+	Type     string `json:"type,omitempty"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
@@ -291,10 +299,12 @@ func parseMessage(raw json.RawMessage) (Message, error) {
 	return m, nil
 }
 
-func setHeaders(req *http.Request, apiKey, session string) {
+func setHeaders(req *http.Request, apiKey, session, baseURL string) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", "aux/"+version.Version)
-	req.Header["x-opencode-session"] = []string{session}
+	if isOpenCode(baseURL) {
+		req.Header.Set("x-opencode-session", session)
+	}
 }
 
 func bodySnippet(b []byte) string {

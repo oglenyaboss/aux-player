@@ -62,3 +62,25 @@ _Avoid_: poll, questionnaire
 **Memory**:
 Entries about the listener's preferences that the picker accumulates between sessions from their explicit signals: what they like, what they do not, which connections between music hold.
 _Avoid_: profile, history
+
+## Agent connection
+
+**Provider**:
+The service that runs the picker's language model: a preset (OpenCode Go, Command Code, ChatGPT, OpenRouter, OpenAI, Anthropic, DeepSeek) or a custom OpenAI-compatible address.
+_Avoid_: backend, vendor
+
+**Provider profile**:
+The key, model and reasoning level stored for one provider; switching providers keeps the other profiles.
+
+**Active provider**:
+The one provider whose profile the picker uses now; changing it takes effect on the next turn without a restart.
+
+**Subscription limits**:
+The share of the ChatGPT plan's 5-hour and weekly windows already used, as the Codex endpoint reports it.
+_Avoid_: quota, rate limit
+
+## Settings
+
+**Settings**:
+The overlay that opens over the current screen and edits the provider, the interface and the integrations; every row saves on confirm.
+_Avoid_: onboarding, preferences

@@ -71,12 +71,6 @@ func TestLoad_CreatesDefaultWhenMissing(t *testing.T) {
 	if cfg.AuthPort != 7777 {
 		t.Errorf("AuthPort = %d, want %d", cfg.AuthPort, 7777)
 	}
-	if cfg.Provider != "apple" {
-		t.Errorf("Provider = %q, want %q", cfg.Provider, "apple")
-	}
-	if cfg.Theme != "default" {
-		t.Errorf("Theme = %q, want %q", cfg.Theme, "default")
-	}
 
 	// File must have been written.
 	if _, err := os.Stat(path); err != nil {
@@ -90,8 +84,6 @@ func TestLoad_ReadsExistingConfig(t *testing.T) {
 		"apple_user_token":      "usr-tok",
 		"storefront":            "it",
 		"auth_port":             9999,
-		"provider":              "spotify",
-		"theme":                 "dark",
 	})
 
 	cfg, err := config.Load(path)
@@ -130,9 +122,6 @@ func TestLoad_DefaultsPreservedForMissingKeys(t *testing.T) {
 	if cfg.AuthPort != 7777 {
 		t.Errorf("AuthPort = %d, want default 7777", cfg.AuthPort)
 	}
-	if cfg.Provider != "apple" {
-		t.Errorf("Provider = %q, want default apple", cfg.Provider)
-	}
 }
 
 func TestLoad_InvalidJSON(t *testing.T) {
@@ -155,12 +144,8 @@ func TestSave_RoundTrip(t *testing.T) {
 	original := &config.Config{
 		AppleDeveloperToken: "devtoken",
 		AppleUserToken:      "usertoken",
-		AppleKeyID:          "KEYID123",
-		AppleTeamID:         "TEAMID456",
 		StoreFront:          "de",
 		AuthPort:            8888,
-		Provider:            "apple",
-		Theme:               "dark",
 	}
 
 	if err := original.Save(path); err != nil {
@@ -188,7 +173,7 @@ func TestSave_RoundTrip(t *testing.T) {
 
 func TestSave_CreatesDirectories(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deep", "nested", "dir", "config.json")
-	cfg := &config.Config{StoreFront: "fr", AuthPort: 7777, Provider: "apple", Theme: "default"}
+	cfg := &config.Config{StoreFront: "fr", AuthPort: 7777}
 
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -203,7 +188,7 @@ func TestSave_FilePermissions(t *testing.T) {
 		t.Skip("Windows uses inherited profile ACLs, not Unix permission bits")
 	}
 	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := &config.Config{StoreFront: "us", AuthPort: 7777, Provider: "apple", Theme: "default"}
+	cfg := &config.Config{StoreFront: "us", AuthPort: 7777}
 
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
@@ -241,7 +226,7 @@ func TestConfigPath_UsesPlatformDirectory(t *testing.T) {
 
 func TestSave_WriteError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := &config.Config{StoreFront: "us", AuthPort: 7777, Provider: "apple", Theme: "default"}
+	cfg := &config.Config{StoreFront: "us", AuthPort: 7777}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("initial Save: %v", err)
 	}
@@ -257,8 +242,8 @@ func TestLoad_NormalizesOnLoad(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	// Write a config with 0 AuthPort and empty Provider — normalize should fix both.
-	raw := `{"auth_port": 0, "provider": "", "storefront": "us"}`
+	// Write a config with 0 AuthPort — normalize should fix it.
+	raw := `{"auth_port": 0, "storefront": "us"}`
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil { //nolint:gosec // test fixture
 		t.Fatal(err)
 	}
@@ -270,9 +255,6 @@ func TestLoad_NormalizesOnLoad(t *testing.T) {
 	if cfg.AuthPort != 7777 {
 		t.Errorf("AuthPort = %d, want 7777 (normalize should have set it)", cfg.AuthPort)
 	}
-	if cfg.Provider != "apple" {
-		t.Errorf("Provider = %q, want 'apple' (normalize should have set it)", cfg.Provider)
-	}
 }
 
 // --- Save with override path ---
@@ -280,7 +262,7 @@ func TestLoad_NormalizesOnLoad(t *testing.T) {
 func TestSave_WithOverridePath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "override-config.json")
-	cfg := &config.Config{AuthPort: 1234, Provider: "apple", StoreFront: "gb"}
+	cfg := &config.Config{AuthPort: 1234, StoreFront: "gb"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -304,7 +286,6 @@ func TestSave_UsesLoadedOverrideWhenPathOmitted(t *testing.T) {
 	override := writeCfg(t, map[string]any{
 		"storefront": "us",
 		"auth_port":  7777,
-		"provider":   "apple",
 	})
 
 	cfg, err := config.Load(override)
@@ -401,5 +382,5 @@ func TestAudioCacheMBRoundTrips(t *testing.T) {
 }
 
 func testConfigWithDefaults() *config.Config {
-	return &config.Config{AuthPort: 7777, Provider: "apple", Theme: "default"}
+	return &config.Config{AuthPort: 7777}
 }

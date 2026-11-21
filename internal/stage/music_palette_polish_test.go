@@ -213,7 +213,7 @@ func TestPaletteListThumbs(t *testing.T) {
 
 // A6: the menu of the grid opens under the selected tile and stays inside the panel.
 func TestPaletteGridMenuAnchor(t *testing.T) {
-	m, r := paletteSetup(t, 160, 45, "palette")
+	m, r := paletteSetup(t, 160, 34, "palette")
 	m.JumpPlay(threeTracks(), 0, 0)
 	m.Key("m", "m")
 	steps(m, 0.2)

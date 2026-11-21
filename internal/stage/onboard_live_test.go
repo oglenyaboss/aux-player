@@ -33,7 +33,7 @@ func frameRow(frame, sub string) string {
 }
 
 // toAgent walks the Apple Music step with the host answering the sign-in, landing on
-// the agent step with OpenRouter selected.
+// the agent step with OpenCode Go selected.
 func toAgent(m *Model) {
 	m.Key("enter", "")
 	m.StepDone(0, "")
@@ -96,8 +96,8 @@ func TestOnboardLoadModels(t *testing.T) {
 	r := &recorder{}
 	m := liveOnboard(t, Options{}, r)
 	modelsStep(t, m)
-	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://openrouter.ai/api/v1", Key: "k1"}) {
-		t.Fatalf("ждём LoadModels{https://openrouter.ai/api/v1, k1}, записано %v", r.acts)
+	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{Provider: "opencode-go", URL: "https://opencode.ai/inference/go/v1", Key: "k1"}) {
+		t.Fatalf("ждём LoadModels{https://opencode.ai/inference/go/v1, k1}, записано %v", r.acts)
 	}
 	steps(m, 3)
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubLoading {
@@ -143,7 +143,7 @@ func TestOnboardCustomURL(t *testing.T) {
 	m.Key("enter", "")
 	m.StepDone(0, "")
 	steps(m, 2)
-	for range 5 {
+	for range 7 {
 		m.Key("down", "")
 	}
 	if _, sub, _, ok := m.Onboarding(); !ok || sub != SubProvider {
@@ -153,7 +153,7 @@ func TestOnboardCustomURL(t *testing.T) {
 	m.Key("", "localhost:8080/v1")
 	m.Key("enter", "")
 	m.Key("enter", "")
-	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{URL: "https://localhost:8080/v1"}) {
+	if got := recorded[LoadModels](r); len(got) != 1 || got[0] != (LoadModels{Provider: "custom", URL: "https://localhost:8080/v1"}) {
 		t.Fatalf("ждём LoadModels{https://localhost:8080/v1}, записано %v", r.acts)
 	}
 }
@@ -172,7 +172,7 @@ func TestOnboardSetup(t *testing.T) {
 	if len(setups) != 1 {
 		t.Fatalf("ждём ровно один Setup, записано %v", r.acts)
 	}
-	want := Setup{Lang: "ru", URL: "https://openrouter.ai/api/v1", Key: "k1", Model: "a/x", Effort: "high", Lastfm: false}
+	want := Setup{Lang: "ru", Provider: "opencode-go", URL: "https://opencode.ai/inference/go/v1", Key: "k1", Model: "a/x", Effort: "high", Lastfm: false}
 	if setups[0] != want {
 		t.Fatalf("Setup %+v, ждём %+v", setups[0], want)
 	}
