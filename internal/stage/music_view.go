@@ -121,7 +121,11 @@ func (m *Model) drawMusicTabs(f *fb) {
 	y := musicTabsY
 	x := musicMargin
 	for s := MusicFavorites; s <= MusicSearch; s++ {
-		lab := []rune(musicTabLabel(s))
+		label := musicTabLabel(s)
+		if s == m.mu.tab && mlSortable(s) {
+			label += " · " + m.mu.tabs[s].sort.label()
+		}
+		lab := []rune(label)
 		if x+len(lab) > right {
 			return
 		}

@@ -354,6 +354,52 @@ func TestMusicMenuFavorite(t *testing.T) {
 	}
 }
 
+// A9: ctrl+e on an album tile expands it and appends its tracks to the queue;
+// the stage and a follow session learn them too, as a single append does.
+func TestMusicAppendAlbum(t *testing.T) {
+	p := newMusicProvider()
+	m, mp := musicTestModel(t, p)
+	m.vibeAI.follow = true
+	openSection(t, m, 2)
+	musicFeed(t, m, press(m, "ctrl+e"))
+	if len(mp.appendQueueIDs) != 1 || len(mp.appendQueueIDs[0]) != 2 ||
+		mp.appendQueueIDs[0][0] != "i.b1" || mp.appendQueueIDs[0][1] != "i.b2" {
+		t.Fatalf("appendQueueIDs = %v, want one call with [i.b1 i.b2]", mp.appendQueueIDs)
+	}
+	if n := len(m.vibeAI.followSongs); n != 2 {
+		t.Fatalf("followSongs = %+v, want the two album tracks", m.vibeAI.followSongs)
+	}
+	if frame := musicFrame(m, 0.2); !strings.Contains(frame, "+2 queued") {
+		t.Errorf("the stage did not learn the queue additions:\n%s", frame)
+	}
+	if frame := musicFrame(m, 0.2); !strings.Contains(frame, "queued: Blonde") {
+		t.Errorf("the queue notice is missing:\n%s", frame)
+	}
+}
+
+// A9: a collection whose every track is an upload without a catalog match
+// appends nothing and says so.
+func TestMusicAppendAlbumAllUploads(t *testing.T) {
+	p := newMusicProvider()
+	p.collTracks["l.a1"] = []provider.Track{{ID: "i.u1", Title: "Upload", Artist: "Someone"}}
+	m, mp := musicTestModel(t, p)
+	openSection(t, m, 2)
+	musicFeed(t, m, press(m, "ctrl+e"))
+	if len(mp.appendQueueIDs) != 0 {
+		t.Fatalf("appendQueueIDs = %v, want nothing queued", mp.appendQueueIDs)
+	}
+	if frame := musicFrame(m, 0.2); !strings.Contains(frame, "nothing to queue") {
+		t.Errorf("the empty append is not named:\n%s", frame)
+	}
+}
+
+// A9: the row carries the provider's favorite flag, which the favorites sort reads.
+func TestMusicSongItemMapsFavorite(t *testing.T) {
+	if it := musicSongItem(provider.Track{ID: "i.1", Title: "T", Favorite: true}); !it.Fav {
+		t.Fatalf("musicSongItem = %+v, want Fav from the provider track", it)
+	}
+}
+
 // A9: play all on an album tile expands it and queues its tracks.
 func TestMusicPlayAll(t *testing.T) {
 	p := newMusicProvider()

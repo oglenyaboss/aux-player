@@ -36,6 +36,7 @@ type MusicItem struct {
 	Album      string // the album of a song; the album eggs match on it
 	Dur        float64
 	Count      int    // tracks in a collection
+	Fav        bool   // in Favorites; the favorites sort puts these first
 	Unplayable string // why it cannot play here; "" plays
 }
 
@@ -71,7 +72,8 @@ type MusicPlay struct {
 	From  *MusicItem
 }
 
-// MusicAppend asks the host to put one song at the end of the queue.
+// MusicAppend asks the host to put one song, or a whole collection it expands,
+// at the end of the queue.
 type MusicAppend struct {
 	Item MusicItem
 }
@@ -105,6 +107,8 @@ type MusicPlayAll struct {
 // musicTab is the rows and the request state of one section.
 type musicTab struct {
 	items   []MusicItem
+	fresh   []MusicItem // the host's rows, newest first, before any sort
+	sort    mlSort
 	query   string
 	err     string
 	sent    bool // a load went out and has not failed
@@ -291,7 +295,8 @@ func (m *Model) MusicRows(gen int, items []MusicItem, err string) {
 	t := &m.mu.tabs[m.mu.reqTab]
 	t.loading, t.err = false, err
 	if err == "" {
-		t.items = slices.Clone(items)
+		t.fresh = slices.Clone(items)
+		t.items = mlSorted(t.sort, t.fresh)
 		t.sel = musicClamp(t.sel, len(t.items))
 	}
 	m.mu.selT, m.mu.cascT, m.mu.glideSnap = m.t, m.t, true
@@ -317,8 +322,10 @@ func (m *Model) MusicUpdate(sec MusicSection, parentKey string, items []MusicIte
 			swapped = true
 		}
 	} else if t := &m.mu.tabs[sec]; t.sent && !t.loading && t.err == "" {
-		t.sel = musicKeepSel(t.items, t.sel, items)
-		t.items = slices.Clone(items)
+		t.fresh = slices.Clone(items)
+		sorted := mlSorted(t.sort, t.fresh)
+		t.sel = musicKeepSel(t.items, t.sel, sorted)
+		t.items = sorted
 		swapped = true
 	}
 	if swapped && m.musicStyle() != musicStyleFull {
@@ -566,10 +573,6 @@ func (m *Model) musicAppend() {
 		m.MusicNotice(it.Unplayable)
 		return
 	}
-	if it.Kind != MusicSong {
-		m.MusicNotice(tr("в очередь добавляется трек — открой коллекцию", "append works on a track — open the collection"))
-		return
-	}
 	m.send(MusicAppend{Item: it})
 }
 
@@ -642,6 +645,8 @@ func (m *Model) musicKey(k, text string) bool {
 		m.musicSelect(0)
 	case "end", "G":
 		m.musicSelect(len(m.musicViewState().items) - 1)
+	case "ctrl+s":
+		m.mlCycleSort()
 	case "left", "shift+tab":
 		m.musicSwitch(m.mu.tab - 1)
 	case "right", "tab":

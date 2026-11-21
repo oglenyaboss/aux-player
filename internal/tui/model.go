@@ -215,7 +215,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SaveTrackMsg, saveTrackDoneMsg:
 		cmds = append(cmds, m.handleSaveMsg(msg))
 
-	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicFollowMsg,
+	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicAppendTracksMsg, musicFollowMsg,
 		musicRefreshMsg, musicCheckedMsg:
 		cmds = append(cmds, m.handleMusicMsg(msg))
 

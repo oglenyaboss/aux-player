@@ -47,6 +47,7 @@ func (m *Model) mlMenuItems() []mlMenuEntry {
 	return []mlMenuEntry{
 		{mlMenuOpen, tr("открыть", "open")},
 		{mlMenuPlayAll, tr("играть всё", "play all")},
+		{mlMenuQueue, tr("в очередь", "add to queue")},
 		{mlMenuFollow, m.mlFollowLabel()},
 		settings,
 	}

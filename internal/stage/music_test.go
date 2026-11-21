@@ -222,7 +222,7 @@ func TestMusicCollectionDrill(t *testing.T) {
 	}
 }
 
-// A8: a on a song appends it; a on a collection only says to open the collection.
+// A8: a on a song appends it; a on a collection appends the whole of it.
 func TestMusicAppend(t *testing.T) {
 	m, r := musicSetup(t, 110, 32)
 	m.Key("ctrl+o", "")
@@ -235,13 +235,10 @@ func TestMusicAppend(t *testing.T) {
 	m.Key("right", "")
 	pl := MusicItem{ID: "p1", Kind: MusicPlaylist, Title: "Mix", Count: 4}
 	m.MusicRows(2, []MusicItem{pl}, "")
-	before := len(r.acts)
 	m.Key("a", "")
-	if len(r.acts) != before {
-		t.Fatalf("a on a collection sent %+v, want nothing", r.acts[before:])
-	}
-	if frame := stripANSI(m.View()); !strings.Contains(frame, "append works on a track") {
-		t.Errorf("no notice about the collection:\n%s", frame)
+	app = recorded[MusicAppend](r)
+	if len(app) != 2 || app[1].Item.ID != "p1" {
+		t.Fatalf("appends = %+v, want the playlist too", app)
 	}
 }
 

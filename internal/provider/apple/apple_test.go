@@ -1944,3 +1944,37 @@ func TestAddToLibrary_ServerError(t *testing.T) {
 		t.Fatal("AddToLibrary: expected an error on 500")
 	}
 }
+
+func TestGetLibraryTracks_SortsByDateAdded(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.String())
+		switch len(paths) {
+		case 1:
+			writeJSON(t, w, map[string]any{
+				"data": []any{songJSON("1", "Track 1", "Art", "Alb", 100000, "")},
+				"next": "/me/library/songs?limit=100&offset=100",
+			})
+		case 2:
+			writeJSON(t, w, map[string]any{
+				"data": []any{songJSON("2", "Track 2", "Art", "Alb", 100000, "")},
+				"next": "",
+			})
+		}
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+	tracks, err := p.GetLibraryTracks(context.Background())
+	if err != nil {
+		t.Fatalf("GetLibraryTracks: %v", err)
+	}
+	if len(tracks) != 2 || len(paths) != 2 {
+		t.Fatalf("tracks = %d, pages = %d, want 2 of each", len(tracks), len(paths))
+	}
+	for i, path := range paths {
+		if !strings.Contains(path, "sort=-dateAdded") {
+			t.Errorf("page %d = %s, want sort=-dateAdded on every page", i+1, path)
+		}
+	}
+}

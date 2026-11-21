@@ -520,7 +520,8 @@ func TestNoteSaved(t *testing.T) {
 
 	s.NoteSaved(provider.Track{ID: "i.2", Title: "New"}, true)
 	e := readStored(t, s, Songs, "")
-	if len(e.Songs) != 2 || e.Songs[1].ID != "i.2" || !e.Songs[1].Favorite {
+	// The songs are newest first, so the track AUX itself saved goes to the head.
+	if len(e.Songs) != 2 || e.Songs[0].ID != "i.2" || !e.Songs[0].Favorite {
 		t.Fatalf("after new save songs = %+v", e.Songs)
 	}
 	if !e.Fetched.Equal(fetched) {
@@ -538,7 +539,7 @@ func TestNoteSaved(t *testing.T) {
 
 	s.NoteSaved(provider.Track{ID: "i.3", CatalogID: "777", Title: "Library"}, false)
 	s.NoteSaved(provider.Track{ID: "777", CatalogID: "777", Title: "From search"}, true)
-	if e = readStored(t, s, Songs, ""); len(e.Songs) != 3 || e.Songs[2].ID != "i.3" || !e.Songs[2].Favorite {
+	if e = readStored(t, s, Songs, ""); len(e.Songs) != 3 || e.Songs[0].ID != "i.3" || !e.Songs[0].Favorite {
 		t.Fatalf("a catalog save of a library song = %+v, want i.3 flagged and not duplicated", e.Songs)
 	}
 
@@ -719,5 +720,18 @@ func TestNoteSavedDuringRefresh(t *testing.T) {
 	}
 	if e := readStored(t, s, Songs, ""); !has(e.Songs) {
 		t.Fatalf("songs file lost the save: %+v", e.Songs)
+	}
+}
+
+// A track AUX itself saved is the newest one, so fold puts it at the head of
+// the fresh-first songs.
+func TestFoldPutsNewTrackFirst(t *testing.T) {
+	old := []provider.Track{{ID: "a", Title: "Old"}, {ID: "b", Title: "Older"}}
+	got := fold(old, provider.Track{ID: "c", Title: "Newest"}, true)
+	if len(got) != 3 || got[0].ID != "c" || !got[0].Favorite {
+		t.Fatalf("fold = %+v, want the new favorite track first", got)
+	}
+	if got[1].ID != "a" || got[2].ID != "b" {
+		t.Fatalf("fold = %+v, want the stored order behind it", got)
 	}
 }

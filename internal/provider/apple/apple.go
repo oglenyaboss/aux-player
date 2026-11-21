@@ -24,14 +24,15 @@ const (
 	favoritesPlaylistID   = provider.FavoritesPlaylistID
 	favoritesPlaylistName = "Favorites"
 	// favoritesEndpoint asks Apple to report inFavorites on every library song.
-	favoritesEndpoint = "/me/library/songs?limit=100&extend=inFavorites"
+	favoritesEndpoint = "/me/library/songs?limit=100&extend=inFavorites&sort=-dateAdded"
 	// maxResponseBody bounds how much of any API response is read.
 	maxResponseBody = 32 << 20
 )
 
-// favoritesPageParams keep the inFavorites extension on pages reached through
-// a "next" link, which carries only the parameters Apple chose to repeat.
-var favoritesPageParams = url.Values{"limit": {"100"}, "extend": {"inFavorites"}}
+// favoritesPageParams keep the inFavorites extension and the date-added sort on
+// pages reached through a "next" link, which carries only the parameters Apple
+// chose to repeat.
+var favoritesPageParams = url.Values{"limit": {"100"}, "extend": {"inFavorites"}, "sort": {"-dateAdded"}}
 
 // resolveURL turns an endpoint into the URL to request. A relative endpoint
 // is joined to base. An absolute one, which is how Apple's "next" pagination
@@ -1083,9 +1084,9 @@ func (a *AppleProvider) GetCatalogPlaylistTracks(ctx context.Context, playlistID
 }
 
 // getFavoriteTracks returns the library songs Apple Music marks as Favorites,
-// in library order. The extension is re-applied to every page because Apple's
-// "next" links drop it, and a page fetched without it reports every song as
-// not favourite.
+// newest first: the endpoint sorts by date added. The extension is re-applied
+// to every page because Apple's "next" links drop it, and a page fetched
+// without it reports every song as not favourite.
 func (a *AppleProvider) getFavoriteTracks(ctx context.Context) ([]provider.Track, error) {
 	resources, err := a.fetchSongResources(ctx, favoritesEndpoint, favoritesPageParams)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -18,6 +19,71 @@ const (
 	mlModeMusic mlMode = iota
 	mlModeAgent
 )
+
+// mlSort is the row order of a song tab: the host's rows newest first, or one of
+// the orders the listener cycles with ctrl+s.
+type mlSort int
+
+const (
+	mlSortFresh mlSort = iota
+	mlSortTitle
+	mlSortArtist
+	mlSortFav
+	mlSortCount
+)
+
+var mlSortLabels = [mlSortCount][2]string{
+	{"свежие", "recent"},
+	{"название", "title"},
+	{"артист", "artist"},
+	{"фавориты", "favorites"},
+}
+
+func (s mlSort) label() string { return tr(mlSortLabels[s][0], mlSortLabels[s][1]) }
+
+// mlSortable is whether a section's rows can be re-ordered: the song tabs. The
+// search, the grid tabs and a drilled collection keep their own order.
+func mlSortable(sec MusicSection) bool { return sec == MusicSongs || sec == MusicFavorites }
+
+// mlSorted lays rows in the given sort; fresh keeps the host's order, which the
+// library fetch sorts newest first, and every other sort is stable over it.
+func mlSorted(mode mlSort, items []MusicItem) []MusicItem {
+	out := slices.Clone(items)
+	switch mode {
+	case mlSortTitle:
+		sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title) })
+	case mlSortArtist:
+		sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Artist) < strings.ToLower(out[j].Artist) })
+	case mlSortFav:
+		sort.SliceStable(out, func(i, j int) bool { return out[i].Fav && !out[j].Fav })
+	}
+	return out
+}
+
+// mlCycleSort turns the tab's sort over, keeping the highlight on its row.
+func (m *Model) mlCycleSort() {
+	if m.mu.list.root || m.mu.coll != nil || m.mu.list.query != "" || !mlSortable(m.mu.tab) {
+		return
+	}
+	t := &m.mu.tabs[m.mu.tab]
+	key := ""
+	if m.musicStyle() == musicStyleFull {
+		if t.sel >= 0 && t.sel < len(t.items) {
+			key = t.items[t.sel].Key()
+		}
+	} else if l, ok := m.mlSelected(); ok {
+		key = l.it.Key()
+	}
+	old := t.items
+	t.sort = (t.sort + 1) % mlSortCount
+	t.items = mlSorted(t.sort, t.fresh)
+	m.mu.selT, m.mu.glideSnap = m.t, true
+	if m.musicStyle() == musicStyleFull {
+		t.sel = musicKeepSel(old, t.sel, t.items)
+		return
+	}
+	m.mlReselect(key)
+}
 
 // musicList is the navigation of the palette and the drawer: the level, the query and
 // the line under the highlight. A level is the root entries, a section of them, or the
@@ -647,7 +713,8 @@ func (m *Model) mlPlay(l mlLine) {
 	m.mu.playKey, m.mu.playT = l.it.Key(), m.t
 }
 
-// mlAppend puts the song under the highlight at the end of the queue.
+// mlAppend puts the row under the highlight at the end of the queue: one song,
+// or the whole collection, which the host expands.
 func (m *Model) mlAppend() {
 	l, ok := m.mlSelected()
 	if !ok || (l.kind != mlSong && l.kind != mlTile) {
@@ -655,10 +722,6 @@ func (m *Model) mlAppend() {
 	}
 	if l.it.Unplayable != "" {
 		m.MusicNotice(l.it.Unplayable)
-		return
-	}
-	if l.it.Kind != MusicSong {
-		m.MusicNotice(tr("в очередь добавляется трек — открой коллекцию", "append works on a track — open the collection"))
 		return
 	}
 	m.send(MusicAppend{Item: l.it})
@@ -695,6 +758,7 @@ func (m *Model) mlAgentText() string {
 }
 
 // mlCrumb is the breadcrumb of the level, empty at the root and under a query.
+// A song tab names the sort it is in.
 func (m *Model) mlCrumb() string {
 	if m.mu.list.query != "" || m.mu.list.root {
 		return ""
@@ -702,6 +766,9 @@ func (m *Model) mlCrumb() string {
 	root := musicTabLabel(m.mu.tab)
 	if c := m.mu.coll; c != nil {
 		return root + " › " + c.parent.Title
+	}
+	if mlSortable(m.mu.tab) {
+		return root + " · " + m.mu.tabs[m.mu.tab].sort.label()
 	}
 	return root
 }
@@ -784,6 +851,8 @@ func (m *Model) musicListKey(k, text string) bool {
 		m.mlAppend()
 	case "ctrl+n":
 		m.mlToggleFollow()
+	case "ctrl+s":
+		m.mlCycleSort()
 	case "right":
 		if !palette {
 			return false
@@ -1512,7 +1581,7 @@ func (m *Model) mlBarCaps() [][2]string {
 		caps = append(caps, [2]string{"ctrl+n", m.mlFollowLabel()})
 	}
 	if m.musicStyle() == musicStylePalette {
-		if ok && l.kind == mlSong && l.it.Kind == MusicSong && l.it.Unplayable == "" {
+		if ok && (l.kind == mlSong || l.kind == mlTile) && l.it.Unplayable == "" {
 			caps = append(caps, [2]string{"ctrl+e", tr("в очередь", "queue")})
 		}
 		if !ok || l.kind != mlMore {
