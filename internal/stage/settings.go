@@ -382,7 +382,7 @@ func settingsFormNeed(a *agentForm) int {
 
 func (m *Model) drawSettings(f *fb) {
 	s := m.settings
-	w := min(64, max(8, m.w-4))
+	w := min(72, max(8, m.w-4))
 	need := len(s.lines()) + 6
 	if s.form != nil {
 		need = settingsFormNeed(s.form) + 4
