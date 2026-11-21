@@ -22,6 +22,7 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/tui/art"
 	"github.com/oglenyaboss/aux-player/internal/vibeai"
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 type stageScreen struct {
@@ -344,6 +345,28 @@ func (s *stageScreen) act(a stage.Action) {
 		if err := cfg.Save(""); err != nil {
 			s.host.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 		}
+	case stage.LoadMemory:
+		s.cmds = append(s.cmds, s.host.loadMemoryCmd())
+	case stage.MemoryAdd:
+		s.cmds = append(s.cmds, s.host.mutateMemoryCmd(func(st *memory.Store) error {
+			return st.Add(a.Text, "edited in settings")
+		}))
+	case stage.MemoryEdit:
+		s.cmds = append(s.cmds, s.host.mutateMemoryCmd(func(st *memory.Store) error {
+			ev := "edited in settings"
+			if entries := st.Entries(); a.Index >= 0 && a.Index < len(entries) && entries[a.Index].Evidence != "" {
+				ev = entries[a.Index].Evidence
+			}
+			return st.ReplaceAt(a.Index, a.Text, ev)
+		}))
+	case stage.MemoryDelete:
+		s.cmds = append(s.cmds, s.host.mutateMemoryCmd(func(st *memory.Store) error {
+			return st.RemoveAt(a.Index)
+		}))
+	case stage.LoadRated:
+		s.cmds = append(s.cmds, s.host.loadRatedCmd())
+	case stage.RatedSet:
+		s.cmds = append(s.cmds, s.host.setRatedCmd(a))
 	case stage.ConnectApple:
 		if s.host.appleLogin != nil {
 			// The sign-in waits for the onboarding to ask; the answer lands

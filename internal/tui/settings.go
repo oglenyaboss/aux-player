@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/oglenyaboss/aux-player/internal/stage"
 	"github.com/oglenyaboss/aux-player/internal/vibeai"
 	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/memory"
 )
 
 // openChatGPT, chatgptLogin and stageListChatGPTModels are the subscription's I/O
@@ -116,6 +118,12 @@ func (m *Model) settingsInfo() stage.SettingsInfo {
 			info.Usage = usageText(*l)
 		}
 	}
+	if st, err := memory.Open(vibeMemoryPath(), memory.DefaultLimit); err == nil {
+		info.MemoryCount = len(st.Entries())
+	}
+	if sig, err := vibeai.OpenSignals(vibeSignalsPath()); err == nil {
+		info.RatedCount = len(sig.Rated())
+	}
 	m.settingsErr = ""
 	return info
 }
@@ -196,3 +204,107 @@ func usageWindow(d time.Duration) string {
 
 // refreshSettings re-reads the host state into the overlay after a settings action.
 func (s *stageScreen) refreshSettings() { s.st.OpenSettings(s.host.settingsInfo()) }
+
+// vibeMemoryPath and vibeSignalsPath name the taste files the settings edit:
+// beside the config the picker already reads.
+func vibeMemoryPath() string  { return filepath.Join(vibeMemDir(), "vibe-memory.md") }
+func vibeSignalsPath() string { return filepath.Join(vibeMemDir(), "vibe-signals.jsonl") }
+
+// loadMemoryCmd reads the picker's memory for the settings' memory sub-screen.
+func (m *Model) loadMemoryCmd() tea.Cmd {
+	r := m.vibeAI
+	return func() tea.Msg {
+		if r != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+		}
+		st, err := memory.Open(vibeMemoryPath(), memory.DefaultLimit)
+		if err != nil {
+			return stageMemoryMsg{err: err.Error()}
+		}
+		return stageMemoryMsg{entries: stageMemoryEntries(st.Entries())}
+	}
+}
+
+// mutateMemoryCmd applies one edit to the picker's memory and answers with the
+// entries as they stand after it; a live engine re-reads the file at once.
+func (m *Model) mutateMemoryCmd(fn func(*memory.Store) error) tea.Cmd {
+	r := m.vibeAI
+	return func() tea.Msg {
+		if r != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+		}
+		st, err := memory.Open(vibeMemoryPath(), memory.DefaultLimit)
+		if err != nil {
+			return stageMemoryMsg{err: err.Error()}
+		}
+		err = fn(st)
+		if err == nil && r != nil && r.engine != nil {
+			_ = r.engine.ReloadMemory()
+		}
+		msg := stageMemoryMsg{entries: stageMemoryEntries(st.Entries())}
+		if err != nil {
+			msg.err = err.Error()
+		}
+		return msg
+	}
+}
+
+// loadRatedCmd reads the liked and disliked tracks for the settings' ratings sub-screen.
+func (m *Model) loadRatedCmd() tea.Cmd {
+	r := m.vibeAI
+	return func() tea.Msg {
+		if r != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+		}
+		sig, err := vibeai.OpenSignals(vibeSignalsPath())
+		if err != nil {
+			return stageRatedMsg{err: err.Error()}
+		}
+		return stageRatedMsg{songs: stageRatedSongs(sig.Rated())}
+	}
+}
+
+// setRatedCmd moves a track between liked and disliked, or clears its rating,
+// and answers with the ratings as they stand after the move; a live engine
+// re-reads the log at once.
+func (m *Model) setRatedCmd(a stage.RatedSet) tea.Cmd {
+	r := m.vibeAI
+	return func() tea.Msg {
+		if r != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+		}
+		sig, err := vibeai.OpenSignals(vibeSignalsPath())
+		if err != nil {
+			return stageRatedMsg{err: err.Error()}
+		}
+		err = sig.SetRating(a.ID, a.Artist, a.Title, a.Kind)
+		if err == nil && r != nil && r.engine != nil {
+			_ = r.engine.ReloadSignals()
+		}
+		msg := stageRatedMsg{songs: stageRatedSongs(sig.Rated())}
+		if err != nil {
+			msg.err = err.Error()
+		}
+		return msg
+	}
+}
+
+func stageMemoryEntries(src []memory.Entry) []stage.MemoryEntry {
+	out := make([]stage.MemoryEntry, len(src))
+	for i, e := range src {
+		out[i] = stage.MemoryEntry{Text: e.Text, Evidence: e.Evidence, Created: e.Created, Updated: e.Updated}
+	}
+	return out
+}
+
+func stageRatedSongs(src []vibeai.RatedTrack) []stage.RatedSong {
+	out := make([]stage.RatedSong, len(src))
+	for i, rt := range src {
+		out[i] = stage.RatedSong{ID: rt.ID, Artist: rt.Artist, Title: rt.Title, Kind: rt.Kind}
+	}
+	return out
+}

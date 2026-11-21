@@ -54,6 +54,20 @@ type vibeAISavedMsg struct {
 	err      error
 }
 
+// stageMemoryMsg answers the settings' memory row: the entries as they stand
+// after the load or edit, or why the file could not be touched.
+type stageMemoryMsg struct {
+	entries []stage.MemoryEntry
+	err     string
+}
+
+// stageRatedMsg answers the settings' ratings row: the liked and disliked tracks
+// as they stand after the load or change, or why the log could not be touched.
+type stageRatedMsg struct {
+	songs []stage.RatedSong
+	err   string
+}
+
 // vibeAIRun is the agent session behind the vibe screen. The engine runs in
 // command goroutines; mu serialises them, everything else is owned by Update.
 type vibeAIRun struct {
@@ -166,16 +180,25 @@ func waitVibeAI(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
 }
 
+// vibeMemDir is where the picker's memory and signals live: beside the config
+// when it has a home, under the cache directory otherwise.
+func vibeMemDir() string {
+	if p, err := config.ConfigPath(""); err == nil {
+		return filepath.Dir(p)
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir()
+	}
+	return filepath.Join(cacheDir, "aux", "vibe")
+}
+
 func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		cacheDir = os.TempDir()
 	}
 	cacheDir = filepath.Join(cacheDir, "aux", "vibe")
-	memDir := cacheDir
-	if p, err := config.ConfigPath(""); err == nil {
-		memDir = filepath.Dir(p)
-	}
 	lang := cfg.VibeLang
 	if lang == "" {
 		lang = stage.DefaultLang()
@@ -193,8 +216,8 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 		LLM:                 llmCfg,
 		PortionSize:         vibeAIPortion,
 		Lang:                lang,
-		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
-		SignalsPath:         filepath.Join(memDir, "vibe-signals.jsonl"),
+		MemoryPath:          vibeMemoryPath(),
+		SignalsPath:         vibeSignalsPath(),
 		CacheDir:            cacheDir,
 		RunsDir:             filepath.Join(cacheDir, "runs"),
 	}
@@ -420,6 +443,14 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 
 	case stageModelsMsg:
 		v.st.Models(msg.list, msg.total, msg.err)
+		return nil
+
+	case stageMemoryMsg:
+		v.st.SetMemory(msg.entries, msg.err)
+		return nil
+
+	case stageRatedMsg:
+		v.st.SetRated(msg.songs, msg.err)
 		return nil
 
 	case AppleLoginMsg:
