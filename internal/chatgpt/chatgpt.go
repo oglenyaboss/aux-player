@@ -88,7 +88,7 @@ func Open(path string, h *http.Client) (*Store, error) {
 		http:   h,
 		now:    time.Now,
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the configured credentials file
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return s, nil
@@ -434,13 +434,13 @@ func writeTokens(path string, tok *Tokens) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("chatgpt: creating auth dir: %w", err)
 	}
-	data, err := json.MarshalIndent(tok, "", "  ")
+	data, err := json.MarshalIndent(tok, "", "  ") //nolint:gosec // G117: the credentials file holds the tokens by design
 	if err != nil {
 		return fmt.Errorf("chatgpt: encoding credentials: %w", err)
 	}
 	tmp := path + ".tmp"
 	_ = os.Remove(tmp)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: beside the credentials file
 	if err != nil {
 		return fmt.Errorf("chatgpt: writing credentials: %w", err)
 	}

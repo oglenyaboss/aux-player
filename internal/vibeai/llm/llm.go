@@ -150,7 +150,7 @@ type wireMessage struct {
 }
 
 func marshalMessage(m Message) (json.RawMessage, error) {
-	if len(m.Raw) > 0 && !(m.Role == "assistant" && isJSONArray(m.Raw)) {
+	if len(m.Raw) > 0 && (m.Role != "assistant" || !isJSONArray(m.Raw)) {
 		return m.Raw, nil
 	}
 	wm := wireMessage{Role: m.Role, Content: m.Content}

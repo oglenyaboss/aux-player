@@ -459,9 +459,7 @@ func (m *Model) drawMemEdit(f *fb, x, y, w, h int) {
 	lines := wrapEdit(s.buf, m.memEditWidth())
 	curRow, curCol := editCursorPos(lines, s.cur)
 	s.scroll = min(max(0, len(lines)-visRows), max(0, s.scroll))
-	if curRow < s.scroll {
-		s.scroll = curRow
-	}
+	s.scroll = min(s.scroll, curRow)
 	if curRow > s.scroll+visRows-1 {
 		s.scroll = curRow - visRows + 1
 	}

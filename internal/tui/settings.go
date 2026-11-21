@@ -47,10 +47,10 @@ var chatgptSignedIn = func() bool {
 // a key provider needs its stored key, the subscription a sign-in.
 func agentReady(cfg *config.Config) (id string, ready bool) {
 	id, profile, _ := cfg.ActiveLLM()
-	switch {
-	case id == "":
+	switch id {
+	case "":
 		return "", false
-	case id == config.ChatGPTProvider:
+	case config.ChatGPTProvider:
 		return id, chatgptSignedIn()
 	default:
 		return id, profile.APIKey != ""

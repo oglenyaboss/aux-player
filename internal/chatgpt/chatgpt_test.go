@@ -70,7 +70,7 @@ func newTokenServer(t *testing.T, respond func(w http.ResponseWriter, n int)) *t
 			if err := json.NewDecoder(r.Body).Decode(&req.body); err != nil {
 				t.Errorf("decoding JSON token request: %v", err)
 			}
-		} else if err := r.ParseForm(); err != nil {
+		} else if err := r.ParseForm(); err != nil { //nolint:gosec // G120: the test server's own form
 			t.Errorf("parsing form token request: %v", err)
 		} else {
 			req.form = r.PostForm
@@ -118,7 +118,7 @@ func newEmptyStore(t *testing.T, issuerURL string) *Store {
 func newStoredStore(t *testing.T, tok *Tokens, issuerURL string, now func() time.Time) *Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), authFileName)
-	data, err := json.Marshal(tok)
+	data, err := json.Marshal(tok) //nolint:gosec // G117: the test tokens
 	if err != nil {
 		t.Fatalf("marshalling test tokens: %v", err)
 	}
@@ -138,7 +138,7 @@ func newStoredStore(t *testing.T, tok *Tokens, issuerURL string, now func() time
 
 func readTokensFile(t *testing.T, path string) Tokens {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the test store's own path
 	if err != nil {
 		t.Fatalf("reading credentials: %v", err)
 	}

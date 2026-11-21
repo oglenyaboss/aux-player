@@ -78,7 +78,7 @@ func newTestResponses(t *testing.T, cfg Config, tok Tokens, onLimits func(Limits
 
 func readSSE(t *testing.T, name string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("testdata", name))
+	b, err := os.ReadFile(filepath.Join("testdata", name)) //nolint:gosec // G304: a test fixture
 	if err != nil {
 		t.Fatal(err)
 	}

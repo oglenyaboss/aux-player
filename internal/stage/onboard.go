@@ -245,7 +245,7 @@ func (m *Model) agentKey(k, text string) {
 		}
 		return
 	}
-	if k == "tab" && o.form.sub != SubLoading {
+	if k == "tab" && o.sub != SubLoading {
 		o.agentAsk = true
 		return
 	}
@@ -260,7 +260,7 @@ func (m *Model) agentKey(k, text string) {
 func (o *onboard) setup() Setup {
 	provider, url, key, model, effort := "", "", "", "", ""
 	if o.form != nil {
-		provider, url, key, model, effort = o.form.result()
+		provider, url, key, model, effort = o.result()
 	}
 	return Setup{Lang: lang, Provider: provider, URL: url, Key: key, Model: model, Effort: effort,
 		Lastfm: o.done[2] >= 0 && !o.skipped}
@@ -291,10 +291,10 @@ func (m *Model) Models(list []ModelInfo, total int, err string) {
 		return
 	}
 	o := m.ob
-	if m.ob == nil || o.step != 1 || o.form.sub != SubLoading {
+	if m.ob == nil || o.step != 1 || o.sub != SubLoading {
 		return
 	}
-	o.form.reply(list, total, err)
+	o.reply(list, total, err)
 }
 
 // Onboarding reports where the onboarding stands: the current step, the agent step's
@@ -303,7 +303,7 @@ func (m *Model) Onboarding() (step, sub int, t float64, ok bool) {
 	if m.ob == nil {
 		return 0, 0, 0, false
 	}
-	return m.ob.step, int(m.ob.form.sub), m.ob.t, true
+	return m.ob.step, int(m.ob.sub), m.ob.t, true
 }
 
 // ---------- layout ----------
@@ -938,7 +938,7 @@ func (m *Model) drawStepBody(f *fb, i, x, y, w int, a float64) int {
 			f.fade(x, y+2, trunc(o.errMsg, w), m.th.bad, a, false)
 		}
 	case 1:
-		return m.drawAgentBody(f, x, y, w, a*easeOut(prog(o.t, o.form.subT, 0.3)))
+		return m.drawAgentBody(f, x, y, w, a*easeOut(prog(o.t, o.subT, 0.3)))
 
 	case 2:
 		if !m.o.LastfmAskKeys {

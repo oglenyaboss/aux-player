@@ -133,7 +133,7 @@ func TestAgentFormDraw(t *testing.T) {
 			t.Errorf("no-intro frame lacks %q:\n%s", want, frame)
 		}
 	}
-	for _, line := range strings.Split(frame, "\n") {
+	for line := range strings.SplitSeq(frame, "\n") {
 		if strings.Contains(line, "heart of AUX") {
 			t.Errorf("no-intro frame has the heart line:\n%s", frame)
 		}
@@ -141,7 +141,7 @@ func TestAgentFormDraw(t *testing.T) {
 	f = newFB(70, 24)
 	m.drawAgentForm(f, a, 1, 1, 60, 22, true, 1)
 	found := false
-	for _, line := range strings.Split(stripANSI(f.String()), "\n") {
+	for line := range strings.SplitSeq(stripANSI(f.String()), "\n") {
 		if strings.Contains(line, "heart of AUX") {
 			found = true
 		}
