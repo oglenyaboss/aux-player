@@ -1,6 +1,8 @@
 package stage
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -310,6 +312,229 @@ func TestSetTasteClosed(t *testing.T) {
 	m2.OpenSettings(settingsInfo())
 	if m2.settings.mem == nil {
 		t.Fatal("the refresh closed the memory sub-screen")
+	}
+}
+
+// T12: the editor wraps its buffer at word boundaries and maps the cursor onto the
+// wrapped lines.
+func TestWrapEdit(t *testing.T) {
+	cases := []struct {
+		text string
+		w    int
+		want []editLine
+	}{
+		{"", 10, []editLine{{0, 0}}},
+		{"hello world", 10, []editLine{{0, 6}, {6, 11}}},
+		{"abcdefghij", 10, []editLine{{0, 10}, {10, 10}}},
+		{"abcdefghijkl", 5, []editLine{{0, 5}, {5, 10}, {10, 12}}},
+		{"a   b", 10, []editLine{{0, 5}}},
+	}
+	for _, c := range cases {
+		if got := wrapEdit([]rune(c.text), c.w); !slices.Equal(got, c.want) {
+			t.Errorf("wrapEdit(%q, %d) = %v, want %v", c.text, c.w, got, c.want)
+		}
+	}
+	if row, col := editCursorPos(wrapEdit([]rune(""), 10), 0); row != 0 || col != 0 {
+		t.Errorf("editCursorPos(empty, 0) = (%d, %d), want (0, 0)", row, col)
+	}
+	lines := wrapEdit([]rune("abcdefghij"), 10)
+	if row, col := editCursorPos(lines, 10); row != 1 || col != 0 {
+		t.Errorf("editCursorPos(full last line, 10) = (%d, %d), want (1, 0)", row, col)
+	}
+	if row, col := editCursorPos(lines, 9); row != 0 || col != 9 {
+		t.Errorf("editCursorPos(full last line, 9) = (%d, %d), want (0, 9)", row, col)
+	}
+}
+
+// T13: the editor moves its cursor and edits in place at it, word by word included.
+func TestMemEditCursorAndOps(t *testing.T) {
+	m, r := memSetup(t)
+	lastEdit := func() MemoryEdit {
+		t.Helper()
+		edits := recorded[MemoryEdit](r)
+		if len(edits) == 0 {
+			t.Fatal("no MemoryEdit recorded")
+		}
+		return edits[len(edits)-1]
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "hello world"}}, "")
+	m.Key("enter", "")
+	for range 6 {
+		m.Key("left", "")
+	}
+	if s := m.settings.mem; s.cur != 5 {
+		t.Fatalf("after six lefts cur = %d, want 5", s.cur)
+	}
+	m.Key("", ",")
+	m.Key("enter", "")
+	if e := lastEdit(); e.Index != 0 || e.Text != "hello, world" {
+		t.Fatalf("MemoryEdit = %+v, want hello, world", e)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "hello world"}}, "")
+	m.Key("enter", "")
+	m.Key("home", "")
+	m.Key("", "! ")
+	m.Key("end", "")
+	m.Key("", "?")
+	m.Key("enter", "")
+	if e := lastEdit(); e.Text != "! hello world?" {
+		t.Fatalf("home/end edit = %q, want ! hello world?", e.Text)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "hello world"}}, "")
+	m.Key("enter", "")
+	m.Key("ctrl+a", "")
+	m.Key("", "[")
+	m.Key("ctrl+e", "")
+	m.Key("", "]")
+	m.Key("enter", "")
+	if e := lastEdit(); e.Text != "[hello world]" {
+		t.Fatalf("ctrl+a/ctrl+e edit = %q, want [hello world]", e.Text)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "hello world"}}, "")
+	m.Key("enter", "")
+	m.Key("home", "")
+	m.Key("delete", "")
+	m.Key("ctrl+d", "")
+	if s := m.settings.mem; string(s.buf) != "llo world" || s.cur != 0 {
+		t.Fatalf("after deletes buf = %q cur = %d, want llo world at 0", string(s.buf), s.cur)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "любит джаз и соул"}}, "")
+	m.Key("enter", "")
+	m.Key("ctrl+w", "")
+	if s := m.settings.mem; string(s.buf) != "любит джаз и " || s.cur != 13 {
+		t.Fatalf("after ctrl+w buf = %q cur = %d", string(s.buf), s.cur)
+	}
+	m.Key("alt+backspace", "")
+	if s := m.settings.mem; string(s.buf) != "любит джаз " || s.cur != 11 {
+		t.Fatalf("after alt+backspace buf = %q cur = %d", string(s.buf), s.cur)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "любит джаз и соул"}}, "")
+	m.Key("enter", "")
+	s := m.settings.mem
+	jump := func(k string, want int) {
+		t.Helper()
+		m.Key(k, "")
+		if s.cur != want {
+			t.Fatalf("after %s cur = %d, want %d", k, s.cur, want)
+		}
+	}
+	jump("alt+left", 13)
+	jump("ctrl+left", 11)
+	jump("alt+b", 6)
+	jump("alt+right", 10)
+	jump("ctrl+right", 12)
+	jump("alt+f", 17)
+	m.Key("", "!")
+	m.Key("enter", "")
+	if e := lastEdit(); e.Text != "любит джаз и соул!" {
+		t.Fatalf("word-jump edit = %q, want любит джаз и соул!", e.Text)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: "hello world"}}, "")
+	m.Key("enter", "")
+	m.Key("ctrl+a", "")
+	for range 5 {
+		m.Key("right", "")
+	}
+	m.Key("ctrl+u", "")
+	if s := m.settings.mem; string(s.buf) != " world" || s.cur != 0 {
+		t.Fatalf("after ctrl+u buf = %q cur = %d", string(s.buf), s.cur)
+	}
+	m.Key("right", "")
+	m.Key("right", "")
+	m.Key("ctrl+k", "")
+	if s := m.settings.mem; string(s.buf) != " w" || s.cur != 2 {
+		t.Fatalf("after ctrl+k buf = %q cur = %d", string(s.buf), s.cur)
+	}
+
+	m.SetMemory([]MemoryEntry{{Text: strings.Repeat("a", 295)}}, "")
+	m.Key("enter", "")
+	m.Key("home", "")
+	m.Paste(strings.Repeat("b", 10))
+	if s := m.settings.mem; len(s.buf) != 300 || s.cur != 5 || string(s.buf[:5]) != "bbbbb" || string(s.buf[5:]) != strings.Repeat("a", 295) {
+		t.Fatalf("cap insert: len = %d cur = %d head = %q", len(s.buf), s.cur, string(s.buf[:min(10, len(s.buf))]))
+	}
+}
+
+// T14: long entries wrap across the frame and up/down move between the wrapped lines.
+func TestMemEditUpDownAndWrapRender(t *testing.T) {
+	m, r := memSetup(t)
+	var b strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&b, "w%03d ", i)
+	}
+	m.SetMemory([]MemoryEntry{{Text: b.String()}}, "")
+	m.Key("enter", "")
+	frame := settingsFrame(m)
+	if !strings.Contains(frame, "w000") || !strings.Contains(frame, "w029") {
+		t.Errorf("the wrapped frame lost the start or the end of the entry:\n%s", frame)
+	}
+	if !strings.Contains(frame, "150/300") {
+		t.Errorf("the frame lacks the 150/300 counter:\n%s", frame)
+	}
+
+	m.Key("up", "")
+	if s := m.settings.mem; s.cur >= 130 {
+		t.Fatalf("up from the last line kept cur = %d, want a line above", s.cur)
+	}
+	m.Key("", "X")
+	m.Key("down", "")
+	m.Key("", "Y")
+	m.Key("enter", "")
+	edits := recorded[MemoryEdit](r)
+	if len(edits) != 1 {
+		t.Fatalf("MemoryEdit = %+v, want one", edits)
+	}
+	x := strings.Index(edits[0].Text, "X")
+	y := strings.Index(edits[0].Text, "Y")
+	if x < 65 || x >= 130 {
+		t.Errorf("X landed at %d, want on the middle wrapped line [65,130)", x)
+	}
+	if y < 130 {
+		t.Errorf("Y landed at %d, want on the last wrapped line", y)
+	}
+}
+
+// T15: the narrow screen scrolls the wrapped entry to keep the cursor visible.
+func TestMemEditScrollNarrow(t *testing.T) {
+	m, _ := settingsSetup(t)
+	m.SetSize(40, 15)
+	m.OpenSettings(settingsInfo())
+	settingsDown(m, 10)
+	m.Key("up", "")
+	m.Key("enter", "")
+	var b strings.Builder
+	for i := range 52 {
+		fmt.Fprintf(&b, "w%03d ", i)
+	}
+	m.SetMemory([]MemoryEntry{{Text: b.String()}}, "")
+	m.Key("enter", "")
+
+	m.Key("home", "")
+	top := settingsFrame(m)
+	if s := m.settings.mem; s.scroll != 0 {
+		t.Fatalf("scroll at the top = %d, want 0", s.scroll)
+	}
+	if !strings.Contains(top, "w000") {
+		t.Errorf("the top of the entry left the frame:\n%s", top)
+	}
+
+	m.Key("end", "")
+	bottom := settingsFrame(m)
+	if s := m.settings.mem; s.scroll <= 0 {
+		t.Fatalf("scroll at the end = %d, want past the top", s.scroll)
+	}
+	if !strings.Contains(bottom, "w051") {
+		t.Errorf("the end of the entry left the frame:\n%s", bottom)
+	}
+	if strings.Contains(bottom, "w000") {
+		t.Errorf("the top stayed visible after scrolling to the end:\n%s", bottom)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode"
 )
 
 // MemoryEntry is one line of the picker agent's memory, as the settings show it.
@@ -28,6 +29,8 @@ type memUI struct {
 	editing bool
 	editIdx int // -1 for a new entry
 	buf     []rune
+	cur     int // cursor offset into buf
+	scroll  int // first wrapped row on screen
 	errMsg  string
 }
 
@@ -135,13 +138,14 @@ func (m *Model) settingsMemKey(k, text string) {
 	case "down", "j":
 		s.sel = min(max(0, len(s.entries)-1), s.sel+1)
 	case "a":
-		s.editing, s.editIdx, s.buf, s.errMsg = true, -1, nil, ""
+		s.editing, s.editIdx, s.buf, s.cur, s.scroll, s.errMsg = true, -1, nil, 0, 0, ""
 	case "enter", "e":
 		switch {
 		case armed:
 			m.memDelete()
 		case len(s.entries) > 0:
-			s.editing, s.editIdx, s.buf, s.errMsg = true, s.sel, []rune(singleLine(s.entries[s.sel].Text)), ""
+			buf := []rune(singleLine(s.entries[s.sel].Text))
+			s.editing, s.editIdx, s.buf, s.cur, s.scroll, s.errMsg = true, s.sel, buf, len(buf), 0, ""
 		}
 	case "d", "backspace":
 		if len(s.entries) > 0 {
@@ -160,11 +164,85 @@ func (m *Model) memDelete() {
 	s.loading, s.confirm = true, false
 }
 
+// editLine is one soft-wrapped row of the memory editor: buf[start:end].
+type editLine struct{ start, end int }
+
+// wrapEdit partitions buf into wrapped rows of at most w runes, breaking after the
+// last space of the window and keeping every space verbatim; a full last row gets an
+// empty trailing row so the end cursor still sits inside the width.
+func wrapEdit(buf []rune, w int) []editLine {
+	w = max(1, w)
+	if len(buf) == 0 {
+		return []editLine{{0, 0}}
+	}
+	var lines []editLine
+	for pos := 0; pos < len(buf); {
+		end := len(buf)
+		if len(buf)-pos > w {
+			end = -1
+			for i := pos + w - 1; i >= pos; i-- {
+				if buf[i] == ' ' {
+					end = i + 1
+					break
+				}
+			}
+			if end < 0 {
+				end = pos + w
+			}
+		}
+		lines = append(lines, editLine{pos, end})
+		pos = end
+	}
+	if last := lines[len(lines)-1]; last.end-last.start == w {
+		lines = append(lines, editLine{len(buf), len(buf)})
+	}
+	return lines
+}
+
+// editCursorPos maps a buffer offset onto its wrapped row and column.
+func editCursorPos(lines []editLine, cur int) (row, col int) {
+	for i, l := range lines {
+		if cur < l.end || i == len(lines)-1 {
+			return i, cur - l.start
+		}
+	}
+	return 0, 0
+}
+
+// memWordStart is the start of the word left of cur: trailing spaces first, then the word.
+func memWordStart(buf []rune, cur int) int {
+	i := cur
+	for i > 0 && unicode.IsSpace(buf[i-1]) {
+		i--
+	}
+	for i > 0 && !unicode.IsSpace(buf[i-1]) {
+		i--
+	}
+	return i
+}
+
+// memWordEnd is the end of the word right of cur: leading spaces first, then the word.
+func memWordEnd(buf []rune, cur int) int {
+	i := cur
+	for i < len(buf) && unicode.IsSpace(buf[i]) {
+		i++
+	}
+	for i < len(buf) && !unicode.IsSpace(buf[i]) {
+		i++
+	}
+	return i
+}
+
+// memEditWidth is the editor's wrapping width: the settings box minus its margins.
+func (m *Model) memEditWidth() int {
+	return max(1, min(72, max(8, m.w-4))-7)
+}
+
 func (m *Model) memEditKey(k, text string) {
 	s := m.settings.mem
 	switch k {
 	case "esc":
-		s.editing, s.buf, s.errMsg = false, nil, ""
+		s.editing, s.buf, s.cur, s.scroll, s.errMsg = false, nil, 0, 0, ""
 	case "enter":
 		txt := strings.TrimSpace(string(s.buf))
 		if txt == "" {
@@ -177,15 +255,80 @@ func (m *Model) memEditKey(k, text string) {
 			m.send(MemoryEdit{Index: s.editIdx, Text: txt})
 		}
 		s.loading, s.editing = true, false
+	case "left":
+		s.cur = max(0, s.cur-1)
+	case "right":
+		s.cur = min(len(s.buf), s.cur+1)
+	case "up", "down":
+		lines := wrapEdit(s.buf, m.memEditWidth())
+		row, col := editCursorPos(lines, s.cur)
+		if k == "up" {
+			if row == 0 {
+				s.cur = 0
+				break
+			}
+			row--
+		} else {
+			if row == len(lines)-1 {
+				s.cur = len(s.buf)
+				break
+			}
+			row++
+		}
+		l := lines[row]
+		end := l.end - 1
+		if row == len(lines)-1 {
+			end = l.end
+		}
+		s.cur = min(l.start+col, end)
+	case "home", "ctrl+a":
+		s.cur = 0
+	case "end", "ctrl+e":
+		s.cur = len(s.buf)
+	case "alt+left", "ctrl+left", "alt+b":
+		s.cur = memWordStart(s.buf, s.cur)
+	case "alt+right", "ctrl+right", "alt+f":
+		s.cur = memWordEnd(s.buf, s.cur)
 	case "backspace":
-		if len(s.buf) > 0 {
-			s.buf = s.buf[:len(s.buf)-1]
+		if s.cur > 0 {
+			s.buf = append(s.buf[:s.cur-1], s.buf[s.cur:]...)
+			s.cur--
+			s.errMsg = ""
 		}
+	case "delete", "ctrl+d":
+		if s.cur < len(s.buf) {
+			s.buf = append(s.buf[:s.cur], s.buf[s.cur+1:]...)
+			s.errMsg = ""
+		}
+	case "ctrl+w", "alt+backspace":
+		start := memWordStart(s.buf, s.cur)
+		s.buf = append(s.buf[:start], s.buf[s.cur:]...)
+		s.cur = start
+		s.errMsg = ""
+	case "ctrl+u":
+		s.buf = append(s.buf[:0], s.buf[s.cur:]...)
+		s.cur = 0
+		s.errMsg = ""
+	case "ctrl+k":
+		s.buf = s.buf[:s.cur]
+		s.errMsg = ""
 	default:
-		if room := 300 - len(s.buf); room > 0 && text != "" {
-			rs := []rune(text)
-			s.buf = append(s.buf, rs[:min(room, len(rs))]...)
+		if text == "" {
+			return
 		}
+		rs := []rune(text)
+		room := 300 - len(s.buf)
+		if room <= 0 {
+			return
+		}
+		rs = rs[:min(room, len(rs))]
+		next := make([]rune, 0, len(s.buf)+len(rs))
+		next = append(next, s.buf[:s.cur]...)
+		next = append(next, rs...)
+		next = append(next, s.buf[s.cur:]...)
+		s.buf = next
+		s.cur += len(rs)
+		s.errMsg = ""
 	}
 }
 
@@ -293,21 +436,59 @@ func (m *Model) drawMemUI(f *fb, x, y, w, h int) {
 
 func (m *Model) drawMemEdit(f *fb, x, y, w, h int) {
 	s := m.settings.mem
-	f.textS(x, y, "›", m.th.a1, true, false)
-	buf := s.buf
-	if n := max(0, w-5); len(buf) > n {
-		buf = buf[len(buf)-n:]
+	title := tr("новая запись", "new entry")
+	if s.editIdx >= 0 {
+		title = tr("изменить запись", "edit entry")
 	}
-	n := f.text(x+2, y, string(buf), m.th.text)
-	f.fade(x+2+n, y, "▎", m.th.a1, 0.35+0.65*(0.5+0.5*math.Sin(m.t*6)), false)
+	tw := f.textS(x, y, title, m.th.a1, true, false)
+	cnt := fmt.Sprintf("%d/300", len(s.buf))
+	if cw := len([]rune(cnt)); cw+tw+1 <= w {
+		fg := m.th.dim
+		if len(s.buf) >= 300 {
+			fg = m.th.bad
+		}
+		f.text(x+w-cw, y, cnt, fg)
+	}
+	hintY := y + h
+	statusY := hintY - 2
 	if s.errMsg != "" {
-		f.text(x, y+2, trunc(s.errMsg, w), m.th.bad)
+		f.text(x, statusY, trunc(s.errMsg, w), m.th.bad)
 	}
-	hy := y + h - 2
-	dx := m.mlCap(f, x, hy, "enter", tr("готово", "done"))
-	dx += 2
+	textTop := y + 2
+	visRows := max(1, (statusY-1)-textTop+1)
+	lines := wrapEdit(s.buf, m.memEditWidth())
+	curRow, curCol := editCursorPos(lines, s.cur)
+	s.scroll = min(max(0, len(lines)-visRows), max(0, s.scroll))
+	if curRow < s.scroll {
+		s.scroll = curRow
+	}
+	if curRow > s.scroll+visRows-1 {
+		s.scroll = curRow - visRows + 1
+	}
+	f.textS(x, textTop, "›", m.th.a1, true, false)
+	pulse := 0.35 + 0.65*(0.5+0.5*math.Sin(m.t*6))
+	for r := s.scroll; r < len(lines) && r < s.scroll+visRows; r++ {
+		l := lines[r]
+		ty := textTop + r - s.scroll
+		for xx := x + 1; xx < x+w-1; xx++ {
+			f.tint(xx, ty, m.th.a1, 0.08)
+		}
+		f.text(x+2, ty, string(s.buf[l.start:l.end]), m.th.text)
+	}
+	ty := textTop + curRow - s.scroll
+	tx := x + 2 + curCol
+	if s.cur == len(s.buf) {
+		f.fade(tx, ty, "▎", m.th.a1, pulse, false)
+	} else if c := f.at(tx, ty); c != nil {
+		f.tint(tx, ty, m.th.a1, pulse)
+		c.fg = m.th.text.lerp(m.th.bg, pulse)
+	}
+	dx := m.mlCap(f, x, hintY, "enter", tr("готово", "done")) + 2
 	if x+dx < x+w {
-		m.mlCap(f, x+dx, hy, "esc", tr("назад", "back"))
+		dx += m.mlCap(f, x+dx, hintY, "←↑↓→", tr("курсор", "move")) + 2
+	}
+	if x+dx < x+w {
+		m.mlCap(f, x+dx, hintY, "esc", tr("назад", "back"))
 	}
 }
 
