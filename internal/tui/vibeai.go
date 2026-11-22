@@ -61,6 +61,20 @@ type vibeAISavedMsg struct {
 	err      error
 }
 
+// stageMemoryMsg answers the settings' memory row: the entries as they stand
+// after the load or edit, or why the file could not be touched.
+type stageMemoryMsg struct {
+	entries []stage.MemoryEntry
+	err     string
+}
+
+// stageRatedMsg answers the settings' ratings row: the liked and disliked tracks
+// as they stand after the load or change, or why the log could not be touched.
+type stageRatedMsg struct {
+	songs []stage.RatedSong
+	err   string
+}
+
 // vibeAIRun is the agent session behind the vibe screen. The engine runs in
 // command goroutines; mu serialises them, everything else is owned by Update.
 type vibeAIRun struct {
@@ -178,30 +192,44 @@ func waitVibeAI(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
 }
 
+// vibeMemDir is where the picker's memory and signals live: beside the config
+// when it has a home, under the cache directory otherwise.
+func vibeMemDir() string {
+	if p, err := config.ConfigPath(""); err == nil {
+		return filepath.Dir(p)
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir()
+	}
+	return filepath.Join(cacheDir, "aux", "vibe")
+}
+
 func vibeAIConfig(cfg *config.Config) vibeai.Config {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		cacheDir = os.TempDir()
 	}
 	cacheDir = filepath.Join(cacheDir, "aux", "vibe")
-	memDir := cacheDir
-	if p, err := config.ConfigPath(""); err == nil {
-		memDir = filepath.Dir(p)
-	}
 	lang := cfg.VibeLang
 	if lang == "" {
 		lang = stage.DefaultLang()
+	}
+	id, profile, baseURL := cfg.ActiveLLM()
+	llmCfg := llm.Config{BaseURL: baseURL, APIKey: profile.APIKey, Model: profile.Model, Effort: profile.Effort}
+	if id == config.ChatGPTProvider {
+		llmCfg = llm.Config{BaseURL: llm.ChatGPTBaseURL, Model: profile.Model, Effort: profile.Effort}
 	}
 	return vibeai.Config{
 		AppleDeveloperToken: cfg.AppleDeveloperToken,
 		AppleUserToken:      cfg.AppleUserToken,
 		Storefront:          cfg.StoreFront,
 		LastfmKey:           cfg.LastfmAPIKey,
-		LLM:                 llm.Config{BaseURL: cfg.VibeLLMBaseURL, APIKey: cfg.VibeLLMAPIKey, Model: cfg.VibeLLMModel, Effort: cfg.VibeLLMEffort},
+		LLM:                 llmCfg,
 		PortionSize:         vibeAIPortion,
 		Lang:                lang,
-		MemoryPath:          filepath.Join(memDir, "vibe-memory.md"),
-		SignalsPath:         filepath.Join(memDir, "vibe-signals.jsonl"),
+		MemoryPath:          vibeMemoryPath(),
+		SignalsPath:         vibeSignalsPath(),
 		CacheDir:            cacheDir,
 		RunsDir:             filepath.Join(cacheDir, "runs"),
 	}
@@ -232,7 +260,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	r.pending = nil
 	saved := r.savedSongs
 	r.savedSongs = nil
-	cfg := vibeAIConfig(m.cfg)
+	cfg := m.agentConfig()
 	cfg.LoadLibrary = m.vibeAILibrary()
 	if fresh {
 		r.tracks, r.portion = nil, 0
@@ -274,6 +302,8 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 				return vibeAIDoneMsg{gen: gen, err: err, refill: refill}
 			}
 			r.engine = e
+		} else if !fresh {
+			r.engine.SetLLM(cfg)
 		}
 		primeFollow(r.engine, name, given)
 		noteSavedSongs(r.engine, saved)
@@ -419,18 +449,27 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			if err := m.cfg.Save(""); err != nil {
 				m.appendLog(fmt.Sprintf("[vibe] config save error: %v", err))
 			}
-			if m.lastfmConnected != nil {
-				select {
-				case m.lastfmConnected <- struct{}{}:
-				default:
-				}
+			if m.lastfm != nil {
+				m.lastfm(msg.session)
 			}
 		}
 		v.st.StepDone(msg.step, msg.err)
+		if v.st.SettingsOpen() {
+			m.settingsErr = msg.err
+			v.refreshSettings()
+		}
 		return nil
 
 	case stageModelsMsg:
 		v.st.Models(msg.list, msg.total, msg.err)
+		return nil
+
+	case stageMemoryMsg:
+		v.st.SetMemory(msg.entries, msg.err)
+		return nil
+
+	case stageRatedMsg:
+		v.st.SetRated(msg.songs, msg.err)
 		return nil
 
 	case AppleLoginMsg:
@@ -593,15 +632,16 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		r.playlistID, r.playlistName = msg.id, msg.name
-		if r.playlist != nil {
+		switch {
+		case r.playlist != nil:
 			line := fmt.Sprintf(stage.Tr("сохранено ♫ %s · %d треков", "saved ♫ %s · %d tracks"), msg.name, msg.n)
 			if msg.n < r.playlist.Size {
 				line = fmt.Sprintf(stage.Tr("сохранено ♫ %s · %d из %d треков", "saved ♫ %s · %d of %d tracks"), msg.name, msg.n, r.playlist.Size)
 			}
 			v.st.PlaylistSaved(line)
-		} else if msg.created {
+		case msg.created:
 			v.SetNotice(fmt.Sprintf(stage.Tr("создан ♫ %s · %d треков", "created ♫ %s · %d tracks"), msg.name, msg.n))
-		} else {
+		default:
 			v.SetNotice(fmt.Sprintf("+%d → ♫ %s", msg.n, msg.name))
 		}
 		m.appendLog(fmt.Sprintf("[vibe] playlist %q +%d", msg.name, msg.n))

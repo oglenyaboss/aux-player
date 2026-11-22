@@ -53,11 +53,14 @@ func TestMusicFollowMenu(t *testing.T) {
 	m.MusicRows(mlLastLoad(t, r).Gen, []MusicItem{musicAlbum("l.1", "A", "Album", 2)}, "")
 	m.Key("ctrl+k", "")
 	items := m.mlMenuItems()
-	last := items[len(items)-1]
-	if last.kind != mlMenuFollow || !strings.Contains(last.label, "agent continues: off") {
-		t.Fatalf("menu = %+v, want the switch last", items)
+	if len(items) < 2 || items[len(items)-1].kind != mlMenuSettings {
+		t.Fatalf("menu = %+v, want the settings last", items)
 	}
-	for range items {
+	follow := items[len(items)-2]
+	if follow.kind != mlMenuFollow || !strings.Contains(follow.label, "agent continues: off") {
+		t.Fatalf("menu = %+v, want the switch right before the settings", items)
+	}
+	for range len(items) - 2 {
 		m.Key("down", "")
 	}
 	m.Key("enter", "")

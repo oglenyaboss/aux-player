@@ -311,8 +311,6 @@ func TestLogout_ClearsUserToken(t *testing.T) {
 		AppleUserToken: "token-to-remove",
 		StoreFront:     "us",
 		AuthPort:       7777,
-		Provider:       "apple",
-		Theme:          "default",
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
@@ -333,8 +331,6 @@ func TestLogout_PersistsEmptyToken(t *testing.T) {
 		AppleUserToken: "persist-me-cleared",
 		StoreFront:     "us",
 		AuthPort:       7777,
-		Provider:       "apple",
-		Theme:          "default",
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
@@ -389,8 +385,6 @@ func TestLogin_SuccessFlow(t *testing.T) {
 		AppleDeveloperToken: "test-dev-token",
 		AuthPort:            port,
 		StoreFront:          "us",
-		Provider:            "apple",
-		Theme:               "default",
 	}
 
 	states := captureLoginState(t)

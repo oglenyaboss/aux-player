@@ -24,12 +24,15 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 		ask = make(chan struct{}, 1)
 		opts.AppleLogin = ask
 	}
-	lfm := make(chan struct{}, 1)
-	opts.LastfmConnected = lfm
-	prog := tea.NewProgram(tui.New(cfg, nil, nil, opts))
+	var prog *tea.Program
+	debugLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
+	discordSw := newDiscordSwitch(cfg, debugLog)
+	lastfmSw := newLastfmSwitch(cfg, debugLog)
+	opts.Discord = discordSw.Set
+	opts.Lastfm = lastfmSw.Set
+	prog = tea.NewProgram(tui.New(cfg, nil, nil, opts))
 	playerCh := make(chan *browserless.Player, 1)
 	restartExe := make(chan string, 1)
-	var stopRPC func()
 
 	go func() {
 		res := updater.CheckAndUpdate(version.Version, noUpdate, func(msg string) {
@@ -141,9 +144,8 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 		}
 
 		// Last.fm scrobbler & Discord RPC integration
-		lfmLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
-		go lastfmScrobbleLoop(lfm, cfg, startLastfmScrobbler(cfg, blPlayer, lfmLog), blPlayer, lfmLog)
-		stopRPC = startDiscordRPC(cfg, blPlayer, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
+		lastfmSw.Attach(blPlayer)
+		discordSw.Attach(blPlayer)
 
 		backendLabel := fmt.Sprintf("Browserless (In-Process Widevine + GStreamer) · %d kbps AAC", audioBitrateKbps)
 		prog.Send(tui.EngineReadyMsg{
@@ -154,9 +156,7 @@ func runBrowserlessFlow(cfg *config.Config, opts tui.Options, onUserToken, onSto
 	}()
 
 	_, err := prog.Run()
-	if stopRPC != nil {
-		stopRPC()
-	}
+	discordSw.Close()
 
 	select {
 	case p := <-playerCh:

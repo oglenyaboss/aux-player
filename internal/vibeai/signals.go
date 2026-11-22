@@ -17,6 +17,13 @@ type Outcome struct {
 	PosSec, DurSec    int
 }
 
+// RatedTrack is the current standing of one track across all sessions: Kind is
+// "more" or "less", Time is the moment of the latest rating.
+type RatedTrack struct {
+	ID, Artist, Title, Kind string
+	Time                    time.Time
+}
+
 type signalRec struct {
 	Time    time.Time `json:"t"`
 	Session string    `json:"session"`
@@ -59,6 +66,89 @@ func OpenSignals(path string) (*Signals, error) {
 		s.recs = append(s.recs, r)
 	}
 	return s, nil
+}
+
+// Rated returns every track whose latest rating is "more" or "less", newest first;
+// rate_clear removes the track, other kinds are not ratings.
+func (s *Signals) Rated() []RatedTrack {
+	byKey := make(map[string]RatedTrack)
+	for _, r := range s.recs {
+		if r.Kind != "more" && r.Kind != "less" && r.Kind != "rate_clear" {
+			continue
+		}
+		k := ratedKey(r.Artist, r.Title, r.ID)
+		if r.Kind == "rate_clear" {
+			delete(byKey, k)
+			continue
+		}
+		byKey[k] = RatedTrack{ID: r.ID, Artist: r.Artist, Title: r.Title, Kind: r.Kind, Time: r.Time}
+	}
+	out := make([]RatedTrack, 0, len(byKey))
+	for _, rt := range byKey {
+		out = append(out, rt)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if !a.Time.Equal(b.Time) {
+			return a.Time.After(b.Time)
+		}
+		if a.Artist != b.Artist {
+			return a.Artist < b.Artist
+		}
+		return a.Title < b.Title
+	})
+	return out
+}
+
+// SetRating rewrites the rating of a track from outside a listening session: every
+// earlier rating of that track in any session is cleared first (so skip counts drop
+// it too), and a fresh one lands under the "settings" session.
+func (s *Signals) SetRating(id, artist, title, kind string) error {
+	switch kind {
+	case "more", "less", "rate_clear":
+	default:
+		return fmt.Errorf("unknown rating kind: %q", kind)
+	}
+	key := songKey(Song{Artist: artist, Title: title})
+	byName := strings.TrimSpace(artist) != "" || strings.TrimSpace(title) != ""
+	seen := make(map[string]bool)
+	now := s.now()
+	var toAppend []signalRec
+	for _, r := range s.recs {
+		pair := r.Session + "\x00" + r.ID
+		if seen[pair] {
+			continue
+		}
+		matches := byName && songKey(Song{Artist: r.Artist, Title: r.Title}) == key || id != "" && r.ID == id
+		if !matches {
+			continue
+		}
+		seen[pair] = true
+		if s.lastRating(r.Session, r.ID) == "" {
+			continue
+		}
+		toAppend = append(toAppend, signalRec{
+			Time: now, Session: r.Session, Query: "settings", Kind: "rate_clear",
+			ID: r.ID, Artist: artist, Title: title,
+		})
+	}
+	if kind != "rate_clear" {
+		toAppend = append(toAppend, signalRec{
+			Time: now, Session: "settings", Query: "settings", Kind: kind,
+			ID: id, Artist: artist, Title: title,
+		})
+	}
+	if len(toAppend) == 0 {
+		return nil
+	}
+	return s.append(toAppend...)
+}
+
+func ratedKey(artist, title, id string) string {
+	if strings.TrimSpace(artist) == "" && strings.TrimSpace(title) == "" {
+		return id
+	}
+	return songKey(Song{Artist: artist, Title: title})
 }
 
 func (s *Signals) append(recs ...signalRec) error {

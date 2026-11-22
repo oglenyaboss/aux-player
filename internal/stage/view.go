@@ -27,6 +27,10 @@ func (m *Model) render() *fb {
 	if m.help {
 		m.drawHelp(f)
 	}
+	if m.settings != nil {
+		m.mlVeil(f, 0.55)
+		m.drawSettings(f)
+	}
 	m.lastShot = f
 	return f
 }

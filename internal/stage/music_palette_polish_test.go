@@ -213,7 +213,7 @@ func TestPaletteListThumbs(t *testing.T) {
 
 // A6: the menu of the grid opens under the selected tile and stays inside the panel.
 func TestPaletteGridMenuAnchor(t *testing.T) {
-	m, r := paletteSetup(t, 160, 45, "palette")
+	m, r := paletteSetup(t, 160, 34, "palette")
 	m.JumpPlay(threeTracks(), 0, 0)
 	m.Key("m", "m")
 	steps(m, 0.2)
@@ -281,12 +281,8 @@ func TestPaletteQueueKey(t *testing.T) {
 	mlOpenSection(t, m2, MusicAlbums)
 	m2.MusicRows(mlLastLoad(t, r2).Gen, []MusicItem{musicAlbum("a1", "Beta", "Album One", 9)}, "")
 	m2.Key("ctrl+e", "")
-	if app := recorded[MusicAppend](r2); len(app) != 0 {
-		t.Fatalf("appends = %+v, want none on a collection row", app)
-	}
-	steps(m2, 0.1)
-	if frame := stripANSI(m2.View()); !strings.Contains(frame, "открой коллекцию") {
-		t.Errorf("the collection row has no notice:\n%s", frame)
+	if app := recorded[MusicAppend](r2); len(app) != 1 || app[0].Item.ID != "a1" {
+		t.Fatalf("appends = %+v, want the album row appended as a whole", r2.acts)
 	}
 
 	m3, r3 := paletteRU(t, 160, 45)

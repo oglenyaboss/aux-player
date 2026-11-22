@@ -134,9 +134,16 @@ func runTUI(_ *cobra.Command, _ []string) error {
 		opts.InitialTracks = tracks
 		opts.Backend = "Local mode · playing from " + cfg.MusicDir
 		opts.ScanNotice = prov.ScanNotice()
-		prog := tea.NewProgram(tui.New(cfg, prov, plyr, opts))
-		stopRPC := startDiscordRPC(cfg, plyr, func(msg string) { prog.Send(tui.DebugLogMsg(msg)) })
-		defer stopRPC()
+		var prog *tea.Program
+		debugLog := func(msg string) { prog.Send(tui.DebugLogMsg(msg)) }
+		discordSw := newDiscordSwitch(cfg, debugLog)
+		lastfmSw := newLastfmSwitch(cfg, debugLog)
+		opts.Discord = discordSw.Set
+		opts.Lastfm = lastfmSw.Set
+		prog = tea.NewProgram(tui.New(cfg, prov, plyr, opts))
+		lastfmSw.Attach(plyr)
+		discordSw.Attach(plyr)
+		defer discordSw.Close()
 		_, err = prog.Run()
 		return err
 	}

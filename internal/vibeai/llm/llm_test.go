@@ -124,13 +124,21 @@ func TestToolCallRoundtrip(t *testing.T) {
 }
 
 func TestRequestHeaders(t *testing.T) {
-	c, reqs := newTestClient(t, func(int) (int, string) { return http.StatusOK, okBody })
+	var mu sync.Mutex
+	var rs []captured
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		rs = append(rs, captured{method: r.Method, path: r.URL.Path, header: r.Header.Clone()})
+		mu.Unlock()
+		return httpResponse(http.StatusOK, okBody), nil
+	})
+	c := New(Config{BaseURL: "https://opencode.ai", APIKey: "sk-secret-123", Model: "test-model"}, &http.Client{Transport: rt})
+	c.sleep = func(time.Duration) {}
 	for range 2 {
 		if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rs := reqs()
 	if len(rs) != 2 {
 		t.Fatalf("requests %d, want 2", len(rs))
 	}

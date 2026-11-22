@@ -69,9 +69,9 @@ func (p *preroll) reset() {
 		OnAction: func(a stage.Action) {
 			switch a.(type) {
 			case stage.Query:
-				m.Ask([]stage.Question{{Title: "От чего оттолкнуться?",
+				m.Ask([]stage.Question{{Title: p.f.s.askTitle,
 					Options: []string{"SALUKI · HAHAHA", "Kanye West · Black Skinhead", "Travis Scott · FE!N"},
-					Tracks:  []stage.Track{ts[0], ts[1], ts[3]}, Chip: "ориентир"}})
+					Tracks:  []stage.Track{ts[0], ts[1], ts[3]}, Chip: p.f.s.askChip}})
 			case stage.Answers:
 				p.agent.thinking = true
 			}
@@ -159,7 +159,7 @@ func (p *preroll) think(dt float64) {
 		return
 	}
 	a.clock += dt
-	lines := []string{"читаю про SALUKI", "смотрю соседей Kanye West", "проверяю в Apple Music…"}
+	lines := p.f.s.progress
 	p.m.Progress(lines[min(len(lines)-1, int(a.clock/0.4))])
 	if a.clock < 1.2 {
 		return
@@ -169,7 +169,7 @@ func (p *preroll) think(dt float64) {
 	for _, t := range portion {
 		p.m.Candidate(t, true, "")
 	}
-	p.m.PortionDone(portion, "держу напор, дальше психоделика")
+	p.m.PortionDone(portion, p.f.s.answer)
 }
 
 // land starts the player at the needle: the rest of the drop's wait is skipped.

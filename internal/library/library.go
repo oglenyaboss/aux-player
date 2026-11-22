@@ -398,7 +398,10 @@ func fold(songs []provider.Track, t provider.Track, favorite bool) []provider.Tr
 		}
 	}
 	if at == len(out) {
-		out = append(out, t)
+		// The library is newest first, so a track AUX itself saved is the freshest
+		// one and goes to the head, matching the sort of the fetch.
+		out = append([]provider.Track{t}, out...)
+		at = 0
 	}
 	if favorite {
 		out[at].Favorite = true

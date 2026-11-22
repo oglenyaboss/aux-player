@@ -1386,7 +1386,7 @@ func TestVibeAIPlaylistSavedShowsOnStage(t *testing.T) {
 	if st.Phase() != stage.PhDone {
 		t.Fatalf("phase = %v, want PhDone", st.Phase())
 	}
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		st.Step(1.0 / 30)
 	}
 	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {
@@ -1463,7 +1463,7 @@ func TestVibeAIPlaylistShortSaveSaysSo(t *testing.T) {
 	if st.Phase() != stage.PhDone {
 		t.Fatalf("phase = %v, want PhDone", st.Phase())
 	}
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		st.Step(1.0 / 30)
 	}
 	if frame := ansi.Strip(st.View()); !strings.Contains(frame, "saved ♫ Haze · 3 of 10 tracks") {

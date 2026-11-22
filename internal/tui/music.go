@@ -104,8 +104,17 @@ type musicCollectionMsg struct {
 	err    error
 }
 
+// musicAppendMsg is the stage's append: one song, or a collection the host expands
+// before the answer lands as musicAppendTracksMsg.
 type musicAppendMsg struct {
 	item stage.MusicItem
+}
+
+// musicAppendTracksMsg is the expanded track list behind an append of a collection.
+type musicAppendTracksMsg struct {
+	item   stage.MusicItem
+	tracks []provider.Track
+	err    error
 }
 
 // handleMusicMsg answers the music screen. Loads fetch on a command goroutine and
@@ -268,6 +277,25 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 		if msg.item.Unplayable != "" {
 			return nil
 		}
+		if msg.item.Kind != stage.MusicSong {
+			store := m.musicLibrary()
+			if store == nil {
+				st.MusicNotice(stage.Tr("Apple Music не подключён", "Apple Music is not connected"))
+				return nil
+			}
+			item := msg.item
+			tgt, ok := musicTargetFor(0, &item)
+			if !ok {
+				st.MusicNotice(item.Title + stage.Tr(" — не коллекция", " is not a collection"))
+				return nil
+			}
+			return func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
+				defer cancel()
+				r, err := store.Load(ctx, tgt.kind, tgt.id)
+				return musicAppendTracksMsg{item: item, tracks: r.Songs, err: err}
+			}
+		}
 		t := m.musicTrackFor(msg.item)
 		var cmd tea.Cmd
 		if st.Phase() == stage.PhPlay {
@@ -278,6 +306,40 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			st.PortionDone([]stage.Track{musicStageTrack(t)}, "")
 		} else {
 			cmd = m.musicPlayTracks([]provider.Track{t}, nil)
+		}
+		st.MusicNotice(stage.Tr("в очереди: ", "queued: ") + msg.item.Title)
+		return cmd
+	case musicAppendTracksMsg:
+		if msg.err != nil {
+			st.MusicNotice("Apple Music: " + msg.err.Error())
+			return nil
+		}
+		tracks := make([]provider.Track, 0, len(msg.tracks))
+		for _, t := range msg.tracks {
+			if musicUploaded(t) {
+				continue
+			}
+			tracks = append(tracks, t)
+		}
+		if len(tracks) == 0 {
+			st.MusicNotice(stage.Tr("нечего добавить — все треки без каталога", "nothing to queue — every track is an upload without a catalog"))
+			return nil
+		}
+		var cmd tea.Cmd
+		if st.Phase() == stage.PhPlay {
+			cmd = m.appendQueue(tracks)
+			if m.vibeAI.follow {
+				for _, t := range tracks {
+					m.vibeAI.followSongs = append(m.vibeAI.followSongs, vibeai.Song{ID: PlaybackID(t), Artist: t.Artist, Title: t.Title, Album: t.Album})
+				}
+			}
+			cards := make([]stage.Track, len(tracks))
+			for i, t := range tracks {
+				cards[i] = musicStageTrack(t)
+			}
+			st.PortionDone(cards, "")
+		} else {
+			cmd = m.musicPlayTracks(tracks, &msg.item)
 		}
 		st.MusicNotice(stage.Tr("в очереди: ", "queued: ") + msg.item.Title)
 		return cmd
@@ -392,7 +454,7 @@ func musicUploaded(t provider.Track) bool {
 
 func musicSongItem(t provider.Track) stage.MusicItem {
 	it := stage.MusicItem{ID: PlaybackID(t), Kind: stage.MusicSong, Title: t.Title, Artist: t.Artist,
-		Album: t.Album, Sub: t.Album, Dur: t.Duration.Seconds()}
+		Album: t.Album, Sub: t.Album, Dur: t.Duration.Seconds(), Fav: t.Favorite}
 	if musicUploaded(t) {
 		it.Unplayable = stage.Tr("загрузка без каталога — не играет на Linux", "upload without catalog match — can't play on Linux")
 	}

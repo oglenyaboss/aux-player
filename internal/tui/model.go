@@ -5,14 +5,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/oglenyaboss/aux-player/internal/chatgpt"
 	"github.com/oglenyaboss/aux-player/internal/config"
 	"github.com/oglenyaboss/aux-player/internal/library"
 	"github.com/oglenyaboss/aux-player/internal/player"
 	"github.com/oglenyaboss/aux-player/internal/provider"
 	"github.com/oglenyaboss/aux-player/internal/tui/art"
+	"github.com/oglenyaboss/aux-player/internal/vibeai/llm"
 )
 
 // ── Messages ──────────────────────────────────────────────────────────────
@@ -58,9 +62,18 @@ type Model struct {
 	vibeAIP *vibeAIPanel
 
 	// appleLogin carries the asks from the Apple Music onboarding step;
-	// lastfmConnected signals a freshly connected Last.fm session.
-	appleLogin      chan<- struct{}
-	lastfmConnected chan<- struct{}
+	// lastfm and discord are the host's switches for scrobbling and presence.
+	appleLogin chan<- struct{}
+	lastfm     func(string)
+	discord    func(bool)
+
+	// The settings overlay's ChatGPT state: the sign-in store opens lazily under
+	// its mutex, the usage limits come from the engine goroutine through the
+	// atomic pointer.
+	chatgptMu   sync.Mutex
+	chatgpt     *chatgpt.Store
+	limits      atomic.Pointer[llm.Limits]
+	settingsErr string
 
 	// Errors / status messages
 	errMsg    string
@@ -81,7 +94,8 @@ func New(cfg *config.Config, prov provider.Provider, plyr player.Player, opts Op
 		// on 16-colour/ASCII terminals the scene skips the download entirely.
 		supportsArtColor: art.SupportsColor,
 		appleLogin:       opts.AppleLogin,
-		lastfmConnected:  opts.LastfmConnected,
+		lastfm:           opts.Lastfm,
+		discord:          opts.Discord,
 		saves:            map[string]saveState{},
 	}
 	if plyr != nil {
@@ -198,14 +212,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIPlaylistMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg, AppleLoginMsg,
+	case vibeAIProgressMsg, vibeAIAskMsg, vibeAIPickMsg, vibeAIPlaylistMsg, vibeAIDoneMsg, vibeAISavedMsg, stageTickMsg, stageCoverMsg, stageStepMsg, stageModelsMsg, stageMemoryMsg, stageRatedMsg, AppleLoginMsg,
 		VibeAIAnswersMsg, VibeAISubmitMsg, VibeAICancelMsg, VibeAIActionMsg, VibeAILaterMsg, VibeAIRateMsg:
 		cmds = append(cmds, m.handleVibeAIMsg(msg))
 
 	case SaveTrackMsg, saveTrackDoneMsg:
 		cmds = append(cmds, m.handleSaveMsg(msg))
 
-	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicFollowMsg,
+	case musicLoadMsg, musicRowsMsg, musicPlayMsg, musicPlayAllMsg, musicCollectionMsg, musicAppendMsg, musicAppendTracksMsg, musicFollowMsg,
 		musicRefreshMsg, musicCheckedMsg:
 		cmds = append(cmds, m.handleMusicMsg(msg))
 

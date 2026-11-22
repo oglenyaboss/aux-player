@@ -128,10 +128,16 @@ func testCfg() *config.Config {
 	return &config.Config{
 		StoreFront:    "us",
 		AuthPort:      7777,
-		Provider:      "apple",
-		Theme:         "default",
-		VibeLLMAPIKey: "test-key",
+		VibeProvider:  "opencode-go",
+		VibeProviders: map[string]config.LLMProvider{"opencode-go": {APIKey: "test-key"}},
 	}
+}
+
+// llmConfig is a config with opencode-go active and the given key.
+func llmConfig(key string) *config.Config {
+	cfg := &config.Config{}
+	cfg.SetLLM("opencode-go", config.LLMProvider{APIKey: key})
+	return cfg
 }
 
 func newModel(plyr player.Player) *Model {
