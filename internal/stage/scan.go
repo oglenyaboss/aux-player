@@ -597,7 +597,11 @@ func (m *Model) drawCarry(f *fb, g scanGeom) {
 func (m *Model) drawScanPanel(f *fb, g scanGeom) {
 	x, w := g.px, g.pw
 	if w >= 30 {
-		f.textS(x, g.py-1, fmt.Sprintf(tr("Порция %d", "Batch %d"), m.portionNo), m.th.text, true, false)
+		head := fmt.Sprintf(tr("Порция %d", "Batch %d"), m.portionNo)
+		if m.playlist {
+			head = tr("Плейлист", "Playlist")
+		}
+		f.textS(x, g.py-1, head, m.th.text, true, false)
 	}
 	cnt := fmt.Sprintf(tr("%d из %d", "%d of %d"), m.filled, len(m.slots))
 	f.textS(m.w-3-len([]rune(cnt)), g.py-1, cnt, m.th.a1, true, false)
@@ -713,7 +717,8 @@ func (m *Model) drawAudition(f *fb, c *cand, x, y, w, cs int, g scanGeom) {
 	}
 }
 
-// drawNote: the side is together; the agent's line about it types out where the auditions were.
+// drawNote: the side is together; the agent's line about it types out where the auditions were,
+// then the save status of a playlist and its keys, or the ready line of a stream side.
 func (m *Model) drawNote(f *fb, x, y, w int) {
 	note := []rune(m.note)
 	k := int(prog(m.pt, 0.5, 1.2) * float64(len(note)))
@@ -721,21 +726,36 @@ func (m *Model) drawNote(f *fb, x, y, w int) {
 	for i, line := range lines {
 		f.textS(x, y+1+i, line, m.th.a2.lerp(m.th.text, 0.3), false, true)
 	}
-	s := tr("сторона A готова", "side A is ready")
-	f.fade(x, y+2+max(1, len(lines)), s, m.th.a1, easeOut(prog(m.pt, 0.2, 0.4)), true)
+	ty := y + 2 + max(1, len(lines))
+	a := easeOut(prog(m.pt, 0.2, 0.4))
+	if m.playlist {
+		saved := m.savedLine
+		if saved == "" {
+			saved = tr("сохраняю в Apple Music…", "saving to Apple Music…")
+		}
+		f.fade(x, ty, trunc(saved, w), m.th.a1, a, true)
+		hint := tr("enter — слушать · r — новый запрос", "enter — listen · r — new request")
+		f.fade(x, ty+1, trunc(hint, w), m.th.dim, a, false)
+		return
+	}
+	f.fade(x, ty, tr("сторона A готова", "side A is ready"), m.th.a1, a, true)
 }
 
 // drawSide is the tracklist of side A: a row per keeper, written in as its record lands.
+// A side taller than the panel scrolls so the newest filled row stays in view.
 func (m *Model) drawSide(f *fb, x, y, w, limit int) int {
 	if y >= limit {
 		return y
 	}
 	f.text(x, y, tr("сторона A", "side A"), m.th.dim)
+	room := limit - y - 1
 	y++
-	for i, s := range m.slots {
-		if y >= limit {
-			break
-		}
+	first := 0
+	if len(m.slots) > room {
+		first = min(max(0, m.filled-room+1), len(m.slots)-room)
+	}
+	for i := first; i < len(m.slots) && y < limit; i++ {
+		s := m.slots[i]
 		tag := fmt.Sprintf("A%d", i+1)
 		if s.fillAt < 0 || m.t < s.landAt {
 			f.text(x+3, y, tag, m.th.dim.mul(0.7))

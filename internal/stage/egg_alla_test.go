@@ -51,7 +51,7 @@ func TestAllaRule(t *testing.T) {
 		}
 	}
 	if e := m.eggOf(Track{Artist: "A$AP Rocky", Title: "Praise the Lord (Da Shine)", Album: "TESTING"}); e != nil {
-		t.Errorf("TESTING поймал пасхалку")
+		t.Errorf("TESTING caught the egg")
 	}
 }
 
@@ -61,10 +61,10 @@ func TestAllaRule(t *testing.T) {
 func TestAllaFilm(t *testing.T) {
 	m, f := allaFrame(t, Options{}, allaEvery, 8)
 	if n := count(m, f, func(c col) bool { return allaChroma(c) > 0.04 }); n > 0 {
-		t.Errorf("%d цветных пикселей вне обложки", n)
+		t.Errorf("%d coloured pixels outside the cover", n)
 	}
 	if !strings.Contains(stripANSI(f.String()), "Creepin'") {
-		t.Errorf("очередь потеряла трек")
+		t.Errorf("queue lost the track")
 	}
 	band := func(f *fb, y0 int) (s float64) {
 		for py := y0; py < y0+6; py++ {
@@ -76,11 +76,11 @@ func TestAllaFilm(t *testing.T) {
 	}
 	low, high := band(f, 2*m.h-8), band(f, 2)
 	if low < high*1.3 {
-		t.Errorf("дым внизу %.1f, вверху %.1f; ждём, что снизу гуще", low, high)
+		t.Errorf("smoke at the bottom %.1f, at the top %.1f; want it denser at the bottom", low, high)
 	}
 	steps(m, 1)
 	if band(m.render(), 2*m.h-8) == low {
-		t.Errorf("дым стоит")
+		t.Errorf("smoke stands still")
 	}
 }
 
@@ -91,14 +91,14 @@ func TestAllaStainBreathes(t *testing.T) {
 	eye := func(f *fb) col { return f.pixelAt(g.cx+g.cw/6, g.cy*2+g.ch/3) }
 	a := eye(f)
 	if allaChroma(a) < 0.15 {
-		t.Fatalf("пятно на глазу потеряло цвет: %s", a.css())
+		t.Fatalf("the stain on the eye lost its colour: %s", a.css())
 	}
 	if grey := f.pixelAt(g.cx+g.cw*3/4, g.cy*2+g.ch); allaChroma(grey) > 0.02 {
-		t.Errorf("обложка вне пятна цветная: %s", grey.css())
+		t.Errorf("the cover outside the stain is coloured: %s", grey.css())
 	}
 	steps(m, 2.2)
 	if b := eye(m.render()); allaChroma(b) == allaChroma(a) {
-		t.Errorf("пятно не дышит")
+		t.Errorf("the stain does not breathe")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestAllaStainBreathes(t *testing.T) {
 func TestAllaTrip(t *testing.T) {
 	m, f := allaFrame(t, Options{}, allaLSD, 8)
 	if n := count(m, f, func(c col) bool { return allaChroma(c) > 0.08 && c.r > c.g && c.b > c.g }); n < 1500 {
-		t.Errorf("L$D: %d цветных пикселей дыма", n)
+		t.Errorf("L$D: %d coloured smoke pixels", n)
 	}
 }
 
@@ -121,14 +121,14 @@ func allaColumn(m *Model, f *fb) string {
 func TestAllaSpine(t *testing.T) {
 	m, f := allaFrame(t, Options{}, allaEvery, 3)
 	if s := allaColumn(m, f); !strings.Contains(s, allaSpine) {
-		t.Errorf("корешок: %q", s)
+		t.Errorf("spine: %q", s)
 	}
 }
 
 func TestAllaNoEggs(t *testing.T) {
 	m, f := allaFrame(t, Options{NoEggs: true}, allaEvery, 8)
 	if strings.Contains(allaColumn(m, f), allaSpine) {
-		t.Errorf("NoEggs рисует корешок")
+		t.Errorf("NoEggs draws the spine")
 	}
 }
 

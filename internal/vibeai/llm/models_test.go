@@ -88,7 +88,7 @@ func TestListModelsOpenRouterKey(t *testing.T) {
 		t.Errorf("err = %v, want ErrUnauthorized", err)
 	}
 	if modelsReqs != 0 {
-		t.Errorf("запросов к /models = %d, want 0", modelsReqs)
+		t.Errorf("requests to /models = %d, want 0", modelsReqs)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestListModelsOpenRouterOK(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].ID != "m-1" {
-		t.Errorf("ListModels = %+v, want одну модель m-1", got)
+		t.Errorf("ListModels = %+v, want one model m-1", got)
 	}
 }
 
@@ -124,6 +124,6 @@ func TestListModelsHeaders(t *testing.T) {
 		t.Errorf("User-Agent = %q, want aux/%s", got.Get("User-Agent"), version.Version)
 	}
 	if sess := got.Get("x-opencode-session"); sess == "" || !strings.HasPrefix(sess, "aux-") {
-		t.Errorf("x-opencode-session = %q, want непустой с префиксом aux-", sess)
+		t.Errorf("x-opencode-session = %q, want a non-empty one with an aux- prefix", sess)
 	}
 }

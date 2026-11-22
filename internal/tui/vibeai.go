@@ -37,17 +37,24 @@ type vibeAIPickMsg struct {
 	pick vibeai.Pick
 }
 
+type vibeAIPlaylistMsg struct {
+	gen  int
+	plan vibeai.PlaylistPlan
+}
+
 type vibeAIDoneMsg struct {
-	gen     int
-	tracks  []vibeai.Track
-	note    string
-	later   *vibeai.Question
-	err     error
-	elapsed time.Duration
-	refill  bool
+	gen      int
+	tracks   []vibeai.Track
+	note     string
+	later    *vibeai.Question
+	playlist *vibeai.PlaylistPlan
+	err      error
+	elapsed  time.Duration
+	refill   bool
 }
 
 type vibeAISavedMsg struct {
+	gen      int
 	id, name string
 	n        int
 	created  bool
@@ -96,6 +103,7 @@ type vibeAIRun struct {
 	heardID      string
 	heardPos     time.Duration
 	portion      int
+	playlist     *vibeai.PlaylistPlan
 	playlistID   string
 	playlistName string
 	savedPortion int
@@ -176,6 +184,10 @@ func (b vibeAIBridge) Picked(p vibeai.Pick) {
 	b.r.events <- vibeAIPickMsg{gen: b.r.turnGen, pick: p}
 }
 
+func (b vibeAIBridge) Playlist(p vibeai.PlaylistPlan) {
+	b.r.events <- vibeAIPlaylistMsg{gen: b.r.turnGen, plan: p}
+}
+
 func waitVibeAI(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-ch }
 }
@@ -253,6 +265,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 	if fresh {
 		r.tracks, r.portion = nil, 0
 		r.feed.reset()
+		r.playlist = nil
 		r.playlistID, r.playlistName, r.savedPortion = "", "", 0
 		r.autoplay, r.autoplayID, r.later, r.laterAnswers = true, "", nil, nil
 		r.staged, r.dropStaged = nil, false
@@ -306,7 +319,7 @@ func (m *Model) vibeAITurnCmd(text string, fresh, refill bool) tea.Cmd {
 		}
 		p, err := r.engine.Turn(ctx, text)
 		r.undelivered = err == nil && !fresh
-		return vibeAIDoneMsg{gen: gen, tracks: p.Tracks, note: p.Note, later: p.Later, err: err, elapsed: time.Since(start), refill: refill}
+		return vibeAIDoneMsg{gen: gen, tracks: p.Tracks, note: p.Note, later: p.Later, playlist: p.Playlist, err: err, elapsed: time.Since(start), refill: refill}
 	}
 	// The result rides the event channel behind the turn's picks: the screen
 	// sees every pick before the portion closes.
@@ -402,6 +415,12 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 				v.initErr = ""
 			}
 		}
+		// The update notice waits for the player page, the one surface the
+		// scene has for a host line, and is spent the moment it is shown.
+		if n := v.notice; n != nil && v.st.Phase() == stage.PhPlay {
+			v.st.Toast(n.text())
+			v.notice = nil
+		}
 		if m.errMsg != v.lastErr {
 			v.lastErr = m.errMsg
 			if m.errMsg != "" && v.st.Phase() == stage.PhPlay {
@@ -488,6 +507,20 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		}
 		return waitVibeAI(r.events)
 
+	case vibeAIPlaylistMsg:
+		if msg.gen != r.gen || !r.busy || !r.fresh || r.follow {
+			return waitVibeAI(r.events)
+		}
+		p := msg.plan
+		r.playlist = &p
+		r.autoplay = false
+		v.st.PlaylistMode(p.Size)
+		if r.autoplayID != "" {
+			r.autoplayID = ""
+			return tea.Batch(waitVibeAI(r.events), m.playerCmd(func(pl player.Player) error { return pl.Pause() }))
+		}
+		return waitVibeAI(r.events)
+
 	case vibeAIAskMsg:
 		if msg.gen != r.gen || !r.busy {
 			return waitVibeAI(r.events)
@@ -556,6 +589,8 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 			} else {
 				v.SetNotice(stage.Tr("поток выключен", "stream off"))
 			}
+		case VibeAIListen:
+			return m.vibeAIPlay(r.tracks)
 		}
 
 	case VibeAIRateMsg:
@@ -583,15 +618,30 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case vibeAISavedMsg:
+		if msg.gen != r.gen {
+			return nil
+		}
 		if msg.err != nil {
 			m.appendLog(fmt.Sprintf("[vibe] playlist error: %v", msg.err))
+			r.savedPortion = 0
+			if r.playlist != nil {
+				v.st.PlaylistSaved(fmt.Sprintf(stage.Tr("✗ не сохранилось: %s — w ещё раз", "✗ not saved: %s — w to retry"), msg.err.Error()))
+				return nil
+			}
 			v.SetNotice(stage.Tr("✗ плейлист: ", "✗ playlist: ") + msg.err.Error())
 			return nil
 		}
 		r.playlistID, r.playlistName = msg.id, msg.name
-		if msg.created {
+		switch {
+		case r.playlist != nil:
+			line := fmt.Sprintf(stage.Tr("сохранено ♫ %s · %d треков", "saved ♫ %s · %d tracks"), msg.name, msg.n)
+			if msg.n < r.playlist.Size {
+				line = fmt.Sprintf(stage.Tr("сохранено ♫ %s · %d из %d треков", "saved ♫ %s · %d of %d tracks"), msg.name, msg.n, r.playlist.Size)
+			}
+			v.st.PlaylistSaved(line)
+		case msg.created:
 			v.SetNotice(fmt.Sprintf(stage.Tr("создан ♫ %s · %d треков", "created ♫ %s · %d tracks"), msg.name, msg.n))
-		} else {
+		default:
 			v.SetNotice(fmt.Sprintf("+%d → ♫ %s", msg.n, msg.name))
 		}
 		m.appendLog(fmt.Sprintf("[vibe] playlist %q +%d", msg.name, msg.n))
@@ -654,6 +704,13 @@ func (m *Model) vibeAIDone(msg vibeAIDoneMsg) tea.Cmd {
 	if msg.later != nil {
 		r.later = msg.later
 		v.AskLater(*msg.later)
+	}
+	if msg.playlist != nil {
+		r.playlist = msg.playlist
+	}
+	if r.fresh && r.playlist != nil {
+		r.autoplay = false
+		return m.vibeAISaveCmd()
 	}
 	if r.autoplay {
 		r.autoplay = false
@@ -750,7 +807,7 @@ func (m *Model) vibeAIAhead(s player.State) (int, bool) {
 // vibeAIStreamAhead or fewer tracks left behind it in the queue.
 func (m *Model) vibeAIStreamTick(s player.State) tea.Cmd {
 	r := m.vibeAI
-	if !r.stream || r.busy || s.Track == nil || r.streamForID == s.Track.ID || r.staged != nil {
+	if !r.stream || r.playlist != nil || r.busy || s.Track == nil || r.streamForID == s.Track.ID || r.staged != nil {
 		return nil
 	}
 	if m.musicLast != nil || (r.follow && !m.vibeAIP.m.st.Following()) {
@@ -889,26 +946,31 @@ func (m *Model) vibeAIFlushPending() tea.Cmd {
 
 func (m *Model) vibeAISaveCmd() tea.Cmd {
 	r := m.vibeAI
+	gen := r.gen
 	tracks := r.tracks
-	id, name := r.playlistID, r.playlistName
+	id, name, description := r.playlistID, r.playlistName, ""
 	if id == "" {
-		name = vibeAIPlaylistName(m.vibeAIP.m.Query())
+		if r.playlist != nil {
+			name, description = r.playlist.Name, r.playlist.Description
+		} else {
+			name = vibeAIPlaylistName(m.vibeAIP.m.Query())
+		}
 	}
 	r.savedPortion = r.portion
 	return func() tea.Msg {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		if r.engine == nil {
-			return vibeAISavedMsg{err: fmt.Errorf("no vibe session")}
+			return vibeAISavedMsg{gen: gen, err: fmt.Errorf("no vibe session")}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if id == "" {
-			newID, err := r.engine.SavePlaylist(ctx, name, tracks)
-			return vibeAISavedMsg{id: newID, name: name, n: len(tracks), created: true, err: err}
+			newID, err := r.engine.SavePlaylist(ctx, name, description, tracks)
+			return vibeAISavedMsg{gen: gen, id: newID, name: name, n: len(tracks), created: true, err: err}
 		}
 		err := r.engine.AppendPlaylist(ctx, id, tracks)
-		return vibeAISavedMsg{id: id, name: name, n: len(tracks), err: err}
+		return vibeAISavedMsg{gen: gen, id: id, name: name, n: len(tracks), err: err}
 	}
 }
 

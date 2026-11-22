@@ -51,7 +51,7 @@ func TestEggLayersAlbumReplacesArtist(t *testing.T) {
 		t.Errorf("knob %q, want 'x'", e.knob)
 	}
 	if e.jewel {
-		t.Errorf("jewel должен уйти вместе со слоем артиста")
+		t.Errorf("the jewel must go away with the artist layer")
 	}
 }
 
@@ -141,7 +141,7 @@ func TestEggLayersHookOverStep(t *testing.T) {
 	e.over(m, newFB(4, 4), playGeom{})
 	e.step(m)
 	if len(ov) != 2 || ov[0] != "a" || ov[1] != "b" || len(st) != 2 || st[0] != "a" || st[1] != "b" {
-		t.Errorf("порядок слоёв: over %v step %v", ov, st)
+		t.Errorf("layer order: over %v step %v", ov, st)
 	}
 }
 
@@ -149,12 +149,12 @@ func TestEggFrameHookBg(t *testing.T) {
 	_, f := playFrame(t, Options{}, "T", egg{
 		bg: func(m *Model, c col, x, y int) col { return col{0, 1, 0} }}, 2)
 	if p := f.at(1, 16); p.bg.g <= p.bg.r*2 || p.bg.g <= p.bg.b*2 {
-		t.Errorf("bg hook не пробился: %+v", p.bg)
+		t.Errorf("the bg hook did not come through: %+v", p.bg)
 	}
 	_, f2 := playFrame(t, Options{NoEggs: true}, "T", egg{
 		bg: func(m *Model, c col, x, y int) col { return col{0, 1, 0} }}, 2)
 	if q := f2.at(1, 16); q.bg.g > q.bg.r*2 && q.bg.g > q.bg.b*2 {
-		t.Errorf("NoEggs пропускает bg hook: %+v", q.bg)
+		t.Errorf("NoEggs lets the bg hook through: %+v", q.bg)
 	}
 }
 
@@ -163,7 +163,7 @@ func TestEggFrameHookCover(t *testing.T) {
 		cover: func(m *Model, at func(px, py int) col, px, py int) col { return col{0, 0, 1} }}, 3)
 	g := m.geom()
 	if c := f.pixelAt(g.cx+g.cw/2, g.cy*2+g.ch); c.b <= 0.5 || c.r >= 0.2 || c.g >= 0.2 {
-		t.Errorf("cover hook не пробился: %+v (geom %+v)", c, g)
+		t.Errorf("the cover hook did not come through: %+v (geom %+v)", c, g)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestEggFrameHookInk(t *testing.T) {
 		}
 	}
 	if !red {
-		t.Errorf("ink hook не пробился в %v", m.titleBox)
+		t.Errorf("the ink hook did not come through in %v", m.titleBox)
 	}
 }
 
@@ -187,7 +187,7 @@ func TestEggFrameHookBar(t *testing.T) {
 	m, _ := playFrame(t, Options{}, "T", egg{
 		bar: func(m *Model, i, bw int, frac float64, r rune, c col) (rune, col) { return '▲', white }}, 2)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "▲") {
-		t.Errorf("bar hook не пробился:\n%s", frame)
+		t.Errorf("the bar hook did not come through:\n%s", frame)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestEggFrameHookOver(t *testing.T) {
 		over: func(m *Model, f *fb, g playGeom) { f.put(0, 0, '@', white) }}, 2)
 	lines := strings.Split(stripANSI(m.View()), "\n")
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "@") {
-		t.Errorf("over hook не пробился: первая строка %q", lines[0])
+		t.Errorf("the over hook did not come through: first line %q", lines[0])
 	}
 }
 
@@ -208,14 +208,14 @@ func TestEggFrameHookStep(t *testing.T) {
 	m.JumpPlay([]Track{{Artist: "A", Title: "T"}}, 0, 0)
 	steps(m, 1)
 	if n == 0 {
-		t.Fatal("step hook не вызван ни разу")
+		t.Fatal("the step hook was never called")
 	}
 }
 
 func TestTitleBoxFrame(t *testing.T) {
 	m, _ := playFrame(t, Options{}, "TT", egg{}, 2)
 	if m.titleBox == (image.Rectangle{}) {
-		t.Fatal("titleBox пустой")
+		t.Fatal("titleBox is empty")
 	}
 	if px := m.geom().px; m.titleBox.Min.X != px {
 		t.Errorf("titleBox.Min.X %d, geom px %d", m.titleBox.Min.X, px)
@@ -282,28 +282,28 @@ func TestEggOfMemo(t *testing.T) {
 		t.Fatal("egg nil")
 	}
 	if a != b {
-		t.Fatalf("два вызова eggOf вернули разные указатели: %p и %p", a, b)
+		t.Fatalf("two eggOf calls returned different pointers: %p and %p", a, b)
 	}
 }
 
 func TestFoldHelpers(t *testing.T) {
 	if got := fold("The Life of Pi’erre 4"); got != "the life of pi'erre 4" {
-		t.Errorf("fold апострофа: %q", got)
+		t.Errorf("fold of the apostrophe: %q", got)
 	}
 	if got := foldAlbum("Heroes & Villains"); got != "heroes & villains" {
 		t.Errorf("foldAlbum Heroes: %q", got)
 	}
 	if got := foldAlbum("The Life of Pi’erre 4"); got != "the life of pi'erre 4" {
-		t.Errorf("foldAlbum портит Pi’erre: %q", got)
+		t.Errorf("foldAlbum spoils Pi’erre: %q", got)
 	}
 	if got := foldAlbum("X - Single"); got != "x" {
-		t.Errorf("foldAlbum сингла: %q", got)
+		t.Errorf("foldAlbum of a single: %q", got)
 	}
 	if got := foldTitle("Sky (feat. X)"); got != "sky" {
-		t.Errorf("foldTitle фита: %q", got)
+		t.Errorf("foldTitle of a feat: %q", got)
 	}
 	if got := foldTitle("Nights (Live)"); got != "nights (live)" {
-		t.Errorf("foldTitle живой: %q", got)
+		t.Errorf("foldTitle of a live take: %q", got)
 	}
 }
 
@@ -313,7 +313,7 @@ func TestEggFrameOnAlbumTrack(t *testing.T) {
 	m.JumpPlay([]Track{{Artist: "Playboi Carti", Title: "Stop Breathing", Album: "Whole Lotta Red", Dur: 190}}, 0, 0)
 	steps(m, 8)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "†") {
-		t.Errorf("кадр пасхалки альбома без ползунка †:\n%s", frame)
+		t.Errorf("album egg frame without the † knob:\n%s", frame)
 	}
 }
 
@@ -325,17 +325,17 @@ func TestFBBlank(t *testing.T) {
 	f.blank(1, 0, 2)
 	for x := 1; x <= 2; x++ {
 		if c := f.at(x, 0); c.ch != ' ' || c.pix || c.bg.b != 1 {
-			t.Errorf("ячейка %d: %+v, ждали пробел на синем фоне", x, *c)
+			t.Errorf("cell %d: %+v, expected a space on a blue background", x, *c)
 		}
 	}
 	if c := f.at(3, 0); c.bg.b != 1 {
-		t.Errorf("blank задел соседнюю ячейку")
+		t.Errorf("blank touched the neighbouring cell")
 	}
 }
 
 func TestEggTrackFrame(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{}, Track{Artist: "A", Title: "T", Dur: 100}, 10, 2)
 	if f.w != 160 || f.h != 45 || m.pos < 11.9 || m.pos > 12.1 || m.pause > 0.01 {
-		t.Errorf("кадр %dx%d, pos %.2f, pause %.2f", f.w, f.h, m.pos, m.pause)
+		t.Errorf("frame %dx%d, pos %.2f, pause %.2f", f.w, f.h, m.pos, m.pause)
 	}
 }

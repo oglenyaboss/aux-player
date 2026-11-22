@@ -41,7 +41,7 @@ func TestAtakeTrigger(t *testing.T) {
 	m := New(Options{})
 	e := m.eggOf(atakePluto)
 	if e == nil {
-		t.Fatal("для трека альбома яйко nil")
+		t.Fatal("the egg is nil for a track of the album")
 	}
 	if e.theme != &atakeTheme || e.jewel || e.knob != '✦' {
 		t.Errorf("theme %v jewel %v knob %q, want &atakeTheme false '✦'", e.theme == &atakeTheme, e.jewel, e.knob)
@@ -63,7 +63,7 @@ func TestAtakeTrigger(t *testing.T) {
 	}
 
 	if e := New(Options{}).eggOf(Track{Artist: "Lil Yachty", Title: "Baby Pluto", Album: "Eternal Atake", Dur: 210}); e != nil {
-		t.Errorf("Lil Yachty: яйко %v, want nil", e)
+		t.Errorf("Lil Yachty: egg %v, want nil", e)
 	}
 }
 
@@ -72,14 +72,14 @@ func TestAtakeBeam(t *testing.T) {
 	m95, f95 := atakeTrackFrame(t, Options{}, atakePluto, 0, 95)
 	c := atakePixel(m95, f95, 0.77, 0.9)
 	if !(c.g > 0.12 && c.g > c.r+0.06) {
-		t.Errorf("луч (0.77, 0.9)@95: (%.3f %.3f %.3f), ждём g > 0.12 и g > r+0.06", c.r, c.g, c.b)
+		t.Errorf("beam (0.77, 0.9)@95: (%.3f %.3f %.3f), want g > 0.12 and g > r+0.06", c.r, c.g, c.b)
 	}
 	if out := atakePixel(m95, f95, 0.2, 0.9); out.lum() >= 0.03 {
-		t.Errorf("вне луча (0.2, 0.9)@95: lum %.4f, ждём < 0.03", out.lum())
+		t.Errorf("outside the beam (0.2, 0.9)@95: lum %.4f, want < 0.03", out.lum())
 	}
 	m10, f10 := atakeTrackFrame(t, Options{}, atakePluto, 0, 10)
 	if c := atakePixel(m10, f10, 0.77, 0.9); c.g >= 0.03 {
-		t.Errorf("луч (0.77, 0.9)@10: g %.4f, ждём < 0.03", c.g)
+		t.Errorf("beam (0.77, 0.9)@10: g %.4f, want < 0.03", c.g)
 	}
 }
 
@@ -99,11 +99,11 @@ func TestAtakeParticles(t *testing.T) {
 	}
 	m93, f93 := atakeTrackFrame(t, Options{}, atakePluto, 0, 93)
 	if l := maxLum(m93, f93); !(l > 0.8) {
-		t.Errorf("частица@93: max lum %.4f, ждём > 0.8", l)
+		t.Errorf("particle@93: max lum %.4f, want > 0.8", l)
 	}
 	m89, f89 := atakeTrackFrame(t, Options{}, atakePluto, 0, 89)
 	if l := maxLum(m89, f89); l >= 0.6 {
-		t.Errorf("частиц нет@89: max lum %.4f, ждём < 0.6", l)
+		t.Errorf("no particles@89: max lum %.4f, want < 0.6", l)
 	}
 }
 
@@ -114,32 +114,32 @@ func TestAtakeSteady(t *testing.T) {
 	m, f := atakeTrackFrame(t, Options{}, atakePluto, 0, 10)
 	b := m.titleBox
 	if b.Empty() {
-		t.Fatal("titleBox пуст")
+		t.Fatal("titleBox is empty")
 	}
 	topBright, botBright := 0, 0
 	for x := b.Min.X; x < b.Max.X; x++ {
 		if c := f.pixelAt(x, b.Min.Y); c.lum() > 0.1 {
 			topBright++
 			if !(c.b > c.g) {
-				t.Errorf("заголовок верх (%d,%d): (%.3f %.3f %.3f), ждём b > g", x, b.Min.Y, c.r, c.g, c.b)
+				t.Errorf("title top (%d,%d): (%.3f %.3f %.3f), want b > g", x, b.Min.Y, c.r, c.g, c.b)
 			}
 		}
 		if c := f.pixelAt(x, b.Max.Y-1); c.lum() > 0.1 {
 			botBright++
 			if !(c.g > c.b) {
-				t.Errorf("заголовок низ (%d,%d): (%.3f %.3f %.3f), ждём g > b", x, b.Max.Y-1, c.r, c.g, c.b)
+				t.Errorf("title bottom (%d,%d): (%.3f %.3f %.3f), want g > b", x, b.Max.Y-1, c.r, c.g, c.b)
 			}
 		}
 	}
 	if topBright == 0 || botBright == 0 {
-		t.Errorf("заголовок не светится: строка %d и %d 'l>0.1' пикселей", topBright, botBright)
+		t.Errorf("the title does not glow: %d and %d 'l>0.1' pixels", topBright, botBright)
 	}
 	star := false
 	for y := 2; y <= 8; y++ {
 		for x := 100; x <= 159; x++ {
 			c := f.at(x, y)
 			if l := c.bg.lum(); l >= 0.03 {
-				t.Errorf("небо (%d,%d): bg.lum %.4f, ждём < 0.03", x, y, l)
+				t.Errorf("sky (%d,%d): bg.lum %.4f, want < 0.03", x, y, l)
 			}
 			if c.ch == '·' || c.ch == '+' || c.ch == '✦' {
 				star = true
@@ -147,12 +147,12 @@ func TestAtakeSteady(t *testing.T) {
 		}
 	}
 	if !star {
-		t.Error("небо без звезды в x 100…159, строках 2…8")
+		t.Error("sky without a star in x 100…159, rows 2…8")
 	}
 	isStar := func(r rune) bool { return r == '·' || r == '+' || r == '✦' }
 	for x := m.barBox.Min.X; x < m.barBox.Max.X; x++ {
 		if ch := f.at(x, m.barBox.Min.Y).ch; ch == '·' || ch == '+' {
-			t.Errorf("бар (%d,%d): символ %q", x, m.barBox.Min.Y, ch)
+			t.Errorf("bar (%d,%d): rune %q", x, m.barBox.Min.Y, ch)
 		}
 	}
 	for y := 0; y < f.h; y++ {
@@ -162,7 +162,7 @@ func TestAtakeSteady(t *testing.T) {
 			}
 			for _, nx := range [2]int{x - 1, x + 1} {
 				if c := f.at(nx, y); c != nil && (unicode.IsLetter(c.ch) || unicode.IsDigit(c.ch)) {
-					t.Errorf("звезда (%d,%d) стоит рядом с %q", x, y, c.ch)
+					t.Errorf("star (%d,%d) stands next to %q", x, y, c.ch)
 				}
 			}
 		}
@@ -171,7 +171,7 @@ func TestAtakeSteady(t *testing.T) {
 	for y := 2; y <= 8; y++ {
 		for x := 100; x <= 159; x++ {
 			if ch := f3.at(x, y).ch; ch == '·' || ch == '+' || ch == '✦' {
-				t.Errorf("до раскрытия (%d,%d): символ %q", x, y, ch)
+				t.Errorf("before the reveal (%d,%d): rune %q", x, y, ch)
 			}
 		}
 	}
@@ -193,12 +193,12 @@ func TestAtakeNoStone(t *testing.T) {
 	}
 	m, f := atakeTrackFrame(t, Options{}, atakePluto, 0, 9)
 	if n := pinkPixels(m, f); n != 0 {
-		t.Errorf("у Eternal Atake розовых пикселей %d, ждём 0", n)
+		t.Errorf("Eternal Atake has %d pink pixels, want 0", n)
 	}
 	ref := Track{Artist: "Lil Uzi Vert", Title: "Baby Pluto", Album: "Pink Tape", Dur: 210}
 	mr, fr := atakeTrackFrame(t, Options{}, ref, 0, 9)
 	if n := pinkPixels(mr, fr); n == 0 {
-		t.Error("Pink Tape: эталон без розовых пикселей")
+		t.Error("Pink Tape: the reference has no pink pixels")
 	}
 }
 
@@ -206,7 +206,7 @@ func TestAtakeNoStone(t *testing.T) {
 func TestAtakeNoEggs(t *testing.T) {
 	m, f := atakeTrackFrame(t, Options{NoEggs: true}, atakePluto, 0, 95)
 	if c := atakePixel(m, f, 0.77, 0.9); c.g >= 0.03 {
-		t.Errorf("NoEggs: g %.4f, ждём < 0.03", c.g)
+		t.Errorf("NoEggs: g %.4f, want < 0.03", c.g)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestAtakeSizes(t *testing.T) {
 				steps(m, secs)
 				f := m.render()
 				if f == nil || f.at(m.w-1, m.h-1) == nil {
-					t.Errorf("размер %dx%d: кадр не отрисован", sz[0], sz[1])
+					t.Errorf("size %dx%d: frame not rendered", sz[0], sz[1])
 				}
 			}
 		}

@@ -52,22 +52,22 @@ func blondeGreenish(c col) bool { return c.g > c.r+0.15 && c.g > c.b+0.15 }
 func TestBlondeRule(t *testing.T) {
 	m := New(Options{})
 	if e := m.eggOf(blondeNikes); e == nil || e.cover == nil || e.bg == nil || e.switchAt != 0 {
-		t.Fatalf("Nikes: egg %+v, ждём хуки обложки и фона без свитча", e)
+		t.Fatalf("Nikes: egg %+v, want the cover and backdrop hooks without a switch", e)
 	}
 	if e := m.eggOf(blondeNights); e == nil || e.switchAt != 210 {
-		t.Fatalf("Nights: egg %+v, ждём свитч на 210", e)
+		t.Fatalf("Nights: egg %+v, want a switch at 210", e)
 	}
 	if e := m.eggOf(blondeFerrari); e == nil || e.theme != &blondeNightTheme {
-		t.Fatalf("White Ferrari: egg %+v, ждём ночную тему", e)
+		t.Fatalf("White Ferrari: egg %+v, want the night theme", e)
 	}
 	if e := m.eggOf(blondeSolo); e == nil || e.theme == &blondeNightTheme {
-		t.Errorf("Solo — дневная сторона, а тема ночная")
+		t.Errorf("Solo is the day side, but the theme is the night one")
 	}
 	if e := m.eggOf(blondeReprise); e == nil || e.theme != &blondeNightTheme {
-		t.Errorf("Solo (Reprise) — ночная сторона, а тема не ночная")
+		t.Errorf("Solo (Reprise) is the night side, but the theme is not the night one")
 	}
 	if e := m.eggOf(Track{Artist: "Frank Ocean", Title: "Thinkin Bout You", Album: "channel ORANGE"}); e != nil {
-		t.Errorf("channel ORANGE поймал пасхалку: %+v", e)
+		t.Errorf("channel ORANGE caught the egg: %+v", e)
 	}
 }
 
@@ -84,13 +84,13 @@ func TestBlondeDayWashed(t *testing.T) {
 	_, p := blondeFrame(t, Options{NoEggs: true}, blondeNikes, 60, 9)
 	c, plain := blondeCoverMid(m, f), blondeCoverMid(m, p)
 	if !blondeGreenish(c) {
-		t.Fatalf("днём обложка %+v, ждём свою зелёную", c)
+		t.Fatalf("by day the cover is %+v, want its own green one", c)
 	}
 	if c.lum() < plain.lum()+0.03 {
-		t.Errorf("днём обложка %.3f против %.3f без пасхалки, ждём засвет", c.lum(), plain.lum())
+		t.Errorf("by day the cover is %.3f against %.3f without the egg, want an overexposed one", c.lum(), plain.lum())
 	}
 	if g := m.geom(); g.noCover {
-		t.Errorf("днём раскладка перестроена, ждём обычный плеер")
+		t.Errorf("by day the layout is rebuilt, want the usual player")
 	}
 }
 
@@ -104,7 +104,7 @@ func TestBlondeDayLeak(t *testing.T) {
 		steps(m, 2)
 	}
 	if hi-lo < 0.04 {
-		t.Errorf("блик не проходит: яркость фона в %.3f..%.3f", lo, hi)
+		t.Errorf("the leak does not pass: backdrop brightness within %.3f..%.3f", lo, hi)
 	}
 }
 
@@ -114,10 +114,10 @@ func TestBlondeDayLeak(t *testing.T) {
 func TestBlondeNightSide(t *testing.T) {
 	m, f := blondeFrame(t, Options{}, blondeFerrari, 60, 9)
 	if c := blondeCoverMid(m, f); !blondeSmoky(c) {
-		t.Errorf("White Ferrari: обложка %+v, ждём дымную", c)
+		t.Errorf("White Ferrari: cover %+v, want the smoky one", c)
 	}
 	if g := m.geom(); g.noCover {
-		t.Errorf("ночью раскладка перестроена, ждём обычный плеер")
+		t.Errorf("by night the layout is rebuilt, want the usual player")
 	}
 	g := m.geom()
 	outside := func(x, y int) bool { return x >= g.cx+g.cw+2 || y >= g.cy+g.ch+2 }
@@ -135,7 +135,7 @@ func TestBlondeNightSide(t *testing.T) {
 		}
 	}
 	if bright < 20 || red < 3 {
-		t.Errorf("огней: светлых ячеек %d, красных %d; ждём от 20 и от 3", bright, red)
+		t.Errorf("lights: %d bright cells, %d red ones; want 20 and 3 at the least", bright, red)
 	}
 	steps(m, 1)
 	f2 := m.render()
@@ -146,7 +146,7 @@ func TestBlondeNightSide(t *testing.T) {
 		}
 	}
 	if moved < 30 {
-		t.Errorf("за секунду сменилось %d ячеек фона, ждём огни в движении", moved)
+		t.Errorf("%d backdrop cells changed in a second, want the lights moving", moved)
 	}
 }
 
@@ -154,18 +154,18 @@ func TestBlondeNightSide(t *testing.T) {
 func TestBlondeNightsCut(t *testing.T) {
 	m, f := blondeFrame(t, Options{}, blondeNights, 200, 9.8)
 	if c := blondeCoverMid(m, f); !blondeGreenish(c) {
-		t.Errorf("Nights на %.2f с: обложка %+v, ждём дневную", m.pos, c)
+		t.Errorf("Nights at %.2f s: cover %+v, want the day one", m.pos, c)
 	}
 	m, f = blondeFrame(t, Options{}, blondeNights, 200, 10.1)
 	if c := blondeCoverMid(m, f); !blondeSmoky(c) {
-		t.Errorf("Nights на %.2f с: обложка %+v, ждём дымную сразу после свитча", m.pos, c)
+		t.Errorf("Nights at %.2f s: cover %+v, want the smoky one right after the switch", m.pos, c)
 	}
 }
 
 func TestBlondeNoEggs(t *testing.T) {
 	m, f := blondeFrame(t, Options{NoEggs: true}, blondeFerrari, 60, 9)
 	if c := blondeCoverMid(m, f); !blondeGreenish(c) {
-		t.Errorf("NoEggs: обложка %+v, ждём свою", c)
+		t.Errorf("NoEggs: cover %+v, want its own", c)
 	}
 }
 

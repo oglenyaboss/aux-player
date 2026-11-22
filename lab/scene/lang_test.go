@@ -65,7 +65,7 @@ func TestLangEnFramesHaveNoCyrillic(t *testing.T) {
 	for _, at := range []float64{5.8, 9.5, 13.6, 15.5, 16.8, 25, 35, 40, 44, 47.5, 52, 57, 60} {
 		frame := frameText(t, 110, 32, at)
 		if hasCyrillic(strings.ReplaceAll(frame, "Русский", "")) {
-			t.Errorf("кадр %v на английском содержит кириллицу:\n%s", at, frame)
+			t.Errorf("frame %v in English contains Cyrillic:\n%s", at, frame)
 		}
 	}
 }
@@ -75,11 +75,11 @@ func TestLangEnScanAndPlayText(t *testing.T) {
 	frame := frameText(t, 110, 32, 50)
 	for _, s := range []string{"Batch", "of 5", "passed", "side A"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("кадр сканирования 50 без %q:\n%s", s, frame)
+			t.Errorf("the scan frame 50 is without %q:\n%s", s, frame)
 		}
 	}
 	if frame := frameText(t, 110, 32, 69.5); !strings.Contains(frame, "noted: more like this") {
-		t.Errorf("кадр плеера 69.5 без тоста:\n%s", frame)
+		t.Errorf("the player frame 69.5 is without the toast:\n%s", frame)
 	}
 }
 
@@ -93,11 +93,11 @@ func TestLangEnHelpFrame(t *testing.T) {
 	frame := stripANSI(s.m.View())
 	for _, k := range []string{"talk to the agent", "more like this", "less like this", "next", "save to playlist", "start over", "quit"} {
 		if !strings.Contains(frame, k) {
-			t.Errorf("справка без %q:\n%s", k, frame)
+			t.Errorf("the help is without %q:\n%s", k, frame)
 		}
 	}
 	if hasCyrillic(frame) {
-		t.Errorf("справка на английском содержит кириллицу:\n%s", frame)
+		t.Errorf("the help in English contains Cyrillic:\n%s", frame)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestLangPickerEnFrame(t *testing.T) {
 	frame := frameText(t, 110, 32, 5.8)
 	for _, s := range []string{"English", "Русский"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("кадр выбора языка без %q:\n%s", s, frame)
+			t.Errorf("the language picker frame is without %q:\n%s", s, frame)
 		}
 	}
 }
@@ -115,13 +115,13 @@ func TestLangModelStepEn(t *testing.T) {
 	langEN(t)
 	frame := frameText(t, 110, 32, 13.6)
 	if !strings.Contains(frame, "recommended") {
-		t.Errorf("кадр 13.6 без recommended:\n%s", frame)
+		t.Errorf("the frame 13.6 is without recommended:\n%s", frame)
 	}
 	if strings.Contains(frame, "fetching models") {
-		t.Errorf("кадр 13.6 всё ещё показывает загрузку:\n%s", frame)
+		t.Errorf("the frame 13.6 still shows loading:\n%s", frame)
 	}
 	if frame := frameText(t, 110, 32, 12.0); !strings.Contains(frame, "fetching models") {
-		t.Errorf("кадр 12.0 без fetching models:\n%s", frame)
+		t.Errorf("the frame 12.0 is without fetching models:\n%s", frame)
 	}
 }
 
@@ -140,11 +140,11 @@ func TestLangEnQueryAndHint(t *testing.T) {
 	frame := stripANSI(s.m.View())
 	for _, s := range []string{"say what you want to hear", "like Don Toliver but not him, late night drive"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("интро без %q:\n%s", s, frame)
+			t.Errorf("the intro is without %q:\n%s", s, frame)
 		}
 	}
 	if hasCyrillic(frame) {
-		t.Errorf("интро на английском содержит кириллицу:\n%s", frame)
+		t.Errorf("the intro in English contains Cyrillic:\n%s", frame)
 	}
 }
 

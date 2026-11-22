@@ -31,13 +31,13 @@ func TestMbdtfTrigger(t *testing.T) {
 	}
 	luxe := Track{Artist: "Kanye West", Title: "Devil in a New Dress", Album: "My Beautiful Dark Twisted Fantasy (Deluxe Edition)"}
 	if e := m.eggOf(luxe); e == nil || e.theme != &mbdtfTheme {
-		t.Error("deluxe edition не опознан")
+		t.Error("the deluxe edition is not recognised")
 	}
 	if e := m.eggOf(Track{Artist: "Kanye West", Title: "New Slaves", Album: "Yeezus"}); e != nil && e.theme == &mbdtfTheme {
-		t.Error("Yeezus подхватил тему MBDTF")
+		t.Error("Yeezus picked up the MBDTF theme")
 	}
 	if e := m.eggOf(Track{Artist: "Kid Cudi", Title: "REVOFEV", Album: "My Beautiful Dark Twisted Fantasy"}); e != nil {
-		t.Errorf("другой артист получил пасхалку: %+v", *e)
+		t.Errorf("another artist got the egg: %+v", *e)
 	}
 }
 
@@ -79,24 +79,24 @@ func mbdtfWallFrame(t *testing.T, w, h int, pos, secs float64) (*Model, *fb) {
 func TestMbdtfWall(t *testing.T) {
 	m, f := mbdtfWallFrame(t, 160, 45, 20, 2)
 	if g := m.geom(); !g.noCover || !g.noQueue {
-		t.Errorf("160x45: noCover %v noQueue %v, ждём стену", g.noCover, g.noQueue)
+		t.Errorf("160x45: noCover %v noQueue %v, want the wall", g.noCover, g.noQueue)
 	}
 	b, _ := mbdtfPlan(m)
 	if b.cell < 4 {
-		t.Fatalf("клетка мозаики %d пикселей, ждём крупную", b.cell)
+		t.Fatalf("mosaic cell of %d pixels, want a big one", b.cell)
 	}
 	for j := range 8 {
 		for i := range 8 {
 			c := f.pixelAt(b.mx+i*b.cell+b.cell/2, b.my+j*b.cell+b.cell/2)
 			want := col{float64(i*32) / 255, float64(j*32) / 255, 200.0 / 255}
 			if !mbdtfNear(c, want, 0.03) {
-				t.Errorf("клетка (%d,%d) = %s, ждём %s", i, j, c.css(), want.css())
+				t.Errorf("cell (%d,%d) = %s, want %s", i, j, c.css(), want.css())
 			}
 		}
 	}
 	m, _ = mbdtfWallFrame(t, 80, 40, 20, 2)
 	if g := m.geom(); g.noCover {
-		t.Errorf("80x40: стена вместо обычного плеера")
+		t.Errorf("80x40: a wall instead of the usual player")
 	}
 }
 
@@ -113,7 +113,7 @@ func TestMbdtfMosaicEntrance(t *testing.T) {
 		}
 	}
 	if empty == 0 || empty == 64 {
-		t.Errorf("на 0.6 с пустых клеток %d из 64, ждём часть", empty)
+		t.Errorf("at 0.6 s %d of 64 cells are empty, want some", empty)
 	}
 }
 
@@ -130,22 +130,22 @@ func TestMbdtfHung(t *testing.T) {
 	}
 	for title, want := range cases {
 		if got := mbdtfPainting(Track{Title: title}); got != want {
-			t.Errorf("%s: картина %q, ждём %q", title, got, want)
+			t.Errorf("%s: painting %q, want %q", title, got, want)
 		}
 	}
 	seen := map[string]bool{}
 	for _, title := range []string{"Gorgeous", "So Appalled", "Devil in a New Dress", "Hell of a Life", "Blame Game", "Lost in the World", "Who Will Survive in America", "See Me Now"} {
 		p := mbdtfPainting(Track{Title: title})
 		if p == "ballerina" {
-			t.Errorf("%s: балерина не только у Runaway", title)
+			t.Errorf("%s: the ballerina is not only on Runaway", title)
 		}
 		if p != mbdtfPainting(Track{Title: title}) {
-			t.Errorf("%s: картина плавает", title)
+			t.Errorf("%s: the painting floats", title)
 		}
 		seen[p] = true
 	}
 	if len(seen) < 3 {
-		t.Errorf("остальные треки висят на %d картинах, ждём разнообразие", len(seen))
+		t.Errorf("the other tracks hang on %d paintings, want variety", len(seen))
 	}
 }
 
@@ -169,7 +169,7 @@ func TestMbdtfPainting(t *testing.T) {
 		f := m.render()
 		b, _ := mbdtfPlan(m)
 		if c := f.pixelAt(b.mx+b.ms/10, b.my+b.ms/10); !tc.ok(c) {
-			t.Errorf("%s: угол картины %s", tc.title, c.css())
+			t.Errorf("%s: corner of the painting %s", tc.title, c.css())
 		}
 	}
 }
@@ -198,7 +198,7 @@ func TestMbdtfGilding(t *testing.T) {
 		want := []bool{tc.top, tc.right, tc.bot, tc.lft}
 		for k := range got {
 			if got[k] != want[k] {
-				t.Errorf("на %.0f с сторона %d золотая %v, ждём %v", m.pos, k, got[k], want[k])
+				t.Errorf("at %.0f s side %d is golden %v, want %v", m.pos, k, got[k], want[k])
 			}
 		}
 	}
@@ -211,14 +211,14 @@ func TestMbdtfLabel(t *testing.T) {
 	screen := stripANSI(f.String())
 	for _, s := range []string{"Dark Fantasy", "Kanye West", mbdtfCredit, "1:03 / 4:41"} {
 		if !strings.Contains(screen, s) {
-			t.Errorf("на табличке нет %q", s)
+			t.Errorf("the label has no %q", s)
 		}
 	}
 	if c := f.at(b.lx, b.ly); c == nil || !mbdtfNear(c.bg, mbdtfCard, 0.02) {
-		t.Errorf("табличка не светлая")
+		t.Errorf("the label is not light")
 	}
 	if b.lx <= b.mx+b.ms {
-		t.Errorf("табличка (%d) не справа от картины (%d)", b.lx, b.mx+b.ms)
+		t.Errorf("the label (%d) is not to the right of the painting (%d)", b.lx, b.mx+b.ms)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestMbdtfCanvas(t *testing.T) {
 	_, f := mbdtfWallFrame(t, 160, 45, 20, 2)
 	for _, p := range [][2]int{{2, 20}, {150, 40}, {80, 1}} {
 		if c := f.at(p[0], p[1]).bg; c.r <= 2*c.g || c.r < 0.5 {
-			t.Errorf("холст в (%d,%d) не красный: %s", p[0], p[1], c.css())
+			t.Errorf("the canvas at (%d,%d) is not red: %s", p[0], p[1], c.css())
 		}
 	}
 }
@@ -252,7 +252,7 @@ func TestMbdtfFrameFallback(t *testing.T) {
 	m, f = mbdtfWallFrame(t, 80, 40, 20, 3)
 	g = m.geom()
 	if got := f.pixelAt(g.cx-1, g.cy*2+g.ch); mbdtfNear(got, hex(0xe2bd55), 0.02) {
-		t.Errorf("до раскрытия рама уже стоит: %s", got.css())
+		t.Errorf("before the reveal the frame already stands: %s", got.css())
 	}
 }
 
@@ -261,14 +261,14 @@ func TestMbdtfNoEggs(t *testing.T) {
 	m, f := eggTrackFrame(t, Options{NoEggs: true}, mbdtfFantasy, 20, 9)
 	g := m.geom()
 	if g.noCover {
-		t.Fatal("NoEggs вешает стену")
+		t.Fatal("NoEggs hangs the wall")
 	}
 	if got := f.pixelAt(g.cx-1, g.cy*2+g.ch); mbdtfNear(got, hex(0xe2bd55), 0.02) {
-		t.Errorf("NoEggs рисует раму: %s", got.css())
+		t.Errorf("NoEggs draws the frame: %s", got.css())
 	}
 	for x := 0; x < m.w; x++ {
 		if p := f.at(x, m.barBox.Min.Y); p != nil && p.ch == '♛' {
-			t.Fatal("NoEggs ставит ♛")
+			t.Fatal("NoEggs places ♛")
 		}
 	}
 }
@@ -317,18 +317,18 @@ func TestMbdtfRunawaySet(t *testing.T) {
 	steps(m, 3)
 	f := m.render()
 	if c := f.at(80, 1).bg; c.lum() < 0.75 || c.r > c.g+0.05 {
-		t.Errorf("сет не белый: %s", c.css())
+		t.Errorf("the set is not white: %s", c.css())
 	}
 	if n := mbdtfDancerCells(m, f); n < 40 {
-		t.Errorf("на сете %d чёрных пикселей, ждём балерин", n)
+		t.Errorf("%d black pixels on the set, want ballerinas", n)
 	}
 	b, _ := mbdtfPlan(m)
 	if c := f.at(b.lx, b.ly).bg; c.lum() > 0.1 {
-		t.Errorf("табличка на белом не чёрная: %s", c.css())
+		t.Errorf("the label on white is not black: %s", c.css())
 	}
 	m, f = mbdtfWallFrame(t, 160, 45, 20, 3)
 	if n := mbdtfDancerCells(m, f); n != 0 {
-		t.Errorf("Dark Fantasy: на стене %d чёрных пикселей, балерины только в Runaway", n)
+		t.Errorf("Dark Fantasy: %d black pixels on the wall, ballerinas are only in Runaway", n)
 	}
 }
 
@@ -342,13 +342,13 @@ func TestMbdtfRunawayFreeze(t *testing.T) {
 	a := m.render().String()
 	steps(m, 1)
 	if m.render().String() == a {
-		t.Fatal("балерины стоят во время игры")
+		t.Fatal("the ballerinas stand still during playback")
 	}
 	m.Now(mbdtfRunaway.Key(), m.pos, false)
 	steps(m, 0.2)
 	b := m.render().String()
 	steps(m, 1)
 	if m.render().String() != b {
-		t.Errorf("на паузе кадр меняется, ждём замерших балерин")
+		t.Errorf("the frame changes on pause, want the ballerinas frozen")
 	}
 }

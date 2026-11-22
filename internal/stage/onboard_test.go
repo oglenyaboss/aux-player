@@ -26,7 +26,7 @@ func TestOnboardURLStep(t *testing.T) {
 	frame := dump(m.render())
 	for _, s := range []string{"адрес OpenAI-совместимого API", "›", "▎", "нужен адрес", "enter дальше", "esc назад"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("кадр subURL без %q", s)
+			t.Errorf("subURL frame without %q", s)
 		}
 	}
 	o.url = []rune(strings.Repeat("а", 45))
@@ -41,7 +41,7 @@ func TestOnboardURLStep(t *testing.T) {
 		}
 	}
 	if best != 39 {
-		t.Errorf("subURL показывает %d подряд рун адреса, ждём последние w-6 = 39", best)
+		t.Errorf("subURL shows %d address runes in a row, want the last w-6 = 39", best)
 	}
 }
 
@@ -55,14 +55,14 @@ func TestOnboardKeyVariants(t *testing.T) {
 	frame := dump(m.render())
 	for _, s := range []string{"ключ, если нужен", "нужен ключ"} {
 		if !strings.Contains(frame, s) {
-			t.Errorf("подшаг ключа без %q (провайдер без ключей)", s)
+			t.Errorf("key substep without %q (a provider without keys)", s)
 		}
 	}
 	o.prov, o.errT = 0, -1
 	o.key = []rune("sk-or-v1-4f9a2c71e0b8d3" + strings.Repeat("б", 45-len("sk-or-v1-4f9a2c71e0b8d3")))
 	frame = dump(m.render())
 	if strings.Contains(frame, "sk-or-") || !strings.Contains(frame, "•") {
-		t.Errorf("маскированная строка длиннее w-6 не обрезана до последних рун")
+		t.Errorf("the masked string longer than w-6 is not cut to the last runes")
 	}
 }
 
@@ -74,7 +74,7 @@ func TestOnboardEscFromKey(t *testing.T) {
 	m.ob.sub = SubKey
 	m.onboardKey("esc", "")
 	if m.ob.sub != SubProvider {
-		t.Errorf("esc из ключа должен вернуть SubProvider, стало %v", m.ob.sub)
+		t.Errorf("esc from the key must return to SubProvider, got %v", m.ob.sub)
 	}
 }
 
@@ -87,6 +87,6 @@ func TestOnboardEmptyFilter(t *testing.T) {
 	o.filter = []rune("zzz")
 	frame := dump(m.render())
 	if !strings.Contains(frame, "ничего не нашлось") {
-		t.Errorf("пустой фильтр без «ничего не нашлось»:\n%s", frame)
+		t.Errorf("empty filter without «ничего не нашлось»:\n%s", frame)
 	}
 }

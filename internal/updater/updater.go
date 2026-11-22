@@ -129,6 +129,14 @@ func (r Result) Advice() string {
 	}
 }
 
+// Available reports that a newer release exists that this install cannot put
+// in place itself. That is worth telling the listener about: nothing else
+// will, and the binary stays old until they act. OutcomeDisabled is left out:
+// at startup it only comes back for a build from source.
+func (r Result) Available() bool {
+	return r.Outcome == OutcomeManual
+}
+
 // executable is indirected so tests can point the self-replace at a temp file
 // instead of the test binary.
 var executable = os.Executable
@@ -138,8 +146,9 @@ var rename = os.Rename
 
 // CheckAndUpdate checks GitHub for a newer release. If one is found it
 // downloads, verifies the SHA-256 checksum, and installs it in-place.
-// It returns the path of the updated binary when a restart is needed, or ""
-// when already up to date, on error, or when noUpdate is true.
+// It reports what the attempt did: Exe is the binary to restart into when a
+// newer release was installed, and empty otherwise — already current, a
+// failed check, --no-update, or a release this build left alone (Available).
 //
 // The caller is responsible for restarting after cleaning up (e.g. after the
 // TUI exits). All errors are handled internally — the function never blocks
@@ -149,19 +158,19 @@ var rename = os.Rename
 // wait for the next window. On Windows it first deletes the binaries earlier
 // updates moved aside, even when noUpdate is true, since they are there either
 // way.
-func CheckAndUpdate(current string, noUpdate bool, log func(string)) string {
+func CheckAndUpdate(current string, noUpdate bool, log func(string)) Result {
 	if runtime.GOOS == "windows" {
 		if exe, err := selfPath(); err == nil {
 			removeAside(exe)
 		}
 	}
 	if noUpdate {
-		return ""
+		return Result{}
 	}
 	if !shouldCheck() {
-		return ""
+		return Result{}
 	}
-	return update(apiURL, current, true, log).Exe
+	return update(apiURL, current, true, log)
 }
 
 // UpdateNow asks GitHub straight away, ignoring the once-a-day window, and
@@ -285,6 +294,9 @@ func update(api, current string, install bool, log func(string)) Result {
 
 	log(fmt.Sprintf("Updated to %s — restarting…", rel.TagName))
 	_ = os.RemoveAll(tmpDir)
+	// Recorded before the caller re-execs, so even a re-exec that fails leaves
+	// the next start of the new binary a note to read.
+	recordInstall(rel.TagName)
 	return Result{Outcome: OutcomeInstalled, Tag: rel.TagName, Exe: exe}
 }
 
@@ -626,4 +638,35 @@ func markChecked() {
 		return
 	}
 	_ = f.Close()
+}
+
+// recordInstall remembers tag as the release this process just installed, so
+// the first start of that build can say so once. It sits in the cache dir
+// beside the update-check stamp: a one-shot note, not a config setting.
+func recordInstall(tag string) {
+	dir := cacheDir()
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, "installed_update"), []byte(tag), 0o600) //nolint:gosec // fixed name inside our own cacheDir()
+}
+
+// InstalledNotice consumes the recorded install and reports whether the
+// running build is the one it names: the tag when it matches, "" otherwise.
+// The record is cleared on every read, so the notice shows at most once and a
+// stale one — a downgrade, a from-source build over a release — never speaks
+// up later. Release tags carry a leading "v" that goreleaser strips from the
+// version it builds in, so both sides are compared without it.
+func InstalledNotice(running string) string {
+	path := filepath.Join(cacheDir(), "installed_update")
+	data, err := os.ReadFile(path) //nolint:gosec // fixed name inside our own cacheDir()
+	if err != nil {
+		return ""
+	}
+	tag := strings.TrimSpace(string(data))
+	_ = os.Remove(path)
+	if tag == "" || strings.TrimPrefix(tag, "v") != strings.TrimPrefix(running, "v") {
+		return ""
+	}
+	return tag
 }

@@ -39,10 +39,11 @@ type stageScreen struct {
 	art     *art.Cache        // on-disk cover cache; nil fetches uncached
 	artURL  map[string]string // track keys to their raw artwork URLs, for the covers the screen asks for
 
-	initErr  string // launch error the scene shows on the next tick
-	lastErr  string // host error already shown in the player, so a new one toasts once
-	quit     bool   // the scene asked to leave the program; the tick chain stops
-	inflight int    // cover fetches started and not yet answered
+	initErr  string           // launch error the scene shows on the next tick
+	lastErr  string           // host error already shown in the player, so a new one toasts once
+	notice   *UpdateNoticeMsg // update word waiting for the player page to land on
+	quit     bool             // the scene asked to leave the program; the tick chain stops
+	inflight int              // cover fetches started and not yet answered
 }
 
 type stageCover struct{ key, url string }
@@ -242,6 +243,8 @@ func (s *stageScreen) act(a stage.Action) {
 		}
 	case stage.Save:
 		s.out = append(s.out, VibeAIActionMsg{Action: VibeAISave})
+	case stage.Listen:
+		s.out = append(s.out, VibeAIActionMsg{Action: VibeAIListen})
 	case stage.SaveTrack:
 		if a.ID == "" {
 			if s.host.playerState.Track == nil {

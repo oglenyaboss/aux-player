@@ -38,6 +38,10 @@ type UI interface {
 	Picked(p Pick)
 }
 
+type PlaylistUI interface {
+	Playlist(p PlaylistPlan)
+}
+
 type Pick struct {
 	Track    Track
 	Name     string
@@ -140,7 +144,8 @@ const setPlanSchema = `{
       }
     },
     "exclusions": {"type": "array", "items": {"type": "string"}, "description": "Artist names that must not be in the selection. Artists only, not albums and not tracks."},
-    "from_favorites": {"type": "boolean", "description": "Favorites mode: the listener asks for their own favorite, familiar music. Only tracks from Favorites and from the library of Favorites artists."}
+    "from_favorites": {"type": "boolean", "description": "Favorites mode: the listener asks for their own favorite, familiar music. Only tracks from Favorites and from the library of Favorites artists."},
+    "playlist": {"type": "object", "description": "Playlist mode: the listener wants one finished playlist to save or download, not a stream. Omit for a normal stream.", "properties": {"size": {"type": "integer", "minimum": 5, "maximum": 60}, "name": {"type": "string", "description": "Playlist name in the listener's language, up to 60 characters."}, "description": {"type": "string", "description": "One line about the sound, up to 200 characters."}}, "required": ["size", "name"]}
   },
   "required": ["seeds", "exclusions"]
 }`
@@ -291,8 +296,16 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 	}
 	a.msgs = append(a.msgs, llm.Message{Role: "user", Content: user})
 	hints := 0
+	memoryRetried := false
 	start := time.Now()
-	for step := 1; step <= a.MaxSteps; step++ {
+	for step := 1; ; step++ {
+		maxSteps, maxHints := a.MaxSteps, 2
+		if a.Session.Playlist() != nil {
+			maxSteps, maxHints = 2*a.MaxSteps, 5
+		}
+		if step > maxSteps {
+			break
+		}
 		resp, err := a.LLM.Chat(ctx, a.msgs, agentTools(), false)
 		if err != nil {
 			return nil, err
@@ -307,7 +320,7 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 			if a.Session.Done() {
 				break
 			}
-			if hints < 2 {
+			if hints < maxHints {
 				hints++
 				a.msgs = append(a.msgs, llm.Message{
 					Role:    "user",
@@ -317,13 +330,21 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 			}
 			break
 		}
+		memoryFailed := false
 		for _, call := range resp.Message.ToolCalls {
 			a.logf("→ %s %s", call.Name, call.Arguments)
 			res := a.dispatch(ctx, call)
 			a.logf("← %s", truncateRunes(res, 1500))
 			a.msgs = append(a.msgs, llm.Message{Role: "tool", ToolCallID: call.ID, Content: res})
+			if strings.HasPrefix(call.Name, "memory_") && strings.HasPrefix(res, "error: ") {
+				memoryFailed = true
+			}
 		}
 		if a.Session.Done() {
+			if memoryFailed && !memoryRetried {
+				memoryRetried = true
+				continue
+			}
 			break
 		}
 	}
@@ -357,11 +378,12 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			Seeds         []planSeedArg `json:"seeds"`
 			Exclusions    []string      `json:"exclusions"`
 			FromFavorites bool          `json:"from_favorites"`
+			Playlist      *PlaylistPlan `json:"playlist"`
 		}
 		if err := toolArgs(call.Arguments, &args); err != nil {
 			return "error: " + err.Error()
 		}
-		return a.setPlan(args.Seeds, args.Exclusions, args.FromFavorites)
+		return a.setPlan(args.Seeds, args.Exclusions, args.FromFavorites, args.Playlist)
 	case "describe":
 		var args struct {
 			Kind   string `json:"kind"`
@@ -678,7 +700,7 @@ func (a *Agent) askLater(args askLaterArg) string {
 	return "ok: the question will be shown to the listener, the answer comes as a reply"
 }
 
-func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites bool) string {
+func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites bool, playlist *PlaylistPlan) string {
 	a.progress("set_plan", fmt.Sprintf("referents %d, exclusions %d", len(seeds), len(exclusions)))
 	for _, s := range seeds {
 		switch s.Mode {
@@ -687,15 +709,34 @@ func (a *Agent) setPlan(seeds []planSeedArg, exclusions []string, fromFavorites 
 			return "error: unknown mode " + s.Mode
 		}
 	}
+	if playlist != nil {
+		if playlist.Size < 5 || playlist.Size > 60 {
+			return "error: playlist size must be 5–60"
+		}
+		playlist.Name = strings.TrimSpace(playlist.Name)
+		if playlist.Name == "" {
+			return "error: playlist name is required"
+		}
+		playlist.Name = truncateRunes(playlist.Name, 60)
+		playlist.Description = truncateRunes(playlist.Description, 200)
+	}
 	ss := make([]Seed, len(seeds))
 	for i, s := range seeds {
 		ss[i] = Seed(s)
 	}
-	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites})
+	a.Session.SetPlan(Plan{Seeds: ss, Exclusions: exclusions, FromFavorites: fromFavorites, Playlist: playlist})
+	if playlist != nil {
+		if pu, ok := a.UI.(PlaylistUI); ok {
+			pu.Playlist(*playlist)
+		}
+	}
 	a.planSet = true
 	res := fmt.Sprintf("plan accepted: referents %d, exclusions %d", len(seeds), len(exclusions))
 	if fromFavorites {
 		res += ", favorites mode"
+	}
+	if playlist != nil {
+		res += fmt.Sprintf(", playlist of %d", playlist.Size)
 	}
 	return res
 }

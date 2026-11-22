@@ -63,11 +63,11 @@ func TestHVRule(t *testing.T) {
 	m := New(Options{})
 	for _, tr := range []Track{hvSuperhero, hvCreepin, hvAroundMe} {
 		if e := m.eggOf(tr); e == nil || e.theme != &hvTheme || e.over == nil {
-			t.Errorf("%s: egg %+v, ждём H&V", tr.Title, e)
+			t.Errorf("%s: egg %+v, want H&V", tr.Title, e)
 		}
 	}
 	if e := m.eggOf(Track{Artist: "Metro Boomin", Title: "No Complaints", Album: "NOT ALL HEROES WEAR CAPES"}); e != nil {
-		t.Errorf("другой альбом Метро поймал пасхалку: %+v", e)
+		t.Errorf("another Metro album caught the egg: %+v", e)
 	}
 }
 
@@ -77,15 +77,15 @@ func TestHVRule(t *testing.T) {
 func TestHVCity(t *testing.T) {
 	m, f := hvFrame(t, Options{}, hvSuperhero, 0.2)
 	if n := hvFlames(m, f); n > 20 {
-		t.Errorf("на 0.2 с уже %d пикселей огня, ждём разгорание", n)
+		t.Errorf("at 0.2 s already %d fire pixels, want it still kindling", n)
 	}
 	m, f = hvFrame(t, Options{}, hvCreepin, 9)
 	if n := hvFlames(m, f); n < 300 {
-		t.Errorf("%s: %d пикселей огня, ждём горящий город", hvCreepin.Title, n)
+		t.Errorf("%s: %d fire pixels, want a burning city", hvCreepin.Title, n)
 	}
 	m, f = hvFrame(t, Options{}, hvSuperhero, 9)
 	if n := hvFlames(m, f); n < 300 {
-		t.Errorf("%s: %d пикселей огня, ждём горящий город", hvSuperhero.Title, n)
+		t.Errorf("%s: %d fire pixels, want a burning city", hvSuperhero.Title, n)
 	}
 	dark := 0
 	for px := 0; px < m.w; px++ {
@@ -94,7 +94,7 @@ func TestHVCity(t *testing.T) {
 		}
 	}
 	if dark < m.w*2/3 {
-		t.Errorf("у низа экрана тёмных пикселей %d из %d, ждём силуэт города", dark, m.w)
+		t.Errorf("dark pixels at the bottom of the screen %d of %d, want a city skyline", dark, m.w)
 	}
 	g := m.geom()
 	fire := func(f *fb) col { return f.pixelAt(g.cx+g.cw*17/60, g.cy*2+g.ch) }
@@ -106,10 +106,10 @@ func TestHVCity(t *testing.T) {
 		changed = fire(m.render()) != a
 	}
 	if !changed {
-		t.Errorf("огонь на обложке не мерцает")
+		t.Errorf("the fire on the cover does not flicker")
 	}
 	if d := darkPx(m.render()); d != da {
-		t.Errorf("тёмная часть обложки дрожит: %s → %s", da.css(), d.css())
+		t.Errorf("the dark part of the cover shakes: %s → %s", da.css(), d.css())
 	}
 }
 
@@ -117,7 +117,7 @@ func TestHVCity(t *testing.T) {
 func TestHVAfter(t *testing.T) {
 	m, f := hvFrame(t, Options{}, hvAroundMe, 9)
 	if n := hvFlames(m, f); n > 40 {
-		t.Errorf("инструментал: %d пикселей огня, ждём потушенный город", n)
+		t.Errorf("instrumental: %d fire pixels, want the city put out", n)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestHVReadable(t *testing.T) {
 	screen := stripANSI(m.render().String())
 	for _, s := range []string{"Creepin'", "Around Me (Instrumental)"} {
 		if !strings.Contains(screen, s) {
-			t.Errorf("очередь потеряла %q", s)
+			t.Errorf("queue lost %q", s)
 		}
 	}
 }
@@ -138,7 +138,7 @@ func TestHVReadable(t *testing.T) {
 func TestHVNoEggs(t *testing.T) {
 	m, f := hvFrame(t, Options{NoEggs: true}, hvSuperhero, 9)
 	if n := hvFlames(m, f); n > 20 {
-		t.Errorf("NoEggs: %d пикселей огня", n)
+		t.Errorf("NoEggs: %d fire pixels", n)
 	}
 }
 

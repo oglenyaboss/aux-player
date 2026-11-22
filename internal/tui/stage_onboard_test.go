@@ -161,7 +161,7 @@ func TestStageLoadModelsUnauthorized(t *testing.T) {
 		t.Fatalf("flush returned %T, want stageModelsMsg", msg)
 	}
 	if msg.err != "ключ не подошёл" {
-		t.Fatalf("err = %q, want ключ не подошёл", msg.err)
+		t.Fatalf("err = %q, want the wrong-key error", msg.err)
 	}
 }
 
@@ -183,7 +183,7 @@ func TestStageLoadModelsNoTools(t *testing.T) {
 		t.Fatalf("flush returned %T, want stageModelsMsg", msg)
 	}
 	if msg.err != "у провайдера нет моделей с инструментами" {
-		t.Fatalf("err = %q, want у провайдера нет моделей с инструментами", msg.err)
+		t.Fatalf("err = %q, want the no-tools-models error", msg.err)
 	}
 }
 
@@ -442,10 +442,10 @@ func TestStageLastfmTypedKeys(t *testing.T) {
 	s.act(stage.ConnectLastfm{Key: "k", Secret: "s"})
 	m.handleVibeAIMsg(s.flush()())
 	if gotKey != "k" || gotSecret != "s" {
-		t.Fatalf("авторизация с (%q,%q), ждём (k,s)", gotKey, gotSecret)
+		t.Fatalf("authorization with (%q,%q), want (k,s)", gotKey, gotSecret)
 	}
 	if m.cfg.LastfmAPIKey != "k" || m.cfg.LastfmAPISecret != "s" || m.cfg.LastfmSessionKey != "sess" {
-		t.Fatalf("cfg = (%q,%q,%q), ждём (k,s,sess)",
+		t.Fatalf("cfg = (%q,%q,%q), want (k,s,sess)",
 			m.cfg.LastfmAPIKey, m.cfg.LastfmAPISecret, m.cfg.LastfmSessionKey)
 	}
 	data, err := os.ReadFile(savedConfigPath(t))
@@ -461,11 +461,11 @@ func TestStageLastfmTypedKeys(t *testing.T) {
 func TestStageOptionsLastfmAsk(t *testing.T) {
 	o := stageOptions(&config.Config{LastfmAPIKey: "k"}, false)
 	if !o.LastfmAskKeys || o.LastfmKey != "k" {
-		t.Fatalf("key without secret: ask=%v key=%q, ждём true/k", o.LastfmAskKeys, o.LastfmKey)
+		t.Fatalf("key without secret: ask=%v key=%q, want true/k", o.LastfmAskKeys, o.LastfmKey)
 	}
 	o = stageOptions(&config.Config{LastfmAPIKey: "k", LastfmAPISecret: "s"}, false)
 	if o.LastfmAskKeys {
-		t.Fatalf("key and secret: ask=%v, ждём false", o.LastfmAskKeys)
+		t.Fatalf("key and secret: ask=%v, want false", o.LastfmAskKeys)
 	}
 }
 
@@ -476,7 +476,7 @@ func TestStageEggsSaves(t *testing.T) {
 	s := m.vibeAIP.m
 	s.act(stage.Eggs{On: false})
 	if m.cfg.VibeEggs == nil || *m.cfg.VibeEggs {
-		t.Fatalf("VibeEggs = %v, ждём false", m.cfg.VibeEggs)
+		t.Fatalf("VibeEggs = %v, want false", m.cfg.VibeEggs)
 	}
 	data, err := os.ReadFile(savedConfigPath(t))
 	if err != nil {
@@ -487,6 +487,6 @@ func TestStageEggsSaves(t *testing.T) {
 	}
 	s.act(stage.Eggs{On: true})
 	if m.cfg.VibeEggs == nil || !*m.cfg.VibeEggs {
-		t.Fatalf("VibeEggs = %v, ждём true", m.cfg.VibeEggs)
+		t.Fatalf("VibeEggs = %v, want true", m.cfg.VibeEggs)
 	}
 }

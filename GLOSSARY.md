@@ -47,11 +47,14 @@ _Avoid_: station, radio
 The stream moving on to artists similar to the ones similar to the referent; no further than one step (no longer in the prompt).
 
 **Portion**:
-The tracks the agent adds to the stream in one turn; 5 for now.
+The tracks the agent adds to the stream in one turn; 5 for now. In Playlist mode the whole playlist is one Portion.
 _Avoid_: batch, pack
 
+**Playlist mode**:
+A run that delivers one finished playlist of a set size (30 by default) instead of a Stream: saved to Apple Music under the agent's name, not played until the listener asks.
+
 **Window**:
-The last 20 tracks of the stream, over which the selection limits are counted: per artist, per referent, per known artist.
+The last 20 tracks of the stream, over which the selection limits are counted: per artist, per referent, per known artist. In Playlist mode the Window is the playlist, and the limits scale with its size.
 
 **Card**:
 An agent question where every option is a track with artwork; the chosen track plays at once.

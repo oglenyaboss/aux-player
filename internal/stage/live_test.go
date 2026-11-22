@@ -28,12 +28,12 @@ func toScan(t *testing.T, m *Model) {
 	m.Key("enter", "")
 	m.Ask([]Question{{Title: "q", Options: []string{"a", "b"}}})
 	if !runTo(m, PhAsk, 300) {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 	steps(m, 0.8)
 	m.Key("enter", "")
 	if !runTo(m, PhScan, 300) {
-		t.Fatalf("фаза %v, ждём PhScan", m.Phase())
+		t.Fatalf("phase %v, want PhScan", m.Phase())
 	}
 }
 
@@ -45,29 +45,29 @@ func TestKeyPassThrough(t *testing.T) {
 	m.SetSize(110, 32)
 	m.JumpPlay(threeTracks(), 0, 0)
 	if m.Key("n", "") {
-		t.Errorf("n без SelfPlay отдан хосту, а экран его взял")
+		t.Errorf("n without SelfPlay went to the host, but the screen took it")
 	}
 	if m.Key("space", "") {
-		t.Errorf("space должен пройти насквозь")
+		t.Errorf("space must pass through")
 	}
 	if m.Key("left", "") {
-		t.Errorf("left должен пройти насквозь")
+		t.Errorf("left must pass through")
 	}
 	if !m.Key("+", "") {
-		t.Errorf("+ должен быть взят")
+		t.Errorf("+ must be taken")
 	}
 	if !m.Key("w", "") {
-		t.Errorf("w должен быть взят")
+		t.Errorf("w must be taken")
 	}
 	if saves := recorded[Save](r); len(saves) != 1 {
-		t.Fatalf("ждём один Save, записано %v", r.acts)
+		t.Fatalf("want one Save, recorded %v", r.acts)
 	}
 	if m.Phase() != PhPlay {
-		t.Errorf("фаза изменилась: %v", m.Phase())
+		t.Errorf("the phase changed: %v", m.Phase())
 	}
 	tr := threeTracks()
 	if got := m.Ahead(); !eqStrings(got, []string{tr[1].Key(), tr[2].Key()}) {
-		t.Errorf("Ahead()=%v, ждём очередь нетронутой", got)
+		t.Errorf("Ahead()=%v, want the queue untouched", got)
 	}
 }
 
@@ -78,11 +78,11 @@ func TestKeySelfPlay(t *testing.T) {
 	m.SetSize(110, 32)
 	m.JumpPlay(threeTracks(), 0, 0)
 	if !m.Key("n", "") {
-		t.Errorf("n с SelfPlay должен быть взят")
+		t.Errorf("n with SelfPlay must be taken")
 	}
 	tr := threeTracks()
 	if got := m.Ahead(); !eqStrings(got, []string{tr[2].Key()}) {
-		t.Fatalf("Ahead()=%v, ждём %v", got, []string{tr[2].Key()})
+		t.Fatalf("Ahead()=%v, want %v", got, []string{tr[2].Key()})
 	}
 }
 
@@ -93,7 +93,7 @@ func TestProgressStatus(t *testing.T) {
 	toScan(t, m)
 	m.Progress("ищу свежие релизы")
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "ищу свежие релизы") {
-		t.Errorf("кадр без статуса:\n%s", frame)
+		t.Errorf("frame without the status:\n%s", frame)
 	}
 }
 
@@ -109,15 +109,15 @@ func TestCandidatePacing(t *testing.T) {
 	}
 	steps(m, 0.1)
 	if len(m.cands) != 1 {
-		t.Fatalf("на сцене %d через 0.1с после пачки, ждём 1", len(m.cands))
+		t.Fatalf("%d on stage 0.1 s after the batch, want 1", len(m.cands))
 	}
 	steps(m, 0.5)
 	if len(m.cands) != 1 {
-		t.Fatalf("на сцене %d через 0.6с, ждём 1: следующий ждёт ухода первого", len(m.cands))
+		t.Fatalf("%d on stage after 0.6 s, want 1: the next one waits for the first to leave", len(m.cands))
 	}
 	steps(m, 14)
 	if len(m.cands) != 5 || len(m.inbox) != 0 {
-		t.Fatalf("прошло %d, в очереди %d через 14.6с; ждём 5 и 0", len(m.cands), len(m.inbox))
+		t.Fatalf("%d passed, %d in the queue after 14.6 s; want 5 and 0", len(m.cands), len(m.inbox))
 	}
 }
 
@@ -132,7 +132,7 @@ func TestPortionInPlay(t *testing.T) {
 	m.JumpPlay([]Track{a, b}, 0, 0)
 	m.PortionDone([]Track{b, c, d}, "")
 	if got := m.Ahead(); !eqStrings(got, []string{b.Key(), c.Key(), d.Key()}) {
-		t.Fatalf("Ahead()=%v, ждём %v", got, []string{b.Key(), c.Key(), d.Key()})
+		t.Fatalf("Ahead()=%v, want %v", got, []string{b.Key(), c.Key(), d.Key()})
 	}
 }
 
@@ -146,10 +146,10 @@ func TestEmptyPortionFails(t *testing.T) {
 	m.PortionDone(nil, "")
 	steps(m, 1)
 	if m.Phase() != PhIntro {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "ничего не нашлось") {
-		t.Errorf("кадр без ошибки:\n%s", frame)
+		t.Errorf("frame without the error:\n%s", frame)
 	}
 }
 
@@ -165,7 +165,7 @@ func TestAskInPlay(t *testing.T) {
 	})
 	ans := recorded[Answers](r)
 	if len(ans) != 1 || !eqStrings(ans[0].Raw, []string{"", ""}) {
-		t.Fatalf("ждём Answers{Raw:[ ]}, записано %v", r.acts)
+		t.Fatalf("want Answers{Raw:[ ]}, recorded %v", r.acts)
 	}
 }
 
@@ -177,10 +177,10 @@ func TestNowFollowsPlayer(t *testing.T) {
 	m.JumpPlay(tr, 0, 0)
 	m.Now(tr[2].Key(), 42, true)
 	if got := m.Ahead(); len(got) != 0 {
-		t.Fatalf("Ahead()=%v, ждём текущий C", got)
+		t.Fatalf("Ahead()=%v, want the current C", got)
 	}
 	if m.pos != 42 {
-		t.Fatalf("pos=%v, ждём 42", m.pos)
+		t.Fatalf("pos=%v, want 42", m.pos)
 	}
 }
 
@@ -197,13 +197,13 @@ func TestNowBeforePlay(t *testing.T) {
 	m.Candidate(tr[1], true, "")
 	m.Candidate(tr[2], true, "")
 	if !runTo(m, PhPlay, 1500) {
-		t.Fatalf("фаза %v, ждём PhPlay", m.Phase())
+		t.Fatalf("phase %v, want PhPlay", m.Phase())
 	}
 	if m.cur != 1 || m.queue[m.cur].Key() != tr[1].Key() {
-		t.Fatalf("текущий трек %d %q, ждём B", m.cur, m.queue[m.cur].Key())
+		t.Fatalf("current track %d %q, want B", m.cur, m.queue[m.cur].Key())
 	}
 	if m.pos != 10 {
-		t.Errorf("pos=%v, ждём 10", m.pos)
+		t.Errorf("pos=%v, want 10", m.pos)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestPausedHoldsPos(t *testing.T) {
 	m.Now(solo[0].Key(), 5, false)
 	steps(m, 2)
 	if m.pos != 5 {
-		t.Fatalf("pos=%v, ждём 5", m.pos)
+		t.Fatalf("pos=%v, want 5", m.pos)
 	}
 }
 
@@ -229,17 +229,17 @@ func TestFailRestoresQuery(t *testing.T) {
 	m.Key("enter", "")
 	m.Fail("сеть упала")
 	if m.Phase() != PhIntro {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	if m.Input() != "abc" {
-		t.Fatalf("Input()=%q, ждём abc", m.Input())
+		t.Fatalf("Input()=%q, want abc", m.Input())
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "сеть упала") {
-		t.Errorf("кадр без ошибки:\n%s", frame)
+		t.Errorf("frame without the error:\n%s", frame)
 	}
 	m.Key("x", "")
 	if frame := stripANSI(m.View()); strings.Contains(frame, "сеть упала") {
-		t.Errorf("ошибка осталась после клавиши:\n%s", frame)
+		t.Errorf("the error stayed after a key:\n%s", frame)
 	}
 }
 
@@ -253,7 +253,7 @@ func TestScaleSteps(t *testing.T) {
 	m.Key("enter", "")
 	m.Ask([]Question{{Title: "scale", Scale: true, Steps: 3, Left: "l", Right: "r", Def: 1}})
 	if !runTo(m, PhAsk, 300) {
-		t.Fatalf("фаза %v, ждём PhAsk", m.Phase())
+		t.Fatalf("phase %v, want PhAsk", m.Phase())
 	}
 	steps(m, 1)
 	m.Key("right", "")
@@ -264,7 +264,7 @@ func TestScaleSteps(t *testing.T) {
 	}
 	ans := recorded[Answers](r)
 	if len(ans) != 1 || !eqStrings(ans[0].Raw, []string{"3"}) {
-		t.Fatalf("ждём Answers{Raw:[3]}, записано %v", r.acts)
+		t.Fatalf("want Answers{Raw:[3]}, recorded %v", r.acts)
 	}
 }
 
@@ -277,6 +277,6 @@ func TestSetSizeSame(t *testing.T) {
 	m.SetSize(110, 32)
 	m.SetSize(110, 32)
 	if len(m.logo) != n1 || &m.logo[0] != ptr1 {
-		t.Errorf("SetSize того же размера пересобрал логотип")
+		t.Errorf("a same-size SetSize rebuilt the logo")
 	}
 }

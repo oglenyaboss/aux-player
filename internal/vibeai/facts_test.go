@@ -12,7 +12,7 @@ func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join("testdata", name)) //nolint:gosec // G304: fixtures of this package
 	if err != nil {
-		t.Fatalf("прочитать %s: %v", name, err)
+		t.Fatalf("read %s: %v", name, err)
 	}
 	return body
 }
@@ -64,7 +64,7 @@ func TestParseAlbumFacts(t *testing.T) {
 		t.Errorf("Tracks = %v, want %v", f.Tracks, want)
 	}
 	if strings.Contains(f.Editorial, "<") {
-		t.Errorf("Editorial содержит HTML: %q", f.Editorial[:80])
+		t.Errorf("Editorial contains HTML: %q", f.Editorial[:80])
 	}
 	if !strings.HasPrefix(f.Editorial, "100 Best Albums") {
 		t.Errorf("Editorial = %q, want prefix %q", f.Editorial[:80], "100 Best Albums")
@@ -97,13 +97,13 @@ func TestCleanEditorial(t *testing.T) {
 	long := strings.Repeat("а", 1300)
 	want := strings.Repeat("а", 1200) + "…"
 	if got := cleanEditorial(long); got != want {
-		t.Errorf("len = %d рун, want %d рун + …", len([]rune(got)), len([]rune(want)))
+		t.Errorf("len = %d runes, want %d runes + …", len([]rune(got)), len([]rune(want)))
 	}
 }
 
 func TestParseArtistFactsEmpty(t *testing.T) {
 	_, err := parseArtistFacts([]byte(`{"data":[]}`))
 	if err == nil || !strings.Contains(err.Error(), "artist not found") {
-		t.Errorf("err = %v, want «артист не найден»", err)
+		t.Errorf("err = %v, want \"artist not found\"", err)
 	}
 }

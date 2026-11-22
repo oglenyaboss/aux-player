@@ -24,15 +24,15 @@ func TestGeomCoverCap(t *testing.T) {
 	m := New(Options{})
 	m.SetSize(220, 60)
 	if g := m.geom(); g.ch != 26 || g.cw != 52 {
-		t.Errorf("220x60: ch=%d cw=%d, ждём 26/52", g.ch, g.cw)
+		t.Errorf("220x60: ch=%d cw=%d, want 26/52", g.ch, g.cw)
 	}
 	m.SetSize(110, 32)
 	if g := m.geom(); g.ch != 22 {
-		t.Errorf("110x32: ch=%d, ждём 22", g.ch)
+		t.Errorf("110x32: ch=%d, want 22", g.ch)
 	}
 	m.SetSize(160, 45)
 	if g := m.geom(); g.ch != 26 {
-		t.Errorf("160x45: ch=%d, ждём 26", g.ch)
+		t.Errorf("160x45: ch=%d, want 26", g.ch)
 	}
 }
 
@@ -62,22 +62,22 @@ func TestQueueThumb(t *testing.T) {
 		}
 	}
 	if y < 0 {
-		t.Fatalf("строка Two не найдена в кадре")
+		t.Fatalf("the Two line is not found in the frame")
 	}
 	for yy := y; yy <= y+1; yy++ {
 		for xx := g.px; xx < g.px+4; xx++ {
 			c := f.at(xx, yy)
 			if c == nil || !c.pix {
-				t.Fatalf("миниатюра: клетка (%d,%d) не пиксель", xx, yy)
+				t.Fatalf("thumbnail: cell (%d,%d) is not a pixel", xx, yy)
 			}
 		}
 	}
 	if got := rowText(f, y+1, g.px+6, 4); got != "Beta" {
-		t.Errorf("вторая строка %q, ждём Beta", got)
+		t.Errorf("second line %q, want Beta", got)
 	}
 	for xx := 0; xx+4 <= m.w; xx++ {
 		if rowText(f, y, xx, 4) == "Beta" {
-			t.Errorf("артист Beta на первой строке в колонке %d", xx)
+			t.Errorf("the artist Beta on the first line in column %d", xx)
 		}
 	}
 }
@@ -89,7 +89,7 @@ func TestHeaderCount(t *testing.T) {
 	m.JumpPlay(threeTracks(), 1, 0)
 	steps(m, 1)
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "2 / 3   aux") {
-		t.Errorf("кадр без «2 / 3   aux»:\n%s", frame)
+		t.Errorf("frame without «2 / 3   aux»:\n%s", frame)
 	}
 }
 
@@ -103,10 +103,10 @@ func TestPosClampUnknownTrack(t *testing.T) {
 	m.Now("LIBRARY-1", 5, true)
 	steps(m, 45)
 	if m.pos != 40 {
-		t.Errorf("pos=%v, ждём 40", m.pos)
+		t.Errorf("pos=%v, want 40", m.pos)
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "0:40 / 0:40") {
-		t.Errorf("кадр без «0:40 / 0:40»:\n%s", frame)
+		t.Errorf("frame without «0:40 / 0:40»:\n%s", frame)
 	}
 }
 
@@ -119,10 +119,10 @@ func TestJumpPlayNoTracks(t *testing.T) {
 	m.SetSize(110, 32)
 	m.JumpPlay(nil, 0, 0)
 	if m.Phase() != PhIntro {
-		t.Fatalf("фаза %v, ждём PhIntro", m.Phase())
+		t.Fatalf("phase %v, want PhIntro", m.Phase())
 	}
 	if frame := stripANSI(m.View()); !strings.Contains(frame, "ничего не нашлось") {
-		t.Errorf("кадр без ошибки:\n%s", frame)
+		t.Errorf("frame without the error:\n%s", frame)
 	}
 }
 
@@ -137,11 +137,11 @@ func TestEmptyPortionAfterPicks(t *testing.T) {
 	}
 	m.PortionDone(nil, "")
 	if !runTo(m, PhDone, 300) {
-		t.Fatalf("фаза %v, ждём PhDone", m.Phase())
+		t.Fatalf("phase %v, want PhDone", m.Phase())
 	}
 	steps(m, 10)
 	if m.Phase() != PhPlay {
-		t.Fatalf("фаза %v, ждём PhPlay с принятыми треками", m.Phase())
+		t.Fatalf("phase %v, want PhPlay with the accepted tracks", m.Phase())
 	}
 }
 
@@ -152,10 +152,10 @@ func TestSelfPlaySeekForwardUnknownDur(t *testing.T) {
 	m.SetSize(110, 32)
 	m.JumpPlay([]Track{{Artist: "A", Title: "Zero", Dur: 0}}, 0, 0)
 	if !m.Key("]", "") {
-		t.Fatal("] в self-play должен принадлежать экрану")
+		t.Fatal("] in self-play must belong to the screen")
 	}
 	if m.pos < 0 {
-		t.Fatalf("pos=%v, ждём ≥ 0", m.pos)
+		t.Fatalf("pos=%v, want ≥ 0", m.pos)
 	}
 }
 
@@ -171,10 +171,10 @@ func TestZeroDur(t *testing.T) {
 	m.JumpPlay(q, 1, 0)
 	steps(m, 1)
 	if m.cur != 1 {
-		t.Errorf("cur=%d, ждём 1", m.cur)
+		t.Errorf("cur=%d, want 1", m.cur)
 	}
 	if frame := stripANSI(m.View()); strings.Contains(frame, "NaN") {
-		t.Errorf("в кадре NaN:\n%s", frame)
+		t.Errorf("NaN in the frame:\n%s", frame)
 	}
 }
 
@@ -192,19 +192,19 @@ func TestGeomSplit(t *testing.T) {
 		m.SetSize(c.w, c.h)
 		g := m.geom()
 		if !g.split {
-			t.Errorf("%dx%d: split=false, ждём split", c.w, c.h)
+			t.Errorf("%dx%d: split=false, want split", c.w, c.h)
 		}
 		if g.ch != c.ch || g.cw != c.cw || g.px != c.px || g.pw != c.pw {
-			t.Errorf("%dx%d: ch=%d cw=%d px=%d pw=%d, ждём %d/%d/%d/%d", c.w, c.h, g.ch, g.cw, g.px, g.pw, c.ch, c.cw, c.px, c.pw)
+			t.Errorf("%dx%d: ch=%d cw=%d px=%d pw=%d, want %d/%d/%d/%d", c.w, c.h, g.ch, g.cw, g.px, g.pw, c.ch, c.cw, c.px, c.pw)
 		}
 	}
 	m.SetSize(46, 60)
 	if g := m.geom(); g.split || g.px != 3 {
-		t.Errorf("46x60: split=%v px=%d, ждём стопку с px=3", g.split, g.px)
+		t.Errorf("46x60: split=%v px=%d, want the stack with px=3", g.split, g.px)
 	}
 	m.SetSize(110, 32)
 	if g := m.geom(); g.split || g.ch != 22 {
-		t.Errorf("110x32: split=%v ch=%d, ждём боковую с ch=22", g.split, g.ch)
+		t.Errorf("110x32: split=%v ch=%d, want the side layout with ch=22", g.split, g.ch)
 	}
 }
 
@@ -241,16 +241,16 @@ func TestSplitLayout(t *testing.T) {
 		}
 	}
 	if alpha < 0 {
-		t.Fatalf("строка Alpha не найдена справа от обложки")
+		t.Fatalf("the Alpha line is not found right of the cover")
 	}
 	if !inCover(alpha) {
-		t.Errorf("Alpha в строке %d, ждём внутри [%d,%d)", alpha, g.cy, g.cy+g.ch)
+		t.Errorf("Alpha in row %d, want inside [%d,%d)", alpha, g.cy, g.cy+g.ch)
 	}
 	if time < 0 {
-		t.Fatalf("строка времени не найдена")
+		t.Fatalf("the time line is not found")
 	}
 	if !inCover(time) {
-		t.Errorf("полоска времени в строке %d, ждём внутри [%d,%d)", time, g.cy, g.cy+g.ch)
+		t.Errorf("the time bar in row %d, want inside [%d,%d)", time, g.cy, g.cy+g.ch)
 	}
 	next := -1
 	for y := range lines {
@@ -260,10 +260,10 @@ func TestSplitLayout(t *testing.T) {
 		}
 	}
 	if next < 0 {
-		t.Fatalf("строка Two не найдена")
+		t.Fatalf("the Two line is not found")
 	}
 	if next < g.cy+g.ch {
-		t.Errorf("Two в строке %d, ждём не выше %d", next, g.cy+g.ch)
+		t.Errorf("Two in row %d, want no lower than %d", next, g.cy+g.ch)
 	}
 }
 
@@ -285,9 +285,9 @@ func TestPauseGoesDark(t *testing.T) {
 	off := light(false)
 	again := light(true)
 	if !(off < 0.35*on) {
-		t.Fatalf("на паузе экран не потемнел: %v против %v", off, on)
+		t.Fatalf("the screen did not go dark on pause: %v against %v", off, on)
 	}
 	if !(again > 0.9*on) {
-		t.Fatalf("после паузы экран не вернулся: %v против %v", again, on)
+		t.Fatalf("the screen did not come back after the pause: %v against %v", again, on)
 	}
 }

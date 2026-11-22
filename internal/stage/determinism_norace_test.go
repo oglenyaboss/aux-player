@@ -14,7 +14,7 @@ func TestAllaDeterminism(t *testing.T) {
 	_, a := allaFrame(t, Options{}, allaEvery, 5)
 	_, b := allaFrame(t, Options{}, allaEvery, 5)
 	if a.String() != b.String() {
-		t.Errorf("кадры разъехались")
+		t.Errorf("frames diverged")
 	}
 }
 
@@ -22,7 +22,7 @@ func TestAtakeDeterminism(t *testing.T) {
 	m1, f1 := atakeTrackFrame(t, Options{}, atakePluto, 0, 95)
 	m2, f2 := atakeTrackFrame(t, Options{}, atakePluto, 0, 95)
 	if f1.String() != f2.String() {
-		t.Error("кадры на pluto не совпали")
+		t.Error("frames on pluto do not match")
 	}
 	_ = m1
 	_ = m2
@@ -32,7 +32,7 @@ func TestBlondeDeterminism(t *testing.T) {
 	_, a := blondeFrame(t, Options{}, blondeNights, 205, 7)
 	_, b := blondeFrame(t, Options{}, blondeNights, 205, 7)
 	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
+		t.Errorf("two identical frames diverged")
 	}
 }
 
@@ -40,7 +40,7 @@ func TestDsotmDeterminism(t *testing.T) {
 	a, _ := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
 	b, _ := eggTrackFrame(t, Options{}, dsotmMoney, 100, 10)
 	if a.View() != b.View() {
-		t.Errorf("два кадра одного трека разошлись")
+		t.Errorf("two frames of the same track diverged")
 	}
 }
 
@@ -56,7 +56,7 @@ func TestHVDeterminism(t *testing.T) {
 	_, a := hvFrame(t, Options{}, hvSuperhero, 7)
 	_, b := hvFrame(t, Options{}, hvSuperhero, 7)
 	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
+		t.Errorf("two identical frames diverged")
 	}
 }
 
@@ -64,7 +64,7 @@ func TestMbdtfDeterminism(t *testing.T) {
 	m1, _ := eggTrackFrame(t, Options{}, mbdtfFantasy, 20, 9)
 	m2, _ := eggTrackFrame(t, Options{}, mbdtfFantasy, 20, 9)
 	if m1.View() != m2.View() {
-		t.Error("два одинаковых прогона дают разные кадры")
+		t.Error("two identical runs produce different frames")
 	}
 }
 
@@ -79,7 +79,7 @@ func TestPulsarDeterminism(t *testing.T) {
 	}
 	first, second := run(), run()
 	if first != second {
-		t.Error("два прогона дают разные кадры")
+		t.Error("two runs produce different frames")
 	}
 }
 
@@ -87,7 +87,7 @@ func TestUtopiaDeterminism(t *testing.T) {
 	_, a := utopiaFrame(t, Options{}, 7)
 	_, b := utopiaFrame(t, Options{}, 7)
 	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
+		t.Errorf("two identical frames diverged")
 	}
 }
 
@@ -96,7 +96,7 @@ func TestWEDeterminism(t *testing.T) {
 		_, a := weFrame(t, Options{}, tr, 30, 5)
 		_, b := weFrame(t, Options{}, tr, 30, 5)
 		if a.String() != b.String() {
-			t.Errorf("%s: кадры разъехались", tr.Title)
+			t.Errorf("%s: frames diverged", tr.Title)
 		}
 	}
 }
@@ -106,7 +106,7 @@ func TestWave3Determinism(t *testing.T) {
 		_, a := wave3Frame(t, Options{}, tr, 30, 5)
 		_, b := wave3Frame(t, Options{}, tr, 30, 5)
 		if a.String() != b.String() {
-			t.Errorf("%s: кадры разъехались", tr.Title)
+			t.Errorf("%s: frames diverged", tr.Title)
 		}
 	}
 }
@@ -115,6 +115,6 @@ func TestYeezusDeterminism(t *testing.T) {
 	_, a := yeezusFrame(t, Options{}, 25, 9)
 	_, b := yeezusFrame(t, Options{}, 25, 9)
 	if a.String() != b.String() {
-		t.Errorf("два одинаковых кадра разъехались")
+		t.Errorf("two identical frames diverged")
 	}
 }

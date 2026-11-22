@@ -89,6 +89,7 @@ func main() {
 	scriptFlag := flag.String("script", "", `keys fed at simulated seconds: "1:right,2:enter"`)
 	langFlag := flag.String("lang", "", "interface language: en or ru, empty picks from the environment")
 	wait := flag.Float64("wait", 9, "seconds the fake agent thinks before its batch; the real one takes 40–70")
+	toast := flag.String("toast", "", `toast a host line once the player is up, e.g. "AUX updated to v1.2.3"`)
 	flag.Parse()
 
 	switch l := *langFlag; {
@@ -103,6 +104,7 @@ func main() {
 	fmt.Fprint(os.Stderr, stage.Tr("обложки…", "covers…"))
 	s := newScene(*firstRun && !*musicFlag, *demo && *eggAt == "", *musicStyle)
 	s.wait = *wait
+	s.toast = *toast
 	coverTracks := demoTracks()
 	if *musicFlag {
 		coverTracks = append(coverTracks, s.mus.crate.coverTracks()...)
