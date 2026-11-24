@@ -46,6 +46,21 @@ func LoadEnv(path string) (Config, error) {
 	return Config{BaseURL: vals["LLM_BASE_URL"], APIKey: vals["LLM_API_KEY"], Model: vals["LLM_MODEL"]}, nil
 }
 
+var ErrContextLength = errors.New("llm: context length exceeded")
+
+func isContextLength(text string) bool {
+	low := strings.ToLower(text)
+	for _, mark := range []string{
+		"context_length_exceeded", "context length", "maximum context", "context window",
+		"prompt is too long", "too many tokens", "reduce the length",
+	} {
+		if strings.Contains(low, mark) {
+			return true
+		}
+	}
+	return false
+}
+
 type Tool struct {
 	Name        string
 	Description string
@@ -66,7 +81,10 @@ type Message struct {
 	Raw        json.RawMessage
 }
 
-type Usage struct{ PromptTokens, CompletionTokens, ReasoningTokens int }
+type Usage struct {
+	PromptTokens, CompletionTokens, ReasoningTokens, CachedTokens int
+	CachedKnown                                                   bool
+}
 
 type Response struct {
 	Message      Message
@@ -218,6 +236,9 @@ func (c *Client) attempt(ctx context.Context, body []byte, jsonMode bool) (Respo
 	if resp.StatusCode >= 400 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		httpErr := fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, bodySnippet(snippet))
+		if (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusRequestEntityTooLarge) && isContextLength(string(snippet)) {
+			httpErr = fmt.Errorf("llm: HTTP %d: %s: %w", resp.StatusCode, bodySnippet(snippet), ErrContextLength)
+		}
 		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 			return Response{}, retryableError{httpErr}
 		}
@@ -262,6 +283,10 @@ type wireUsage struct {
 	CompletionTokensDetails *struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
+	PromptTokensDetails *struct {
+		CachedTokens *int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+	PromptCacheHitTokens *int `json:"prompt_cache_hit_tokens"`
 }
 
 func (u wireUsage) usage() Usage {
@@ -269,7 +294,14 @@ func (u wireUsage) usage() Usage {
 	if u.CompletionTokensDetails != nil {
 		t = u.CompletionTokensDetails.ReasoningTokens
 	}
-	return Usage{PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, ReasoningTokens: t}
+	cached, known := 0, false
+	switch {
+	case u.PromptTokensDetails != nil && u.PromptTokensDetails.CachedTokens != nil:
+		cached, known = *u.PromptTokensDetails.CachedTokens, true
+	case u.PromptCacheHitTokens != nil:
+		cached, known = *u.PromptCacheHitTokens, true
+	}
+	return Usage{PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, ReasoningTokens: t, CachedTokens: cached, CachedKnown: known}
 }
 
 type wireMessageResp struct {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -32,6 +33,24 @@ func (f *fakeChatter) Chat(ctx context.Context, msgs []llm.Message, tools []llm.
 	return r, nil
 }
 
+// erroringChatter answers from the wrapped fakeChatter but returns err on the
+// given 1-based call numbers, recording those calls too.
+type erroringChatter struct {
+	ch     *fakeChatter
+	err    error
+	calls  int
+	failAt []int
+}
+
+func (f *erroringChatter) Chat(ctx context.Context, msgs []llm.Message, tools []llm.Tool, jsonMode bool) (llm.Response, error) {
+	f.calls++
+	if slices.Contains(f.failAt, f.calls) {
+		f.ch.got = append(f.ch.got, append([]llm.Message(nil), msgs...))
+		return llm.Response{}, f.err
+	}
+	return f.ch.Chat(ctx, msgs, tools, jsonMode)
+}
+
 func textResp(s string) llm.Response {
 	return llm.Response{Message: llm.Message{Role: "assistant", Content: s}}
 }
@@ -40,10 +59,17 @@ func toolResp(calls ...llm.ToolCall) llm.Response {
 	return llm.Response{Message: llm.Message{Role: "assistant", ToolCalls: calls}}
 }
 
+func usageResp(u llm.Usage, calls ...llm.ToolCall) llm.Response {
+	r := toolResp(calls...)
+	r.Usage = u
+	return r
+}
+
 type fakeBackend struct {
 	mu            sync.Mutex
 	describeCalls []string
 	findCalls     []string
+	searches      map[string][]Song // searchTracks answers by "artist|title"
 }
 
 func (f *fakeBackend) describe(ctx context.Context, kind, artist, name string) (any, error) {
@@ -64,6 +90,12 @@ func (f *fakeBackend) findSong(ctx context.Context, sug Suggestion) (Song, bool,
 	}
 	return Song{ID: sug.Artist + "/" + sug.Title, Artist: sug.Artist, Title: sug.Title, Album: "Album", Year: "2024",
 		ArtworkURL: "https://example.com/" + sug.Artist + ".jpg"}, true, nil
+}
+
+func (f *fakeBackend) searchTracks(ctx context.Context, artist, title string) ([]Song, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.searches[artist+"|"+title], nil
 }
 
 type fakeUI struct {
@@ -279,6 +311,47 @@ func TestDispatchUnknownToolAndBadArgs(t *testing.T) {
 	}
 }
 
+func TestSearchTracksLines(t *testing.T) {
+	top := make([]Song, 0, 7)
+	for i := range 7 {
+		top = append(top, Song{ID: fmt.Sprintf("a%d", i+1), Artist: "A", Title: fmt.Sprintf("Song %d", i+1), Album: "Album A", Year: "2024"})
+	}
+	be := &fakeBackend{searches: map[string][]Song{
+		"A|": top,
+		"B|T": {
+			{ID: "b1", Artist: "B", Title: "T", Album: "Album B", Year: "2023"},
+			{ID: "b2", Artist: "B", Title: "T (Remix)", Album: "Album B", Year: "2023"},
+		},
+	}}
+	a := newTestAgent(t, &fakeChatter{}, be, &fakeUI{})
+	res := a.dispatch(context.Background(), call("s", "search_tracks",
+		`{"queries":[{"artist":"A"},{"artist":"B","title":"T"}]}`))
+	blocks := strings.Split(res, "\n\n")
+	if len(blocks) != 2 {
+		t.Fatalf("blocks: %d, want 2:\n%s", len(blocks), res)
+	}
+	lineRe := regexp.MustCompile(`^- \S+ · .+ — .+ · .* · .+ · .+$`)
+	for bi, wantHeader := range []string{"A (top songs):", "B — T:"} {
+		lines := strings.Split(blocks[bi], "\n")
+		if lines[0] != wantHeader {
+			t.Errorf("block %d header = %q, want %q", bi, lines[0], wantHeader)
+		}
+		wantHits := 5
+		if bi == 1 {
+			wantHits = 2
+		}
+		hits := lines[1:]
+		if len(hits) != wantHits {
+			t.Errorf("block %d: %d hit lines, want %d:\n%s", bi, len(hits), wantHits, blocks[bi])
+		}
+		for _, l := range hits {
+			if !lineRe.MatchString(l) {
+				t.Errorf("block %d: hit line does not match: %q", bi, l)
+			}
+		}
+	}
+}
+
 func TestSubmitAcceptedRejectedOrder(t *testing.T) {
 	be := &fakeBackend{}
 	a := newTestAgent(t, &fakeChatter{}, be, &fakeUI{})
@@ -302,7 +375,7 @@ func TestSubmitAcceptedRejectedOrder(t *testing.T) {
 	if len(out.Accepted) != 1 || out.Accepted[0] != "A — Y" {
 		t.Errorf("accepted: %v, want [A — Y]", out.Accepted)
 	}
-	if len(out.Rejected) != 1 || out.Rejected[0].Track != "Ghost — X" || out.Rejected[0].Reason != "not in Apple" {
+	if len(out.Rejected) != 1 || out.Rejected[0].Track != "Ghost — X" || out.Rejected[0].Reason != "not in Apple Music; nothing by this artist found" {
 		t.Errorf("rejected: %+v", out.Rejected)
 	}
 	if out.Portion != "1/3" || out.Need != 2 {
@@ -373,7 +446,7 @@ func TestToolResultsNoCyrillic(t *testing.T) {
 
 func TestAgentToolsNineValidSchemas(t *testing.T) {
 	tools := agentTools()
-	want := []string{"ask_user", "ask_later", "set_plan", "describe", "similar_artists", "submit_candidates",
+	want := []string{"ask_user", "ask_later", "set_plan", "describe", "similar_artists", "search_tracks", "submit_candidates",
 		"memory_add", "memory_replace", "memory_remove", "memory_consolidate"}
 	if len(tools) != len(want) {
 		t.Fatalf("tools %d, want %d", len(tools), len(want))
@@ -602,6 +675,36 @@ func TestRunLogStepsAndCalls(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("log does not contain %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRunLogStepTokens(t *testing.T) {
+	first := toolResp(call("d", "describe", `{"kind":"artist","artist":"Yeat"}`))
+	first.Usage = llm.Usage{PromptTokens: 1200, CompletionTokens: 30, ReasoningTokens: 10, CachedTokens: 800, CachedKnown: true}
+	second := textResp("готово")
+	second.Usage = llm.Usage{PromptTokens: 1300, CompletionTokens: 20}
+	ch := &fakeChatter{resps: []llm.Response{first, second, textResp("готово"), textResp("готово")}}
+	log := &runLog{}
+	a := newTestAgent(t, ch, &fakeBackend{}, &fakeUI{})
+	a.Log = log
+	if _, err := a.Turn(context.Background(), "запрос"); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	out := log.b.String()
+	for _, want := range []string{
+		"tokens in 1200, cached 800, out 30, reasoning 10)",
+		"tokens in 1300, cached ?, out 20, reasoning 0)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log does not contain %q:\n%s", want, out)
+		}
+	}
+	stepRe := regexp.MustCompile(`(?m)^### step \d+ \(\d+\.\d s, tokens in \d+, cached (\d+|\?), out \d+, reasoning \d+\)$`)
+	if lines := stepRe.FindAllString(out, -1); len(lines) != 4 {
+		t.Errorf("step lines = %v, want 4:\n%s", lines, out)
+	}
+	if regexp.MustCompile(`(?m)^.*tokens in \d+, out`).MatchString(out) {
+		t.Errorf("the old step format is still present:\n%s", out)
 	}
 }
 
@@ -1024,7 +1127,7 @@ func TestSubmitCandidatesPickedEvents(t *testing.T) {
 	if !picks[0].Accepted || picks[0].Track.ID != "A/T1" || picks[0].Name != "A — T1" {
 		t.Errorf("picks[0]: %+v", picks[0])
 	}
-	if picks[1].Accepted || picks[1].Name != "Ghost — T2" || picks[1].Reason != "not in Apple" || picks[1].Track.ID != "" {
+	if picks[1].Accepted || picks[1].Name != "Ghost — T2" || picks[1].Reason != "not in Apple Music; nothing by this artist found" || picks[1].Track.ID != "" {
 		t.Errorf("picks[1]: %+v", picks[1])
 	}
 	if !picks[2].Accepted || picks[2].Track.ID != "C/T3" || picks[2].Name != "C — T3" {
@@ -1206,7 +1309,7 @@ func TestPromptRulesFirstTurnQuestions(t *testing.T) {
 		"Do not ask a stock card",
 		`The code answered "not found in Apple Music" — replace those options and call ask_user again`,
 		"the taken field",
-		`Do not repeat questions from the "Questions already asked" list`,
+		"Do not repeat a question you already asked in this stream",
 	} {
 		if !strings.Contains(promptRules, want) {
 			t.Errorf("promptRules does not contain %q", want)
@@ -1225,9 +1328,10 @@ func TestPromptRulesWantItShare(t *testing.T) {
 		"an artist name with a mood, time or activity",
 		"3–4 tracks out of 5",
 		`"only X", "X and that's it" — the whole portion from X`,
-		"the last 20 tracks of the stream",
-		"No more than 2 tracks of one artist in the window, features included, except the want_it referent",
-		"no more than 4 songs with them into the window",
+		"the last 20 served tracks",
+		"usually no more than 2 tracks of one artist in the last 20, features included, except a want_it referent",
+		"about 4 songs by Favorites artists in total",
+		"These are guidelines, not limits: the request decides.",
 		"in batches of 5–8",
 	} {
 		if !strings.Contains(promptRules, want) {
@@ -1249,7 +1353,7 @@ func TestPromptMissAndNudge(t *testing.T) {
 }
 
 func TestPromptRulesAskLaterPlayedTracks(t *testing.T) {
-	if !strings.Contains(promptRules, `an option is the number n of a played-through track from the "Served" list`) {
+	if !strings.Contains(promptRules, `an option is the number n of a played-through track (the numbers in the "Portion K is served" lists)`) {
 		t.Error("ask_later in the prompt is not about the numbers of played-through tracks")
 	}
 }
@@ -1272,6 +1376,57 @@ func TestAskUserOnlyOnFirstTurn(t *testing.T) {
 	}
 	if ui.asks != 1 {
 		t.Errorf("UI.Ask called %d times, want 1", ui.asks)
+	}
+}
+
+// A5: the submit reply carries no known_left, only the facts.
+func TestSubmitReplyNoKnownLeft(t *testing.T) {
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
+	if res := a.dispatch(context.Background(), call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)); !strings.HasPrefix(res, "plan accepted") {
+		t.Fatalf("set_plan: %q", res)
+	}
+	res := a.dispatch(context.Background(), call("s", "submit_candidates", `{"tracks":[{"artist":"A","title":"T1","why":"w"}],"note":"n"}`))
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(res), &raw); err != nil {
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
+	}
+	if _, ok := raw["known_left"]; ok {
+		t.Errorf("the reply still has known_left: %s", res)
+	}
+	for _, key := range []string{"accepted", "rejected", "portion", "need"} {
+		if _, ok := raw[key]; !ok {
+			t.Errorf("the reply lacks %q: %s", key, res)
+		}
+	}
+}
+
+// A6: "again" lets an already served track back into a fresh portion.
+func TestSubmitAgainField(t *testing.T) {
+	a := newTestAgent(t, &fakeChatter{}, &fakeBackend{}, &fakeUI{})
+	ctx := context.Background()
+	if res := a.dispatch(ctx, call("p", "set_plan", `{"seeds":[],"exclusions":[]}`)); !strings.HasPrefix(res, "plan accepted") {
+		t.Fatalf("set_plan: %q", res)
+	}
+	if res := a.dispatch(ctx, call("s1", "submit_candidates", `{"tracks":[{"artist":"A","title":"T1","why":"w"}],"note":"n"}`)); strings.HasPrefix(res, "error") {
+		t.Fatalf("first submit: %q", res)
+	}
+	a.Session.ClosePortion()
+	res := a.dispatch(ctx, call("s2", "submit_candidates", `{"tracks":[{"artist":"A","title":"T1","why":"w","again":true}],"note":"n"}`))
+	var out struct {
+		Accepted []string `json:"accepted"`
+		Rejected []struct {
+			Track  string `json:"track"`
+			Reason string `json:"reason"`
+		} `json:"rejected"`
+	}
+	if err := json.Unmarshal([]byte(res), &out); err != nil {
+		t.Fatalf("result is not JSON: %v\n%s", err, res)
+	}
+	if len(out.Accepted) != 1 || out.Accepted[0] != "A — T1" {
+		t.Errorf("accepted: %v, want [A — T1] (res: %s)", out.Accepted, res)
+	}
+	if len(out.Rejected) != 0 {
+		t.Errorf("rejected: %+v, want none", out.Rejected)
 	}
 }
 
@@ -1483,12 +1638,12 @@ func TestTurnPlaylistModeKeepsNudging(t *testing.T) {
 func TestPromptRulesPlaylistMode(t *testing.T) {
 	for _, want := range []string{
 		"you serve portions of tracks (5 in a stream)",
-		"6. Playlist mode.",
+		"7. Playlist mode.",
 		"size = the number they named, 30 if none (5–60)",
 		"name — short, in the listener's language, about the sound, not a copy of the request",
 		"The whole playlist is one portion: keep calling submit_candidates until it is full.",
 		"Artists the listener named are and_similar or want_it seeds.",
-		"- In playlist mode the limits scale to the playlist size: about 10% per artist, the and_similar referents are capped at 15%, known artists at 20%.",
+		"Keep the balance below over the whole playlist: about one track in ten per artist, the and_similar referents up to about 15%, Favorites artists up to about 20%.",
 	} {
 		if !strings.Contains(promptRules, want) {
 			t.Errorf("promptRules does not contain %q", want)

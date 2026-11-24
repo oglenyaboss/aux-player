@@ -26,6 +26,7 @@ type Config struct {
 	SignalsPath         string           // signals log; "" — in memory only
 	CacheMaxAge         time.Duration
 	PortionSize         int
+	ContextLimit        int
 	Lang                string
 	// LoadLibrary, when set, serves the library and Favorites instead of the
 	// agent's own cache in CacheDir.
@@ -64,6 +65,12 @@ type Engine struct {
 	asked      []string
 	skipped    []string
 	laterAsked bool
+	spent      tokenTally
+	delivered  int
+	announced  int
+	changed    []string
+	outcomes   map[string]Outcome
+	notes      []string
 }
 
 type reply struct {
@@ -142,6 +149,11 @@ func Start(ctx context.Context, cfg Config, ui UI) (*Engine, error) {
 	}
 	session.SetSignals(sig, e.sessionID)
 	e.agent = NewAgent(newChatter(cfg), &liveBackend{api: api, lfm: lfm, sf: cfg.Storefront}, session, mem, ui, e.log, favs, cfg.Lang)
+	e.agent.ContextLimit = cfg.ContextLimit
+	if e.agent.ContextLimit <= 0 {
+		e.agent.ContextLimit = 200000
+	}
+	e.agent.State = e.history
 	return e, nil
 }
 
@@ -204,7 +216,6 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		} else {
 			e.log.f("## listener: %s", text)
 		}
-		e.agent.Reset()
 		e.session.ResetPortion()
 		tail := "Continue the stream: the next portion. Hold the core of the request. ▲ is the main referent, look for something close in sound; played through is a weak plus; move away from ▼ and skipped."
 		if text != "" {
@@ -212,9 +223,15 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 			e.session.ClearReserve()
 		}
 		if text == "" && len(e.skipped) >= 2 {
-			tail += "\n\nSkipped since the last question: " + strings.Join(e.skipped, "; ") + ". If you see a fork — one played through, the other skipped — call ask_later: options are played-through tracks from the \"Served\" list."
+			tail += "\n\nSkipped since the last question: " + strings.Join(e.skipped, "; ") + ". If you see a fork — one played through, the other skipped — call ask_later: options are played-through tracks by their numbers above."
 		}
-		message = e.history() + "\n\n" + tail
+		if e.delivered == 0 {
+			message = e.history() + "\n\n" + tail
+		} else if delta := e.renderDelta(); delta != "" {
+			message = delta + "\n\n" + tail
+		} else {
+			message = tail
+		}
 		if text != "" {
 			e.replies = append(e.replies, reply{after: len(e.portions), text: text})
 		}
@@ -225,10 +242,18 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 		history = append(history, p...)
 	}
 	e.agent.History = history
+	turnStart := time.Now()
 	entries, err := e.agent.Turn(ctx, message)
+	turnSecs := time.Since(turnStart).Seconds()
+	e.spent.plus(e.agent.spent)
 	if err != nil {
 		return Portion{}, err
 	}
+	e.delivered++
+	e.announced = len(e.portions)
+	e.changed = nil
+	e.outcomes = nil
+	e.notes = nil
 	if e.agent.Later != nil {
 		e.skipped = nil
 	}
@@ -252,6 +277,9 @@ func (e *Engine) Turn(ctx context.Context, text string) (Portion, error) {
 	if e.agent.Later != nil {
 		e.log.f("later question: %s %v", e.agent.Later.Question, e.agent.Later.Options)
 	}
+	e.log.f("turn total: steps %d, in %d, cached %s, out %d, reasoning %d, %.1f s",
+		e.agent.spent.Steps, e.agent.spent.In, cachedText(e.agent.spent.Cached, e.agent.spent.CachedKnown),
+		e.agent.spent.Out, e.agent.spent.Reasoning, turnSecs)
 	return Portion{Tracks: tracks, Note: e.agent.Note, Later: e.agent.Later, Playlist: e.session.Playlist()}, nil
 }
 
@@ -259,6 +287,7 @@ func (e *Engine) DropLast() {
 	if len(e.portions) == 0 {
 		return
 	}
+	e.notes = append(e.notes, fmt.Sprintf("portion %d was dropped before it played: the listener replied", len(e.portions)))
 	e.portions = e.portions[:len(e.portions)-1]
 	if e.laterAsked {
 		e.asked = e.asked[:len(e.asked)-1]
@@ -272,11 +301,17 @@ func (e *Engine) Answer(q Question, raw string) {
 	ans := resolveAnswer(q, raw)
 	e.log.f("## listener answer: \"%s\" → %s", q.Question, ans)
 	e.replies = append(e.replies, reply{after: len(e.portions), text: "to the question \"" + q.Question + "\" — " + ans})
+	e.notes = append(e.notes, "answer to the question \""+q.Question+"\": "+ans)
 }
 
 func (e *Engine) NoteSaved(song Song, favorite bool) {
 	alreadyFavorite := favorite && e.session.favs.Has(song)
 	e.session.NoteSaved(song, favorite)
+	where := "the library"
+	if favorite {
+		where = "Favorites"
+	}
+	e.notes = append(e.notes, fmt.Sprintf("saved to %s: %s — %s", where, song.Artist, song.Title))
 	if favorite && !alreadyFavorite {
 		e.agent.noteFavorite(song)
 	}
@@ -349,6 +384,51 @@ func (e *Engine) history() string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
+func (e *Engine) renderDelta() string {
+	var b strings.Builder
+	n := 0
+	for i, portion := range e.portions {
+		if i >= e.announced {
+			fmt.Fprintf(&b, "Portion %d is served, numbered as on the listener's screen:\n", i+1)
+		}
+		for _, t := range portion {
+			n++
+			if i >= e.announced {
+				fmt.Fprintf(&b, "%d. %s — %s\n", n, t.Artist, t.Title)
+			}
+		}
+	}
+	if len(e.changed) > 0 || len(e.notes) > 0 {
+		b.WriteString("Since the last turn:\n")
+		for _, id := range e.changed {
+			fmt.Fprintf(&b, "- %s\n", e.changedLine(id))
+		}
+		for _, note := range e.notes {
+			fmt.Fprintf(&b, "- %s\n", note)
+		}
+	}
+	if ws := e.session.windowSummary(); ws != "" {
+		b.WriteString(ws)
+		b.WriteByte('\n')
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+func (e *Engine) changedLine(id string) string {
+	n := 0
+	for _, portion := range e.portions {
+		for _, t := range portion {
+			n++
+			if t.ID != id {
+				continue
+			}
+			return fmt.Sprintf("%d. %s — %s — %s", n, t.Artist, t.Title, e.trackOutcome(t))
+		}
+	}
+	out := e.outcomes[id]
+	return fmt.Sprintf("%s — %s — %s", out.Artist, out.Title, e.trackOutcome(Track{ID: id, Artist: out.Artist, Title: out.Title}))
+}
+
 func (e *Engine) trackOutcome(t Track) string {
 	out := "not listened"
 	if r, ok := e.sig.lastOutcome(e.sessionID, t.ID); ok {
@@ -372,7 +452,7 @@ func globalBlock(stats []skipStat) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Lasting skips from past sessions (the code no longer lets these artists through):")
+	b.WriteString("Lasting skips from past sessions:")
 	for _, st := range stats {
 		fmt.Fprintf(&b, "\n- %s: early skips %d in %d sessions, played through %d", st.Artist, st.Early, st.Sessions, st.Played)
 		if len(st.Queries) > 0 {
@@ -392,7 +472,7 @@ func skippedBlock(songs []Song) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("In past sessions the listener dropped these before the middle (the code will reject them, do not offer them):")
+	b.WriteString("In past sessions the listener dropped these before the middle:")
 	idx := make(map[string]int, len(songs))
 	artists := make([]string, 0, len(songs))
 	titles := make([][]string, 0, len(songs))
@@ -418,15 +498,16 @@ func (e *Engine) Record(outs []Outcome) error {
 			e.skipped = append(e.skipped, out.Artist+" — "+out.Title)
 		}
 	}
-	if e.sig == nil {
-		return nil
-	}
 	now := time.Now()
 	recs := make([]signalRec, 0, len(outs))
 	for _, out := range outs {
 		switch out.Kind {
 		case "played", "skip_early", "skip_mid", "more", "less", "rate_clear":
+			e.noteChanged(out)
 		default:
+			continue
+		}
+		if e.sig == nil {
 			continue
 		}
 		e.log.f("signal: %s — %s: %s %d/%d s", out.Artist, out.Title, out.Kind, out.PosSec, out.DurSec)
@@ -442,7 +523,20 @@ func (e *Engine) Record(outs []Outcome) error {
 			DurSec:  out.DurSec,
 		})
 	}
+	if e.sig == nil {
+		return nil
+	}
 	return e.sig.append(recs...)
+}
+
+func (e *Engine) noteChanged(out Outcome) {
+	if e.outcomes == nil {
+		e.outcomes = make(map[string]Outcome)
+	}
+	if _, ok := e.outcomes[out.ID]; !ok {
+		e.changed = append(e.changed, out.ID)
+	}
+	e.outcomes[out.ID] = out
 }
 
 func (e *Engine) MemorySize() (used, limit int) {
@@ -479,6 +573,9 @@ func (e *Engine) AppendPlaylist(ctx context.Context, playlistID string, tracks [
 
 func (e *Engine) Close() (logPath string, err error) {
 	e.log.f("memory at end: %d/%d", e.mem.Size(), e.mem.Limit)
+	e.log.f("session total: steps %d, in %d, cached %s, out %d, reasoning %d, wall %d s, compactions %d",
+		e.spent.Steps, e.spent.In, cachedText(e.spent.Cached, e.spent.CachedKnown),
+		e.spent.Out, e.spent.Reasoning, int(time.Since(e.start).Seconds()), e.agent.compactions)
 	if e.cfg.RunsDir == "" {
 		return "", nil
 	}

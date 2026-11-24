@@ -102,6 +102,7 @@ type vibeAIRun struct {
 	savedSongs   []vibeAISavedSong
 	heardID      string
 	heardPos     time.Duration
+	heardTrack   provider.Track
 	portion      int
 	playlist     *vibeai.PlaylistPlan
 	playlistID   string
@@ -227,6 +228,7 @@ func vibeAIConfig(cfg *config.Config) vibeai.Config {
 		LastfmKey:           cfg.LastfmAPIKey,
 		LLM:                 llmCfg,
 		PortionSize:         vibeAIPortion,
+		ContextLimit:        cfg.VibeContextLimit,
 		Lang:                lang,
 		MemoryPath:          vibeMemoryPath(),
 		SignalsPath:         vibeSignalsPath(),
@@ -610,7 +612,7 @@ func (m *Model) handleVibeAIMsg(msg tea.Msg) tea.Cmd {
 		r.pending = append(r.pending, vibeai.Outcome{ID: t.ID, Artist: t.Artist, Title: t.Title, Kind: kind})
 		m.appendLog(fmt.Sprintf("[vibe] %s — %s: %s", t.Artist, t.Title, kind))
 		if msg.Rating == -1 && t.ID == r.heardID {
-			r.heardID, r.heardPos = "", 0
+			r.heardID, r.heardPos, r.heardTrack = "", 0, provider.Track{}
 			m.appendLog("[player] next")
 			m.playerState.Loading = true
 			return m.playerCmd(func(p player.Player) error { return p.Next() })
@@ -856,6 +858,7 @@ func (m *Model) vibeAIOnState(s player.State) {
 	if changed {
 		m.vibeAINoteLeave()
 		r.heardID, r.heardPos = id, 0
+		r.heardTrack = *s.Track
 	}
 	if s.Position > 0 {
 		r.heardPos = s.Position
@@ -863,20 +866,30 @@ func (m *Model) vibeAIOnState(s player.State) {
 }
 
 // vibeAINoteLeave writes the outcome for the heard track captured by vibeAIOnState, resetting it before any return.
+// A track served by the agent lands in pending; one played by hand lands as a
+// neutral manual line in the signals file, never as an outcome.
 func (m *Model) vibeAINoteLeave() {
 	r := m.vibeAI
-	id, pos := r.heardID, r.heardPos
-	r.heardID, r.heardPos = "", 0
+	id, pos, heard := r.heardID, r.heardPos, r.heardTrack
+	r.heardID, r.heardPos, r.heardTrack = "", 0, provider.Track{}
 	if id == "" || pos < time.Second {
 		return
 	}
-	t, ok := r.served[id]
-	if !ok {
+	if t, ok := r.served[id]; ok {
+		out := vibeAIOutcome(t, pos)
+		r.pending = append(r.pending, out)
+		m.appendLog(fmt.Sprintf("[vibe] %s — %s: %s at %ds", t.Artist, t.Title, out.Kind, out.PosSec))
 		return
 	}
-	out := vibeAIOutcome(t, pos)
-	r.pending = append(r.pending, out)
-	m.appendLog(fmt.Sprintf("[vibe] %s — %s: %s at %ds", t.Artist, t.Title, out.Kind, out.PosSec))
+	out := vibeAIOutcome(vibeai.Track{ID: id, Artist: heard.Artist, Title: heard.Title, DurationMs: int(heard.Duration.Milliseconds())}, pos)
+	if out.Kind != "played" {
+		return
+	}
+	if err := vibeai.AppendManualPlay(vibeSignalsPath(), out, time.Now()); err != nil {
+		m.appendLog(fmt.Sprintf("[vibe] manual play not saved: %v", err))
+		return
+	}
+	m.appendLog(fmt.Sprintf("[vibe] manual play: %s — %s", out.Artist, out.Title))
 }
 
 // vibeAIPlay replaces the player queue with ts and starts the first track.

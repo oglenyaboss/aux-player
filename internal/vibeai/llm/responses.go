@@ -306,6 +306,8 @@ func (c *ResponsesClient) attempt(ctx context.Context, body []byte, token, accou
 			return Response{}, retryableError{httpErr}
 		case resp.StatusCode >= 500:
 			return Response{}, retryableError{httpErr}
+		case (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusRequestEntityTooLarge) && isContextLength(string(snippet)):
+			return Response{}, fmt.Errorf("llm: HTTP %d: %s: %w", resp.StatusCode, bodySnippet(snippet), ErrContextLength)
 		default:
 			return Response{}, statusError(resp.StatusCode, snippet)
 		}
@@ -321,6 +323,7 @@ type responsesEvent struct {
 }
 
 type responsesError struct {
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -336,6 +339,9 @@ type responsesUsage struct {
 	OutputTokensDetails *struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"output_tokens_details"`
+	InputTokensDetails *struct {
+		CachedTokens *int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
 }
 
 func (c *ResponsesClient) readStream(r io.Reader) (Response, error) {
@@ -369,13 +375,23 @@ func (c *ResponsesClient) readStream(r io.Reader) (Response, error) {
 
 func eventError(ev responsesEvent) error {
 	msg := ev.Message
-	if ev.Response != nil && ev.Response.Error != nil && ev.Response.Error.Message != "" {
-		msg = ev.Response.Error.Message
-	} else if ev.Error != nil && ev.Error.Message != "" {
-		msg = ev.Error.Message
+	code := ""
+	if ev.Response != nil && ev.Response.Error != nil {
+		if ev.Response.Error.Message != "" {
+			msg = ev.Response.Error.Message
+		}
+		code = ev.Response.Error.Code
+	} else if ev.Error != nil {
+		if ev.Error.Message != "" {
+			msg = ev.Error.Message
+		}
+		code = ev.Error.Code
 	}
 	if msg == "" {
 		msg = "response failed"
+	}
+	if isContextLength(code + " " + msg) {
+		return fmt.Errorf("llm: %s: %w", msg, ErrContextLength)
 	}
 	return fmt.Errorf("llm: %s", msg)
 }
@@ -435,7 +451,11 @@ func (u *responsesUsage) usage() Usage {
 	if u.OutputTokensDetails != nil {
 		t = u.OutputTokensDetails.ReasoningTokens
 	}
-	return Usage{PromptTokens: u.InputTokens, CompletionTokens: u.OutputTokens, ReasoningTokens: t}
+	cached, known := 0, false
+	if u.InputTokensDetails != nil && u.InputTokensDetails.CachedTokens != nil {
+		cached, known = *u.InputTokensDetails.CachedTokens, true
+	}
+	return Usage{PromptTokens: u.InputTokens, CompletionTokens: u.OutputTokens, ReasoningTokens: t, CachedTokens: cached, CachedKnown: known}
 }
 
 func parseLimitError(body []byte, h http.Header) *LimitError {

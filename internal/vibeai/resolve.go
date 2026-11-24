@@ -15,6 +15,7 @@ type Suggestion struct {
 	Artist string
 	Title  string
 	Why    string
+	Again  bool // the listener asked to hear this track again in this stream
 }
 
 type appleSongSearchResponse struct {

@@ -110,6 +110,7 @@ Release builds check GitHub for a newer release once a day and update themselves
 - `~/.cache/aux/library/`: your library, Favorites, albums and playlists, checked against Apple Music in the background.
 - `~/.cache/aux/art/`: cover art, up to 256 MB.
 - `~/.cache/aux/audio/`: encrypted audio segments for replays, up to 2 GB; the license is still requested on every play. Set `"audio_cache_mb"` in `config.json` to change the cap, or to `-1` to turn the cache off.
+- Set `"vibe_context_limit"` in `config.json` to change how many tokens the picker's conversation may grow to before it compacts older turns (default 200000).
 
 ## Credits
 

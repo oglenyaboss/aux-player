@@ -144,6 +144,45 @@ func TestResponsesMessage(t *testing.T) {
 	}
 }
 
+func TestResponsesUsageCached(t *testing.T) {
+	c, _ := newTestResponses(t, Config{Model: "m"}, &fakeTokens{token: "tok1", account: "acc1"}, nil,
+		func(int) (int, http.Header, string) {
+			return http.StatusOK, nil, readSSE(t, "responses_cached.sse")
+		})
+	resp, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.CachedTokens != 96 || !resp.Usage.CachedKnown {
+		t.Errorf("Usage = %+v, want cached 96 known", resp.Usage)
+	}
+}
+
+func TestResponsesUsageCachedAbsent(t *testing.T) {
+	c, _ := newTestResponses(t, Config{Model: "m"}, &fakeTokens{token: "tok1", account: "acc1"}, nil,
+		func(int) (int, http.Header, string) {
+			return http.StatusOK, nil, readSSE(t, "responses_nocache.sse")
+		})
+	resp, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.CachedKnown {
+		t.Errorf("Usage = %+v, want cached unknown", resp.Usage)
+	}
+}
+
+func TestResponsesContextLengthEvent(t *testing.T) {
+	c, _ := newTestResponses(t, Config{Model: "m"}, &fakeTokens{token: "tok1", account: "acc1"}, nil,
+		func(int) (int, http.Header, string) {
+			return http.StatusOK, nil, readSSE(t, "responses_context_failed.sse")
+		})
+	_, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false)
+	if !errors.Is(err, ErrContextLength) {
+		t.Fatalf("err = %v, want ErrContextLength", err)
+	}
+}
+
 func TestResponsesRequest(t *testing.T) {
 	tools := []Tool{{
 		Name:        "echo",

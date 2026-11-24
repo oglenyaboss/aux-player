@@ -34,6 +34,7 @@ type signalRec struct {
 	Title   string    `json:"title"`
 	PosSec  int       `json:"pos,omitempty"`
 	DurSec  int       `json:"dur,omitempty"`
+	Source  string    `json:"source,omitempty"` // "manual": played by the listener's own hand, never an agent outcome
 }
 
 type Signals struct {
@@ -73,6 +74,9 @@ func OpenSignals(path string) (*Signals, error) {
 func (s *Signals) Rated() []RatedTrack {
 	byKey := make(map[string]RatedTrack)
 	for _, r := range s.recs {
+		if r.manual() {
+			continue
+		}
 		if r.Kind != "more" && r.Kind != "less" && r.Kind != "rate_clear" {
 			continue
 		}
@@ -151,6 +155,10 @@ func ratedKey(artist, title, id string) string {
 	return songKey(Song{Artist: artist, Title: title})
 }
 
+// manual marks a neutral line for a track the listener played by hand: it
+// never counts as an outcome, a skip or a rating.
+func (r signalRec) manual() bool { return r.Source == "manual" }
+
 func (s *Signals) append(recs ...signalRec) error {
 	s.recs = append(s.recs, recs...)
 	if s.path == "" {
@@ -177,30 +185,28 @@ func (s *Signals) append(recs ...signalRec) error {
 	return err
 }
 
-func (s *Signals) skippedBefore(song Song, session string) bool {
-	key := songKey(song)
-	cutoff := s.now().Add(-14 * 24 * time.Hour)
-	skipped, played := false, false
-	for _, r := range s.recs {
-		if r.Kind != "skip_early" && r.Kind != "skip_mid" && r.Kind != "played" {
-			continue
-		}
-		if songKey(Song{Artist: r.Artist, Title: r.Title}) != key {
-			continue
-		}
-		if r.Kind == "played" {
-			played = true
-		} else if r.Session != session && !r.Time.Before(cutoff) {
-			skipped = true
-		}
+// AppendManualPlay appends one neutral "played" line for a track the listener
+// played by hand, outside any agent session: the file keeps the same mode and
+// layout as agent lines, the readers keep ignoring it. An empty path drops
+// the line.
+func AppendManualPlay(path string, out Outcome, now time.Time) error {
+	if path == "" {
+		return nil
 	}
-	return skipped && !played
+	return (&Signals{path: path}).append(signalRec{
+		Time: now, Kind: "played", Source: "manual",
+		ID: out.ID, Artist: out.Artist, Title: out.Title,
+		PosSec: out.PosSec, DurSec: out.DurSec,
+	})
 }
 
 func (s *Signals) skippedElsewhere(session string) []Song {
 	cutoff := s.now().Add(-14 * 24 * time.Hour)
 	played := make(map[string]bool)
 	for _, r := range s.recs {
+		if r.manual() {
+			continue
+		}
 		if r.Kind == "played" {
 			played[songKey(Song{Artist: r.Artist, Title: r.Title})] = true
 		}
@@ -209,6 +215,9 @@ func (s *Signals) skippedElsewhere(session string) []Song {
 	out := make([]Song, 0, 8)
 	for i := len(s.recs) - 1; i >= 0 && len(out) < 100; i-- {
 		r := s.recs[i]
+		if r.manual() {
+			continue
+		}
 		if r.Kind != "skip_early" && r.Kind != "skip_mid" || r.Session == session || r.Time.Before(cutoff) {
 			continue
 		}
@@ -221,23 +230,6 @@ func (s *Signals) skippedElsewhere(session string) []Song {
 		out = append(out, song)
 	}
 	return out
-}
-
-func (s *Signals) blockedArtist(artist, session string) string {
-	for _, r := range s.recs {
-		if r.Kind != "skip_early" || r.Session != session {
-			continue
-		}
-		if recHasArtist(r, artist) {
-			return "skipped in this session"
-		}
-	}
-	// ponytail: a 60-day window instead of weight decay; the upgrade is an exponential weight by age
-	early, played, sessions, _ := s.skipCounts(artist)
-	if sessions >= 2 && played < early {
-		return fmt.Sprintf("the listener skips (%d sessions)", sessions)
-	}
-	return ""
 }
 
 type skipStat struct {
@@ -253,6 +245,9 @@ func (s *Signals) skipCounts(artist string) (early, played, sessions int, querie
 		if r.Time.Before(cutoff) {
 			continue
 		}
+		if r.manual() {
+			continue
+		}
 		switch r.Kind {
 		case "more", "less", "rate_clear":
 			ratings[r.Session+"\x00"+r.ID] = r.Kind
@@ -263,6 +258,9 @@ func (s *Signals) skipCounts(artist string) (early, played, sessions int, querie
 	counted := make(map[string]bool)
 	for _, r := range s.recs {
 		if r.Time.Before(cutoff) {
+			continue
+		}
+		if r.manual() {
 			continue
 		}
 		if r.Kind != "skip_early" && r.Kind != "played" && r.Kind != "less" && r.Kind != "more" {
@@ -296,6 +294,9 @@ func (s *Signals) skipCounts(artist string) (early, played, sessions int, querie
 func (s *Signals) globalSkips() []skipStat {
 	cands := make(map[string]bool)
 	for _, r := range s.recs {
+		if r.manual() {
+			continue
+		}
 		if r.Kind != "skip_early" && r.Kind != "less" {
 			continue
 		}
@@ -322,6 +323,9 @@ func (s *Signals) globalSkips() []skipStat {
 func (s *Signals) lastOutcome(session, id string) (signalRec, bool) {
 	for i := len(s.recs) - 1; i >= 0; i-- {
 		r := s.recs[i]
+		if r.manual() {
+			continue
+		}
 		if r.Session != session || r.ID != id {
 			continue
 		}
@@ -336,6 +340,9 @@ func (s *Signals) lastOutcome(session, id string) (signalRec, bool) {
 func (s *Signals) lastRating(session, id string) string {
 	for i := len(s.recs) - 1; i >= 0; i-- {
 		r := s.recs[i]
+		if r.manual() {
+			continue
+		}
 		if r.Session != session || r.ID != id {
 			continue
 		}
@@ -347,6 +354,37 @@ func (s *Signals) lastRating(session, id string) string {
 		}
 	}
 	return ""
+}
+
+// trackStats is the listener's standing for one track across all sessions:
+// the latest rating (rate_clear resets it to none), the play count with the
+// moment of the latest play, and the kinds of the last outcomes in file order.
+// Records with any source count, manual plays included.
+func (s *Signals) trackStats(song Song) (rating string, plays int, last time.Time, outcomes []string) {
+	key := songKey(song)
+	for _, r := range s.recs {
+		if songKey(Song{Artist: r.Artist, Title: r.Title}) != key {
+			continue
+		}
+		switch r.Kind {
+		case "more", "less":
+			rating = r.Kind
+		case "rate_clear":
+			rating = ""
+		case "played":
+			plays++
+			if r.Time.After(last) {
+				last = r.Time
+			}
+		}
+		if r.Kind == "played" || r.Kind == "skip_early" || r.Kind == "skip_mid" {
+			outcomes = append(outcomes, r.Kind)
+		}
+	}
+	if len(outcomes) > 3 {
+		outcomes = outcomes[len(outcomes)-3:]
+	}
+	return rating, plays, last, outcomes
 }
 
 func recHasArtist(r signalRec, artist string) bool {

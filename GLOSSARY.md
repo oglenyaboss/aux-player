@@ -1,6 +1,6 @@
 # AUX picker
 
-Music picking from a free-text request: the model names candidates, live data checks and filters them.
+Music picking from a free-text request: the model searches and names candidates and judges taste; the code checks that a track exists and has not played in this Stream.
 
 ## Request
 
@@ -21,13 +21,13 @@ The part of the request about the character of the music or the situation of lis
 _Avoid_: vibe
 
 **Exclusion**:
-An artist or genre that the request explicitly banned for the whole stream.
+An artist or genre that the request explicitly banned for the whole stream. The model keeps it in its plan; the code does not check it.
 _Avoid_: blacklist, filter
 
 ## Familiarity
 
 **Known track**:
-A track that is already in the listener's library, including other versions of the same track.
+A track that is already in the listener's library, including other versions of the same track. Search marks it `library`; it is taste, not a reason to reject.
 _Avoid_: played track
 
 **Known artist**:
@@ -40,7 +40,7 @@ Any artist that is not known, even if their tracks are in the library.
 ## Output
 
 **Stream**:
-An endless sequence of tracks from one request without repeats.
+An endless sequence of tracks from one request without repeats, unless the listener asks to hear a track again.
 _Avoid_: station, radio
 
 **Drift**:
@@ -54,7 +54,7 @@ _Avoid_: batch, pack
 A run that delivers one finished playlist of a set size (30 by default) instead of a Stream: saved to Apple Music under the agent's name, not played until the listener asks.
 
 **Window**:
-The last 20 tracks of the stream, over which the selection limits are counted: per artist, per referent, per known artist. In Playlist mode the Window is the playlist, and the limits scale with its size.
+The last 20 tracks of the stream, shown to the model every turn as a summary: tracks per artist, by Favorites artists, by referents. A view for balance, not a limit. In Playlist mode the Window is the playlist.
 
 **Card**:
 An agent question where every option is a track with artwork; the chosen track plays at once.
