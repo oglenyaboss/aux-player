@@ -6,6 +6,10 @@
 
 Issues and PRs go to `oglenyaboss/aux-player` only. The `upstream` remote (`simonepelosi/vibez`) is a source of fixes; nothing is created there. If `gh repo view` shows another repo, run `gh repo set-default oglenyaboss/aux-player`.
 
+## Checks
+
+`lefthook run pre-push --all-files` is the full local gate, the same one a push runs. Run it before merging a branch into main and put it in the `Check:` line of a worker brief, so lint findings get fixed on the branch that made them.
+
 ## Picker agent
 
 - Live data for judging a change to the picker: session logs in `~/.cache/aux/vibe/runs/`, signals in `~/.config/aux/vibe-signals.jsonl`, memory in `~/.config/aux/vibe-memory.md`.
