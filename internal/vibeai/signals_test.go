@@ -1,6 +1,7 @@
 package vibeai
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,101 +96,6 @@ func TestOpenSignalsSkipsBrokenLines(t *testing.T) {
 	}
 }
 
-func TestSkippedBeforeOtherSession(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
-	if !sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
-		t.Error("skip in another session: want true")
-	}
-	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s1") {
-		t.Error("skip in the same session: want false")
-	}
-}
-
-func TestSkippedBeforeOldRecordsIgnored(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig,
-		signalRec{Time: testNow.Add(-15 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
-		signalRec{Time: testNow.Add(-13 * 24 * time.Hour), Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Overseas"},
-	)
-	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
-		t.Error("skip 15 days ago: want false")
-	}
-	if !sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Overseas"}, "s2") {
-		t.Error("skip 13 days ago: want true")
-	}
-}
-
-func TestSkippedBeforePlayedCancels(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig,
-		signalRec{Time: testNow, Kind: "skip_mid", Session: "s1", Artist: "Ken Carson", Title: "Yale"},
-		signalRec{Time: testNow, Kind: "played", Session: "s1", PosSec: 10, DurSec: 190, Artist: "Ken Carson", Title: "Yale"},
-	)
-	if sig.skippedBefore(Song{Artist: "KEN CARSON", Title: "Yale"}, "s2") {
-		t.Error("played lifts the block: want false")
-	}
-}
-
-func TestBlockedArtistSessionSkip(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Mercury: Retrograde"})
-	key := songArtists(Song{Artist: "Ghostemane", Title: "Mercury: Retrograde"})[0]
-	if got := sig.blockedArtist(key, "s2"); got != "skipped in this session" {
-		t.Errorf("the same session: got %q, want \"skipped in this session\"", got)
-	}
-	if got := sig.blockedArtist(key, "s3"); got != "" {
-		t.Errorf("another session: got %q, want \"\"", got)
-	}
-}
-
-func TestBlockedArtistGlobalTwoSessions(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig,
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
-	)
-	if got := sig.blockedArtist("ghostemane", "s3"); got != "the listener skips (2 sessions)" {
-		t.Errorf("got %q, want \"the listener skips (2 sessions)\"", got)
-	}
-}
-
-func TestBlockedArtistGlobalOldRecordsIgnored(t *testing.T) {
-	sig := testSignals(t, "")
-	old := testNow.Add(-61 * 24 * time.Hour)
-	addSignals(t, sig,
-		signalRec{Time: old, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
-		signalRec{Time: old, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
-	)
-	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("records older than 60 days: got %q, want \"\"", got)
-	}
-}
-
-func TestBlockedArtistGlobalPlayedCancels(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig,
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
-		signalRec{Time: testNow, Kind: "played", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
-		signalRec{Time: testNow, Kind: "played", Session: "s2", Artist: "Ghostemane", Title: "Rapture"},
-	)
-	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("played 2 is not < early 2: got %q, want \"\"", got)
-	}
-}
-
-func TestBlockedArtistGlobalOneSession(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig,
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Mercury: Retrograde"},
-		signalRec{Time: testNow, Kind: "skip_early", Session: "s1", Artist: "Ghostemane", Title: "Rapture"},
-	)
-	if got := sig.blockedArtist("ghostemane", "s3"); got != "" {
-		t.Errorf("two skips from one session: got %q, want \"\"", got)
-	}
-}
-
 func TestGlobalSkipsOrderAndSingleSession(t *testing.T) {
 	sig := testSignals(t, "")
 	addSignals(t, sig,
@@ -233,9 +139,6 @@ func TestSkippedElsewhere(t *testing.T) {
 	for i, w := range want {
 		if got[i] != w {
 			t.Errorf("got[%d] = %+v, want %+v", i, got[i], w)
-		}
-		if !sig.skippedBefore(w, "s2") {
-			t.Errorf("skippedBefore(%+v) = false, want true", w)
 		}
 	}
 }
@@ -322,16 +225,10 @@ func TestSkipCountsLess(t *testing.T) {
 	if early != 2 || played != 0 || sessions != 2 {
 		t.Fatalf("skipCounts = (%d, %d, %d), want (2, 0, 2)", early, played, sessions)
 	}
-	if sig.blockedArtist(a, "s3") == "" {
-		t.Fatal("two sessions of less must block the artist")
-	}
 	addSignals(t, sig, signalRec{Time: testNow, Kind: "rate_clear", Session: "s2", ID: "2", Artist: "A", Title: "T2"})
 	early, played, sessions, _ = sig.skipCounts(a)
 	if early != 1 || played != 0 || sessions != 1 {
 		t.Fatalf("after rate_clear: (%d, %d, %d), want (1, 0, 1)", early, played, sessions)
-	}
-	if got := sig.blockedArtist(a, "s3"); got != "" {
-		t.Errorf("blockedArtist = %q, want empty after the clear", got)
 	}
 }
 
@@ -344,14 +241,6 @@ func TestSkipCountsLessThenMore(t *testing.T) {
 	early, played, sessions, _ := sig.skipCounts(songArtists(Song{Artist: "A", Title: "T1"})[0])
 	if early != 0 || played != 1 || sessions != 0 {
 		t.Fatalf("skipCounts = (%d, %d, %d), want (0, 1, 0)", early, played, sessions)
-	}
-}
-
-func TestBlockedArtistIgnoresLessInSession(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "less", Session: "s1", ID: "1", Artist: "A", Title: "T1"})
-	if got := sig.blockedArtist(songArtists(Song{Artist: "A", Title: "T1"})[0], "s1"); got != "" {
-		t.Errorf("blockedArtist = %q, want empty: less must not block within the session", got)
 	}
 }
 
@@ -385,17 +274,6 @@ func TestEngineRecordRatings(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "more,less,rate_clear" {
 		t.Fatalf("recs = %v, want [more less rate_clear]", got)
-	}
-}
-
-func TestSkippedBeforeNeedsSkip(t *testing.T) {
-	sig := testSignals(t, "")
-	addSignals(t, sig, signalRec{Time: testNow, Kind: "served", Session: "s1", Artist: "Ken Carson", Title: "Yale"})
-	if sig.skippedBefore(Song{Artist: "Ken Carson", Title: "Yale"}, "s2") {
-		t.Error("the track was only in the portion, it was never reached: want false")
-	}
-	if got := sig.skippedElsewhere("s2"); len(got) != 0 {
-		t.Errorf("skippedElsewhere = %+v, want empty", got)
 	}
 }
 
@@ -531,5 +409,69 @@ func TestSetRatingInvalidKindAndNoop(t *testing.T) {
 	}
 	if len(sig.recs) != 1 {
 		t.Fatalf("recs after noop clear = %d, want 1", len(sig.recs))
+	}
+}
+
+func TestManualLinesIgnoredBySkipReaders(t *testing.T) {
+	sig := testSignals(t, "")
+	addSignals(t, sig,
+		signalRec{Time: testNow, Kind: "played", Source: "manual", Session: "", ID: "x1", Artist: "X", Title: "Song", PosSec: 120, DurSec: 200},
+		signalRec{Time: testNow, Kind: "skip_early", Session: "s0", ID: "x1", Artist: "X", Title: "Song"},
+	)
+	x := songArtists(Song{Artist: "X", Title: "Song"})[0]
+	if _, played, _, _ := sig.skipCounts(x); played != 0 {
+		t.Errorf("skipCounts played = %d, want 0: manual plays never count", played)
+	}
+	if r, ok := sig.lastOutcome("", "x1"); ok {
+		t.Errorf("lastOutcome found a manual record: %+v", r)
+	}
+}
+
+func TestAppendManualPlayLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "s.jsonl")
+	out := Outcome{ID: "1", Artist: "A", Title: "T", PosSec: 100, DurSec: 200}
+	for i := range 2 {
+		if err := AppendManualPlay(path, out, testNow); err != nil {
+			t.Fatalf("AppendManualPlay #%d: %v", i+1, err)
+		}
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file the test just wrote under its temp dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("file: %d lines, want 2", len(lines))
+	}
+	for _, line := range lines {
+		var r signalRec
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatalf("decode %q: %v", line, err)
+		}
+		if r.Source != "manual" || r.Kind != "played" || r.Session != "" || r.Query != "" ||
+			r.ID != "1" || r.Artist != "A" || r.Title != "T" || r.PosSec != 100 || r.DurSec != 200 || !r.Time.Equal(testNow) {
+			t.Errorf("line = %+v", r)
+		}
+	}
+	dir := t.TempDir()
+	if err := AppendManualPlay("", out, testNow); err != nil {
+		t.Errorf("AppendManualPlay with an empty path: %v, want nil", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("an empty path wrote files to disk: %v", entries)
+	}
+}
+
+func TestAgentLineJSONHasNoSourceKey(t *testing.T) {
+	b, err := json.Marshal(signalRec{Time: testNow, Session: "s1", Query: "q", Kind: "played", ID: "1", Artist: "A", Title: "T", PosSec: 1, DurSec: 2, Source: ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "source") {
+		t.Errorf("an agent line carries a source key: %s", b)
 	}
 }

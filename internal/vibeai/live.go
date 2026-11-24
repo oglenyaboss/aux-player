@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -42,6 +44,32 @@ func (b *liveBackend) findSong(ctx context.Context, sug Suggestion) (Song, bool,
 	}
 	song, ok := matchSong(sug, results)
 	return song, ok, nil
+}
+
+func (b *liveBackend) searchTracks(ctx context.Context, artist, title string) ([]Song, error) {
+	if strings.TrimSpace(title) != "" {
+		results, err := searchSongs(ctx, b.api, b.sf, artist, title)
+		if err != nil {
+			return nil, err
+		}
+		want := splitArtists(artist)
+		sort.SliceStable(results, func(i, j int) bool {
+			return artistsIntersect(want, songArtists(results[i])) && !artistsIntersect(want, songArtists(results[j]))
+		})
+		return results, nil
+	}
+	id, _, err := searchArtistApple(ctx, b.api, b.sf, artist)
+	if err != nil {
+		return nil, err
+	}
+	if id == "" {
+		return nil, fmt.Errorf("apple: artist %q not found", artist)
+	}
+	body, err := b.api.get(ctx, "/catalog/"+b.sf+"/artists/"+url.PathEscape(id)+"?views=top-songs&l=en-US")
+	if err != nil {
+		return nil, err
+	}
+	return parseTopSongs(body)
 }
 
 func describeTrack(ctx context.Context, api *appleAPI, lfm *lastfmClient, sf, artist, title string) (TrackFacts, error) {

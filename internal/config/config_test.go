@@ -381,6 +381,37 @@ func TestAudioCacheMBRoundTrips(t *testing.T) {
 	}
 }
 
+func TestVibeContextLimitRoundTrips(t *testing.T) {
+	path := writeCfg(t, map[string]any{"vibe_context_limit": 8000})
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.VibeContextLimit != 8000 {
+		t.Errorf("VibeContextLimit = %d, want 8000", cfg.VibeContextLimit)
+	}
+
+	cfg.VibeContextLimit = 0
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // G304: a file inside the test's temp dir
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "vibe_context_limit") {
+		t.Errorf("the saved config still carries vibe_context_limit:\n%s", data)
+	}
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load after Save: %v", err)
+	}
+	if loaded.VibeContextLimit != 0 {
+		t.Errorf("VibeContextLimit after round trip = %d, want 0", loaded.VibeContextLimit)
+	}
+}
+
 func testConfigWithDefaults() *config.Config {
 	return &config.Config{AuthPort: 7777}
 }

@@ -54,6 +54,8 @@ type Config struct {
 	VibeLLMEffort  string `json:"vibe_llm_effort,omitempty"`
 	VibeLang       string `json:"vibe_lang,omitempty"`
 	VibeEggs       *bool  `json:"vibe_eggs,omitempty"` // nil = on
+	// picker conversation size in tokens before it compacts; 0 = 200000
+	VibeContextLimit int `json:"vibe_context_limit,omitempty"`
 }
 
 type EQBand struct {

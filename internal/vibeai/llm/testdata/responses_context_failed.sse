@@ -1,0 +1,5 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_ctx1","object":"response","status":"in_progress","error":null}}
+
+event: response.failed
+data: {"type":"response.failed","sequence_number":1,"response":{"id":"resp_ctx1","object":"response","status":"failed","error":{"code":"context_length_exceeded","message":"This model's maximum context length is 128000 tokens. However, you requested 130000 tokens."}}}

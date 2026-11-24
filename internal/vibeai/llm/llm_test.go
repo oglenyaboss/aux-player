@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -239,6 +240,30 @@ func TestUnauthorizedNoRetry(t *testing.T) {
 	}
 }
 
+func TestChatContextLengthError(t *testing.T) {
+	const tooLong = `{"error":{"message":"This model's maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens.","code":"context_length_exceeded"}}`
+	cases := []struct {
+		name string
+		code int
+		body string
+		want bool
+	}{
+		{"400 context length", http.StatusBadRequest, tooLong, true},
+		{"400 other error", http.StatusBadRequest, `{"error":{"message":"invalid tool schema"}}`, false},
+		{"413 prompt too long", http.StatusRequestEntityTooLarge, "prompt is too long", true},
+	}
+	for _, tc := range cases {
+		c, _ := newTestClient(t, func(int) (int, string) { return tc.code, tc.body })
+		_, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false)
+		if err == nil {
+			t.Fatalf("%s: want error", tc.name)
+		}
+		if got := errors.Is(err, ErrContextLength); got != tc.want {
+			t.Errorf("%s: errors.Is(err, ErrContextLength) = %v, want %v (err = %v)", tc.name, got, tc.want, err)
+		}
+	}
+}
+
 func TestNoToolsInBody(t *testing.T) {
 	c, reqs := newTestClient(t, func(int) (int, string) { return http.StatusOK, okBody })
 	if _, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false); err != nil {
@@ -284,8 +309,52 @@ func TestUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Usage != (Usage{10, 5, 3}) {
-		t.Errorf("Usage = %+v, want {10 5 3}", resp.Usage)
+	want := Usage{PromptTokens: 10, CompletionTokens: 5, ReasoningTokens: 3}
+	if resp.Usage != want {
+		t.Errorf("Usage = %+v, want %+v", resp.Usage, want)
+	}
+}
+
+func chatUsage(t *testing.T, body string) Usage {
+	t.Helper()
+	c, _ := newTestClient(t, func(int) (int, string) { return http.StatusOK, body })
+	resp, err := c.Chat(context.Background(), []Message{{Role: "user", Content: "hi"}}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.Usage
+}
+
+func TestUsageCached(t *testing.T) {
+	u := chatUsage(t, `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":64}}}`)
+	if u.CachedTokens != 64 || !u.CachedKnown || u.PromptTokens != 100 {
+		t.Errorf("Usage = %+v, want cached 64 known, prompt 100", u)
+	}
+}
+
+func TestUsageCachedZero(t *testing.T) {
+	u := chatUsage(t, `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":0}}}`)
+	if u.CachedTokens != 0 || !u.CachedKnown {
+		t.Errorf("Usage = %+v, want cached 0 known", u)
+	}
+}
+
+func TestUsageCachedDeepSeek(t *testing.T) {
+	u := chatUsage(t, `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":40}}`)
+	if u.CachedTokens != 40 || !u.CachedKnown {
+		t.Errorf("Usage = %+v, want cached 40 known", u)
+	}
+}
+
+func TestUsageCachedAbsent(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"no details", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"completion_tokens_details":{"reasoning_tokens":3}}}`},
+		{"details without cached_tokens", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"other":1}}}`},
+	}
+	for _, tc := range cases {
+		if u := chatUsage(t, tc.body); u.CachedKnown {
+			t.Errorf("%s: Usage = %+v, want cached unknown", tc.name, u)
+		}
 	}
 }
 

@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -464,6 +466,90 @@ func TestVibeAIOutcomesNonVibeTrackIgnored(t *testing.T) {
 	}
 }
 
+// readVibeSignals returns the non-empty lines of the signals file under the
+// test's own HOME.
+func readVibeSignals(t *testing.T) []string {
+	t.Helper()
+	data, err := os.ReadFile(vibeSignalsPath()) //nolint:gosec // G304: the test's own signals file
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func TestManualPlaysWriteNeutralLine(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := New(&config.Config{}, &mockProvider{}, nil, Options{})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "a1", Artist: "Art", Title: "One", Duration: 200 * time.Second}, Position: 190 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "a2", Duration: 200 * time.Second}, Position: 5 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "a3", Duration: 200 * time.Second}, Position: 5 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "a4"}, Position: 0})
+	lines := readVibeSignals(t)
+	if len(lines) != 1 {
+		t.Fatalf("signals = %d lines, want exactly 1 (%q)", len(lines), lines)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("decode %q: %v", lines[0], err)
+	}
+	want := map[string]any{
+		"kind": "played", "source": "manual", "id": "a1",
+		"artist": "Art", "title": "One", "pos": float64(190), "dur": float64(200),
+	}
+	for k, v := range want {
+		if rec[k] != v {
+			t.Errorf("%q = %v, want %v", k, rec[k], v)
+		}
+	}
+	if s, _ := rec["session"].(string); s != "" {
+		t.Errorf("session = %q, want empty", s)
+	}
+}
+
+func TestManualPlaysWithAgentPortion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := openVibeWithPortion(t)
+	m.vibeAI.stream = false
+	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "1"}, Position: 40 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "m1", Artist: "M", Title: "Manual", Duration: 100 * time.Second}, Position: 60 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "2"}, Position: 0})
+	want := []vibeai.Outcome{{ID: "1", Artist: "A", Title: "One", Kind: "played", PosSec: 40, DurSec: 61}}
+	if !reflect.DeepEqual(m.vibeAI.pending, want) {
+		t.Fatalf("pending = %+v, want %+v: a served track keeps its agent outcome", m.vibeAI.pending, want)
+	}
+	lines := readVibeSignals(t)
+	if len(lines) != 1 {
+		t.Fatalf("signals = %d lines, want exactly 1 (%q)", len(lines), lines)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("decode %q: %v", lines[0], err)
+	}
+	if rec["id"] != "m1" || rec["source"] != "manual" || rec["kind"] != "played" {
+		t.Errorf("manual line = %v", rec)
+	}
+}
+
+func TestManualSkipWritesNothing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := New(&config.Config{}, &mockProvider{}, nil, Options{})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "m1", Artist: "M", Title: "Manual", Duration: 200 * time.Second}, Position: 20 * time.Second})
+	m.Update(playerStateMsg{Track: &provider.Track{ID: "m2"}, Position: 0})
+	if lines := readVibeSignals(t); len(lines) != 0 {
+		t.Fatalf("signals = %q, want none: a manual skip writes nothing", lines)
+	}
+}
+
 func TestVibeAIOutcomesPlayActionNoDouble(t *testing.T) {
 	m := openVibeWithPortion(t)
 	m.vibeAI.stream = false
@@ -717,6 +803,12 @@ func TestVibeAI_StreamAheadThreshold(t *testing.T) {
 	}
 	if m.vibeAIStreamTick(player.State{Track: &m.queueTracks[8]}) == nil {
 		t.Error("ahead 1 ≤ 1: must top up")
+	}
+}
+
+func TestVibeAIConfigContextLimit(t *testing.T) {
+	if got := vibeAIConfig(&config.Config{VibeContextLimit: 8000}).ContextLimit; got != 8000 {
+		t.Errorf("ContextLimit = %d, want 8000", got)
 	}
 }
 

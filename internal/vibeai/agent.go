@@ -23,6 +23,7 @@ type backend interface {
 	describe(ctx context.Context, kind, artist, name string) (any, error) // kind: artist | album | track
 	similarArtists(ctx context.Context, artist string) ([]similar, error)
 	findSong(ctx context.Context, sug Suggestion) (Song, bool, error)
+	searchTracks(ctx context.Context, artist, title string) ([]Song, error) // title "" — the artist's top songs
 }
 
 type Question struct {
@@ -58,8 +59,17 @@ type Agent struct {
 	Log      *runLog
 	MaxSteps int // 15 by default
 	Note     string
+	// ContextLimit is the conversation size in tokens before it compacts; 0 = no limit.
+	ContextLimit int
+	// State renders the block that replaces compacted turns.
+	State func() string
 
 	msgs          []llm.Message
+	turnStarts    []int
+	spent         tokenTally
+	compactions   int
+	lastInput     int
+	compactedFrom int
 	askedThisTurn bool
 	askMisses     int
 	planSet       bool
@@ -67,6 +77,7 @@ type Agent struct {
 	History       []Track
 	turns         int
 	Warmup        []answerRow
+	found         map[string]Song // catalog hits the agent has seen, by id, for submit by id
 }
 
 const askUserErr = "error: 1–2 questions; each with 2–4 options {artist, title, label}; default — the option number"
@@ -168,6 +179,26 @@ const similarSchema = `{
   "required": ["artist"]
 }`
 
+const searchTracksSchema = `{
+  "type": "object",
+  "properties": {
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "artist": {"type": "string"},
+          "title": {"type": "string", "description": "omit for the artist's top songs"}
+        },
+        "required": ["artist"]
+      }
+    }
+  },
+  "required": ["queries"]
+}`
+
 const submitSchema = `{
   "type": "object",
   "properties": {
@@ -178,11 +209,13 @@ const submitSchema = `{
       "items": {
         "type": "object",
         "properties": {
+          "id": {"type": "string", "description": "id from search_tracks; then artist and title may be omitted"},
           "artist": {"type": "string"},
           "title": {"type": "string"},
-          "why": {"type": "string"}
+          "why": {"type": "string"},
+          "again": {"type": "boolean", "description": "true only when the listener asked to hear this track again in this stream"}
         },
-        "required": ["artist", "title", "why"]
+        "required": ["why"]
       }
     },
     "note": {"type": "string", "description": "Note to the listener above the portion, up to 8 words: what you hold and where you shift"}
@@ -243,7 +276,8 @@ func agentTools() []llm.Tool {
 		{Name: "set_plan", Description: "Fix the referents with modes and exclusions. Always before submit_candidates.", Parameters: json.RawMessage(setPlanSchema)},
 		{Name: "describe", Description: "Description of a referent from Apple Music and Last.fm: genres, annotation, releases with dates or a tracklist, tags.", Parameters: json.RawMessage(describeSchema)},
 		{Name: "similar_artists", Description: "Similar artists by shared Last.fm audience (noisy, not by sound).", Parameters: json.RawMessage(similarSchema)},
-		{Name: "submit_candidates", Description: "Offer tracks for the portion. The code checks them in Apple Music and against the rules and returns the accepted and the rejected ones with reasons.", Parameters: json.RawMessage(submitSchema)},
+		{Name: "search_tracks", Description: "Search Apple Music for tracks, up to 10 queries at once: artist + title finds that track, artist alone returns their top songs. Each hit has an id for submit_candidates and marks of what the listener has: library, favorite, ▲/▼ rating, in this stream, plays and last outcomes, or new. Search helps memory, it does not replace it: deep cuts you know go straight to submit_candidates.", Parameters: json.RawMessage(searchTracksSchema)},
+		{Name: "submit_candidates", Description: "Offer tracks for the portion, by id from search_tracks or by artist and title. The code checks that each exists in Apple Music and has not played in this stream, and returns the accepted and the rejected ones with reasons.", Parameters: json.RawMessage(submitSchema)},
 		{Name: "memory_add", Description: "Add a lasting preference of the listener to memory.", Parameters: json.RawMessage(memoryAddSchema)},
 		{Name: "memory_replace", Description: "Replace the memory entry that contains the substring old.", Parameters: json.RawMessage(memoryReplaceSchema)},
 		{Name: "memory_remove", Description: "Remove the memory entry that contains the substring old.", Parameters: json.RawMessage(memoryRemoveSchema)},
@@ -294,10 +328,12 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 		user += "\n\nCandidates from the previous turn that did not make it into the portion: " + strings.Join(names, "; ") + ". Take them through submit_candidates only if they fit the fresh reactions."
 		a.logf("reserve offered: %s", strings.Join(names, "; "))
 	}
+	a.turnStarts = append(a.turnStarts, len(a.msgs))
 	a.msgs = append(a.msgs, llm.Message{Role: "user", Content: user})
 	hints := 0
 	memoryRetried := false
-	start := time.Now()
+	compacted := false
+	a.spent = tokenTally{}
 	for step := 1; ; step++ {
 		maxSteps, maxHints := a.MaxSteps, 2
 		if a.Session.Playlist() != nil {
@@ -306,12 +342,30 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 		if step > maxSteps {
 			break
 		}
+		if a.ContextLimit > 0 && a.lastInput >= a.ContextLimit {
+			a.compact()
+		}
+		chatStart := time.Now()
 		resp, err := a.LLM.Chat(ctx, a.msgs, agentTools(), false)
+		chatSecs := time.Since(chatStart).Seconds()
 		if err != nil {
+			if !compacted && errors.Is(err, llm.ErrContextLength) && a.compact() {
+				compacted = true
+				step--
+				continue
+			}
+			a.rollback()
 			return nil, err
 		}
-		a.logf("### step %d (%d s, tokens in %d, out %d, reasoning %d)", step, int(time.Since(start).Seconds()),
-			resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.ReasoningTokens)
+		a.spent.add(resp.Usage)
+		a.lastInput = resp.Usage.PromptTokens
+		a.logf("### step %d (%.1f s, tokens in %d, cached %s, out %d, reasoning %d)", step, chatSecs,
+			resp.Usage.PromptTokens, cachedText(resp.Usage.CachedTokens, resp.Usage.CachedKnown),
+			resp.Usage.CompletionTokens, resp.Usage.ReasoningTokens)
+		if a.compactedFrom > 0 {
+			a.logf("compaction %d: input %d → %d tokens", a.compactions, a.compactedFrom, resp.Usage.PromptTokens)
+			a.compactedFrom = 0
+		}
 		if resp.Message.Content != "" {
 			a.logf("%s", resp.Message.Content)
 		}
@@ -351,7 +405,36 @@ func (a *Agent) Turn(ctx context.Context, user string) ([]Entry, error) {
 	return a.Session.ClosePortion(), nil
 }
 
-func (a *Agent) Reset() { a.msgs = a.msgs[:1] }
+func (a *Agent) rollback() {
+	a.msgs = a.msgs[:a.turnStarts[len(a.turnStarts)-1]]
+	a.turnStarts = a.turnStarts[:len(a.turnStarts)-1]
+}
+
+// compact replaces every turn older than the last two with a state block the
+// code renders through State; the system message and the last two turns stay
+// verbatim. It reports whether there was enough history to compact.
+func (a *Agent) compact() bool {
+	if len(a.turnStarts) < 3 {
+		return false
+	}
+	cut := a.turnStarts[len(a.turnStarts)-2]
+	state := ""
+	if a.State != nil {
+		state = a.State()
+	}
+	msgs := make([]llm.Message, 0, len(a.msgs)-cut+2)
+	msgs = append(msgs, a.msgs[0])
+	msgs = append(msgs, llm.Message{Role: "user", Content: "Earlier turns of this stream, compacted by the code:\n" + state})
+	msgs = append(msgs, a.msgs[cut:]...)
+	before := len(a.msgs)
+	a.msgs = msgs
+	a.turnStarts = []int{2, a.turnStarts[len(a.turnStarts)-1] - cut + 2}
+	a.compactions++
+	a.compactedFrom = a.lastInput
+	a.lastInput = 0
+	a.logf("compaction %d: %d messages → %d", a.compactions, before, len(a.msgs))
+	return true
+}
 
 func (a *Agent) noteFavorite(song Song) {
 	a.msgs[0].Content += fmt.Sprintf("- %s — %s (%s)\n", song.Artist, song.Title, song.Album)
@@ -402,6 +485,14 @@ func (a *Agent) dispatch(ctx context.Context, call llm.ToolCall) string {
 			return "error: " + err.Error()
 		}
 		return a.similarArtists(ctx, args.Artist)
+	case "search_tracks":
+		var args struct {
+			Queries []searchQuery `json:"queries"`
+		}
+		if err := toolArgs(call.Arguments, &args); err != nil {
+			return "error: " + err.Error()
+		}
+		return a.searchTracks(ctx, args.Queries)
 	case "submit_candidates":
 		var args struct {
 			Tracks []trackArg `json:"tracks"`
@@ -463,9 +554,11 @@ func toolArgs(args string, v any) error {
 }
 
 type trackArg struct {
+	ID     string `json:"id"`
 	Artist string `json:"artist"`
 	Title  string `json:"title"`
 	Why    string `json:"why"`
+	Again  bool   `json:"again"`
 }
 
 type planSeedArg struct {
@@ -828,11 +921,48 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	if len(tracks) < 1 || len(tracks) > 30 {
 		return "error: 1–30 tracks"
 	}
-	sugs := make([]Suggestion, len(tracks))
+	type sub struct {
+		sug    Suggestion
+		song   Song
+		found  bool
+		reject string
+		near   string
+	}
+	subs := make([]sub, len(tracks))
+	lookup := make([]int, 0, len(tracks))
+	sugs := make([]Suggestion, 0, len(tracks))
 	for i, t := range tracks {
-		sugs[i] = Suggestion(t)
+		if id := strings.TrimSpace(t.ID); id != "" {
+			if song, ok := a.found[id]; ok {
+				subs[i] = sub{sug: Suggestion{Artist: song.Artist, Title: song.Title, Why: t.Why, Again: t.Again}, song: song, found: true}
+			} else {
+				subs[i] = sub{reject: "unknown id: take ids from search_tracks"}
+			}
+			continue
+		}
+		if strings.TrimSpace(t.Artist) == "" || strings.TrimSpace(t.Title) == "" {
+			subs[i] = sub{reject: "need id or artist and title"}
+			continue
+		}
+		subs[i] = sub{sug: Suggestion{Artist: t.Artist, Title: t.Title, Why: t.Why, Again: t.Again}}
+		lookup = append(lookup, i)
+		sugs = append(sugs, subs[i].sug)
 	}
 	hits := a.findSongs(ctx, sugs)
+	for j, i := range lookup {
+		subs[i].song, subs[i].found = hits[j].song, hits[j].found
+	}
+	missing := make([]int, 0)
+	for i := range tracks {
+		if subs[i].reject == "" && !subs[i].found {
+			missing = append(missing, i)
+		}
+	}
+	if len(missing) > 0 {
+		for j, reason := range a.nearestReasons(ctx, tracks, missing) {
+			subs[missing[j]].near = reason
+		}
+	}
 
 	accepted := make([]string, 0)
 	type rejectedRow struct {
@@ -841,8 +971,21 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 	}
 	rejected := make([]rejectedRow, 0)
 	for i, t := range tracks {
-		sug := Suggestion(t)
-		v := a.Session.Offer(sug, hits[i].song, hits[i].found)
+		var v Verdict
+		if subs[i].reject != "" {
+			v = Verdict{Reason: subs[i].reject}
+		} else {
+			v = a.Session.Offer(subs[i].sug, subs[i].song, subs[i].found)
+			if !v.Accepted && !subs[i].found {
+				v.Reason = subs[i].near
+			}
+		}
+		name := t.Artist + " — " + t.Title
+		if subs[i].sug.Artist != "" {
+			name = subs[i].sug.Artist + " — " + subs[i].sug.Title
+		} else if t.ID != "" {
+			name = t.ID
+		}
 		if a.UI != nil {
 			if v.Accepted {
 				portion := a.Session.Portion()
@@ -852,9 +995,9 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 					Accepted: true,
 				})
 			} else if a.Session.Need() > 0 {
-				p := Pick{Name: t.Artist + " — " + t.Title, Reason: v.Reason}
+				p := Pick{Name: name, Reason: v.Reason}
 				if v.Song.ID != "" {
-					p.Track = toTrack(Entry{Song: v.Song, Why: sug.Why})
+					p.Track = toTrack(Entry{Song: v.Song, Why: subs[i].sug.Why})
 				}
 				a.UI.Picked(p)
 			}
@@ -863,20 +1006,18 @@ func (a *Agent) submitCandidates(ctx context.Context, tracks []trackArg) string 
 			accepted = append(accepted, v.Song.Artist+" — "+v.Song.Title)
 			continue
 		}
-		rejected = append(rejected, rejectedRow{Track: t.Artist + " — " + t.Title, Reason: v.Reason})
+		rejected = append(rejected, rejectedRow{Track: name, Reason: v.Reason})
 	}
 	out := struct {
-		Accepted  []string      `json:"accepted"`
-		Rejected  []rejectedRow `json:"rejected"`
-		Portion   string        `json:"portion"`
-		Need      int           `json:"need"`
-		KnownLeft int           `json:"known_left"`
+		Accepted []string      `json:"accepted"`
+		Rejected []rejectedRow `json:"rejected"`
+		Portion  string        `json:"portion"`
+		Need     int           `json:"need"`
 	}{
-		Accepted:  accepted,
-		Rejected:  rejected,
-		Portion:   fmt.Sprintf("%d/%d", len(a.Session.Portion()), a.Session.Size),
-		Need:      a.Session.Need(),
-		KnownLeft: a.Session.KnownLeft(),
+		Accepted: accepted,
+		Rejected: rejected,
+		Portion:  fmt.Sprintf("%d/%d", len(a.Session.Portion()), a.Session.Size),
+		Need:     a.Session.Need(),
 	}
 	if a.UI != nil {
 		a.UI.Progress(fmt.Sprintf("· submit %d → accepted %d, rejected %d (portion %s)",

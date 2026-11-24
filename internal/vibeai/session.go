@@ -1,7 +1,8 @@
 package vibeai
 
 import (
-	"math"
+	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -29,9 +30,6 @@ type Entry struct {
 	Song     Song
 	Why      string
 	Favorite bool // the track is from the owner's Favorites
-	Known    bool // at least one artist of the song is known
-
-	knownCounted bool
 }
 
 type Verdict struct {
@@ -47,36 +45,31 @@ type reserved struct {
 }
 
 type Session struct {
-	lib, favs       *Library
-	known           map[string]bool
-	plan            Plan
-	excl            map[string]string
-	seeds           map[string]string
-	given           map[string]bool
-	recent          []Entry
-	lastClosed      int
-	portion         []Entry
-	inPortion       map[string]bool
-	portionArts     map[string]int
-	reserve         []reserved
-	knownCount      int
-	sig             *Signals
-	sessionID       string
-	stream          int
-	Size, PerArtist int
+	lib, favs  *Library
+	known      map[string]bool
+	plan       Plan
+	seeds      map[string]string
+	given      map[string]bool
+	recent     []Entry
+	lastClosed int
+	portion    []Entry
+	inPortion  map[string]bool
+	reserve    []reserved
+	sig        *Signals
+	sessionID  string
+	stream     int
+	Size       int
 }
 
 func NewSession(library, favorites []Song, size int) *Session {
 	return &Session{
-		lib:         NewLibrary(library),
-		favs:        NewLibrary(favorites),
-		known:       KnownArtists(favorites),
-		given:       make(map[string]bool),
-		inPortion:   make(map[string]bool),
-		portionArts: make(map[string]int),
-		stream:      size,
-		Size:        size,
-		PerArtist:   2,
+		lib:       NewLibrary(library),
+		favs:      NewLibrary(favorites),
+		known:     KnownArtists(favorites),
+		given:     make(map[string]bool),
+		inPortion: make(map[string]bool),
+		stream:    size,
+		Size:      size,
 	}
 }
 
@@ -90,49 +83,15 @@ func (s *Session) SetPlan(p Plan) {
 	} else {
 		s.Size = s.stream
 	}
-	s.excl = make(map[string]string, len(p.Exclusions))
-	for _, name := range p.Exclusions {
-		if k := normKey(name); k != "" {
-			s.excl[k] = name
-		}
-	}
 	s.seeds = make(map[string]string, len(p.Seeds))
 	for _, sd := range p.Seeds {
 		if k := normKey(sd.Artist); k != "" {
 			s.seeds[k] = sd.Mode
 		}
 	}
-	s.recountKnown()
 }
 
 func (s *Session) Playlist() *PlaylistPlan { return s.plan.Playlist }
-
-func (s *Session) window() int { return max(windowSize, s.Size) }
-
-func (s *Session) perArtist() int {
-	w := s.window()
-	return max(s.PerArtist, w*s.PerArtist/windowSize)
-}
-
-func (s *Session) recountKnown() {
-	s.knownCount = 0
-	for i := range s.portion {
-		counted := false
-		for _, a := range songArtists(s.portion[i].Song) {
-			if !s.known[a] {
-				continue
-			}
-			if _, isSeed := s.seeds[a]; !isSeed {
-				counted = true
-				break
-			}
-		}
-		s.portion[i].knownCounted = counted
-		if counted {
-			s.knownCount++
-		}
-	}
-}
 
 func (s *Session) SetSignals(sig *Signals, sessionID string) {
 	s.sig = sig
@@ -145,7 +104,6 @@ func (s *Session) NoteSaved(song Song, favorite bool) {
 		for _, a := range splitArtists(song.Artist) {
 			s.known[a] = true
 		}
-		s.recountKnown()
 		return
 	}
 	s.lib.add(song)
@@ -162,86 +120,18 @@ func (s *Session) Offer(sug Suggestion, song Song, found bool) Verdict {
 		return v
 	}
 	v.Song = song
-	arts := songArtists(song)
-	for _, a := range arts {
-		if name, ok := s.excl[a]; ok {
-			v.Reason = "exclusion: " + name
-			return v
-		}
-	}
-	for _, a := range arts {
-		if s.seeds[a] == "not_it" {
-			v.Reason = "the referent itself (not_it)"
-			return v
-		}
-	}
 	k := songKey(song)
-	if s.given[k] || s.inPortion[k] {
+	if s.inPortion[k] {
+		v.Reason = "already served"
+		return v
+	}
+	if s.given[k] && !sug.Again {
 		v.Reason = "already served"
 		return v
 	}
 	if s.Need() == 0 {
 		v.Reason = "portion is full"
 		s.addReserve(sug, song)
-		return v
-	}
-	windowArts, windowKnown := s.windowCounts()
-	if s.sig != nil {
-		if s.sig.skippedBefore(song, s.sessionID) {
-			v.Reason = "dropped early before"
-			return v
-		}
-		for _, a := range arts {
-			if r := s.sig.blockedArtist(a, s.sessionID); r != "" {
-				if strings.HasPrefix(r, "the listener skips") && (s.seeds[a] == "want_it" || s.seeds[a] == "and_similar") {
-					continue
-				}
-				v.Reason = r
-				return v
-			}
-		}
-	}
-	if s.plan.FromFavorites {
-		if !s.lib.Has(song) && !s.favs.Has(song) {
-			v.Reason = "favorites mode: not in the library"
-			return v
-		}
-		favArtist := false
-		for _, a := range arts {
-			if s.known[a] {
-				favArtist = true
-				break
-			}
-		}
-		if !favArtist {
-			v.Reason = "favorites mode: artist is not from Favorites"
-			return v
-		}
-	} else if s.lib.Has(song) && !s.favs.Has(song) && !s.hasSeedArtist(arts) {
-		v.Reason = "known track (library)"
-		return v
-	}
-	playlist := s.plan.Playlist != nil
-	for _, a := range arts {
-		mode := s.seeds[a]
-		if mode == "want_it" || (playlist && mode == "and_similar") {
-			continue
-		}
-		if s.portionArts[a]+windowArts[a] >= s.perArtist() {
-			v.Reason = "artist limit: " + a
-			return v
-		}
-	}
-	maxSimilar := int(math.Ceil(float64(s.window())*0.15 - 1e-9))
-	for _, a := range arts {
-		if s.seeds[a] == "and_similar" && s.portionArts[a]+windowArts[a] >= maxSimilar {
-			v.Reason = "referent limit"
-			return v
-		}
-	}
-	_, counted := s.knownFlags(arts)
-	if !s.plan.FromFavorites && counted && s.knownCount+windowKnown >= s.maxKnown() {
-		v.Reason = "known limit"
 		return v
 	}
 	return s.accept(sug, song)
@@ -261,30 +151,9 @@ func (s *Session) Take(sug Suggestion, song Song) Verdict {
 	return s.accept(sug, song)
 }
 
-func (s *Session) knownFlags(arts []string) (isKnown, knownCounted bool) {
-	for _, a := range arts {
-		if !s.known[a] {
-			continue
-		}
-		isKnown = true
-		if _, isSeed := s.seeds[a]; !isSeed {
-			knownCounted = true
-		}
-	}
-	return isKnown, knownCounted
-}
-
 func (s *Session) accept(sug Suggestion, song Song) Verdict {
-	arts := songArtists(song)
-	isKnown, knownCounted := s.knownFlags(arts)
-	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song), Known: isKnown, knownCounted: knownCounted})
+	s.portion = append(s.portion, Entry{Song: song, Why: sug.Why, Favorite: s.favs.Has(song)})
 	s.inPortion[songKey(song)] = true
-	for _, a := range arts {
-		s.portionArts[a]++
-	}
-	if knownCounted {
-		s.knownCount++
-	}
 	return Verdict{Suggestion: sug, Song: song, Accepted: true}
 }
 
@@ -319,54 +188,101 @@ func (s *Session) Done() bool {
 	return s.Need() <= s.Size/10
 }
 
-func (s *Session) hasSeedArtist(arts []string) bool {
-	for _, a := range arts {
-		if m := s.seeds[a]; m == "want_it" || m == "and_similar" {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Session) maxKnown() int {
-	return int(math.Floor(float64(s.window())*0.2 + 1e-9))
-}
-
-func (s *Session) KnownLeft() int {
-	if s.plan.FromFavorites {
-		return s.Need()
-	}
-	_, tailKnown := s.windowCounts()
-	return max(s.maxKnown()-s.knownCount-tailKnown, 0)
-}
-
-func (s *Session) windowTail() []Entry {
-	n := windowSize - s.Size
-	if n <= 0 {
-		return nil
-	}
-	if n >= len(s.recent) {
-		return s.recent
-	}
-	return s.recent[len(s.recent)-n:]
-}
-
-func (s *Session) windowCounts() (map[string]int, int) {
-	tailArts := make(map[string]int)
-	tailKnown := 0
-	for _, e := range s.windowTail() {
-		for _, a := range songArtists(e.Song) {
-			tailArts[a]++
-		}
-		if e.knownCounted {
-			tailKnown++
-		}
-	}
-	return tailArts, tailKnown
-}
-
 func (s *Session) Portion() []Entry {
 	return s.portion
+}
+
+// windowSummary renders the Window the model sees every turn: tracks per
+// artist over the last windowSize served entries, tracks by Favorites
+// artists and tracks by referents, with per-referent counts.
+func (s *Session) windowSummary() string {
+	if len(s.recent) == 0 {
+		return ""
+	}
+	win := s.recent
+	if len(win) > windowSize {
+		win = win[len(win)-windowSize:]
+	}
+	type count struct {
+		name  string
+		count int
+	}
+	less := func(a, b count) bool {
+		if a.count != b.count {
+			return a.count > b.count
+		}
+		return a.name < b.name
+	}
+	artistCounts := make(map[string]int)
+	refCounts := make(map[string]int)
+	favTracks, refTracks := 0, 0
+	for _, e := range win {
+		arts := songArtists(e.Song)
+		referent := false
+		for _, a := range arts {
+			artistCounts[a]++
+			if _, ok := s.seeds[a]; ok {
+				referent = true
+				refCounts[a]++
+			}
+		}
+		if referent {
+			refTracks++
+		}
+		for _, a := range arts {
+			if s.known[a] {
+				favTracks++
+				break
+			}
+		}
+	}
+	multi := make([]count, 0, len(artistCounts))
+	singles := 0
+	for a, c := range artistCounts {
+		if c >= 2 {
+			multi = append(multi, count{name: a, count: c})
+		} else {
+			singles++
+		}
+	}
+	sort.Slice(multi, func(i, j int) bool { return less(multi[i], multi[j]) })
+	artistPart := make([]string, 0, len(multi)+1)
+	for _, m := range multi {
+		artistPart = append(artistPart, fmt.Sprintf("%s %d", m.name, m.count))
+	}
+	switch {
+	case len(multi) == 0:
+		artistPart = append(artistPart, fmt.Sprintf("%d artists with 1 each", singles))
+	case singles > 0:
+		artistPart = append(artistPart, fmt.Sprintf("%d more artists with 1 each", singles))
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Window, the last %d served tracks: by artist — %s; by Favorites artists: %d; by referents: %d",
+		len(win), strings.Join(artistPart, ", "), favTracks, refTracks)
+	if refTracks > 0 {
+		names := make(map[string]string, len(s.plan.Seeds))
+		for _, sd := range s.plan.Seeds {
+			if k := normKey(sd.Artist); k != "" {
+				names[k] = sd.Artist
+			}
+		}
+		refs := make([]count, 0, len(refCounts))
+		for a, c := range refCounts {
+			name := a
+			if n, ok := names[a]; ok {
+				name = n
+			}
+			refs = append(refs, count{name: name, count: c})
+		}
+		sort.Slice(refs, func(i, j int) bool { return less(refs[i], refs[j]) })
+		refPart := make([]string, 0, len(refs))
+		for _, r := range refs {
+			refPart = append(refPart, fmt.Sprintf("%s %d", r.name, r.count))
+		}
+		fmt.Fprintf(&b, " (%s)", strings.Join(refPart, ", "))
+	}
+	b.WriteByte('.')
+	return b.String()
 }
 
 func (s *Session) ClosePortion() []Entry {
@@ -378,8 +294,6 @@ func (s *Session) ClosePortion() []Entry {
 	s.lastClosed = len(out)
 	s.portion = nil
 	s.inPortion = make(map[string]bool)
-	s.portionArts = make(map[string]int)
-	s.knownCount = 0
 	return out
 }
 
@@ -393,8 +307,6 @@ func (s *Session) Give(songs []Song) {
 func (s *Session) ResetPortion() {
 	s.portion = nil
 	s.inPortion = make(map[string]bool)
-	s.portionArts = make(map[string]int)
-	s.knownCount = 0
 }
 
 func (s *Session) DropLast() {
