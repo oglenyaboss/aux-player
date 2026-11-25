@@ -487,7 +487,7 @@ func readVibeSignals(t *testing.T) []string {
 }
 
 func TestManualPlaysWriteNeutralLine(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolatedHome(t)
 	m := New(&config.Config{}, &mockProvider{}, nil, Options{})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "a1", Artist: "Art", Title: "One", Duration: 200 * time.Second}, Position: 190 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "a2", Duration: 200 * time.Second}, Position: 5 * time.Second})
@@ -516,7 +516,7 @@ func TestManualPlaysWriteNeutralLine(t *testing.T) {
 }
 
 func TestManualPlaysWithAgentPortion(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolatedHome(t)
 	m := openVibeWithPortion(t)
 	m.vibeAI.stream = false
 	m.handleVibeAIMsg(VibeAIActionMsg{Action: VibeAIPlay, Index: 0})
@@ -541,7 +541,7 @@ func TestManualPlaysWithAgentPortion(t *testing.T) {
 }
 
 func TestManualSkipWritesNothing(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolatedHome(t)
 	m := New(&config.Config{}, &mockProvider{}, nil, Options{})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "m1", Artist: "M", Title: "Manual", Duration: 200 * time.Second}, Position: 20 * time.Second})
 	m.Update(playerStateMsg{Track: &provider.Track{ID: "m2"}, Position: 0})

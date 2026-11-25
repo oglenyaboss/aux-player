@@ -3,6 +3,10 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
+## [1.4.1] — 2026-11-25
+
+Press `Enter` on an album in search to play it from the first track. This build includes the [1.4 features](https://github.com/oglenyaboss/aux-player/blob/v1.4.1/CHANGELOG.md#140--2026-11-25) and fixes a Windows test that read listening history from outside its temporary directory.
+
 ## [1.4.0] — 2026-11-25
 
 - Press `Enter` on an album in search to play it from the first track. Use `Ctrl+K` → `Open` to browse its tracks without interrupting playback, or `Ctrl+E` to queue the album. `Esc` returns from the tracklist to the selected search result.
