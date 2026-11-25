@@ -3,6 +3,13 @@
 AUX started as a fork of [vibez](https://github.com/simonepelosi/vibez) by Simone Pelosi.
 The vibez history up to the fork is in git.
 
+## [1.4.0] — 2026-11-25
+
+- Press `Enter` on an album in search to play it from the first track. Use `Ctrl+K` → `Open` to browse its tracks without interrupting playback, or `Ctrl+E` to queue the album. `Esc` returns from the tracklist to the selected search result.
+- The picker can search Apple Music before choosing tracks and keeps the conversation between portions of a stream.
+- Ask for a playlist to save a finished set to Apple Music instead of starting a stream.
+- Settings now let you edit the picker's memory and track ratings, switch between provider profiles, and sign in with a ChatGPT subscription.
+
 ## [1.3.0] — 2026-11-14
 
 - `aux update` checks for a newer release and installs it right away, without waiting for the once-a-day check.

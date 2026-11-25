@@ -120,6 +120,7 @@ type musicTab struct {
 type musicColl struct {
 	parent  MusicItem
 	section MusicSection
+	fromQ   string // the search the collection was opened from, to come back to on esc
 	items   []MusicItem
 	err     string
 	loading bool

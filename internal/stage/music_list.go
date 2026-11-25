@@ -549,8 +549,12 @@ func (m *Model) mlBack() {
 	case m.mu.list.query != "":
 		m.mlTypeQuery("")
 	case m.mu.coll != nil:
+		c := m.mu.coll
 		m.mu.coll = nil
 		m.mu.list.sel, m.mu.gridTop = m.mlPop(), 0
+		if c.fromQ != "" {
+			m.mu.list.query = c.fromQ
+		}
 		m.mlSettle()
 	case !m.mu.list.root:
 		m.mu.list.root = true
@@ -584,19 +588,25 @@ func (m *Model) mlPushSection(sec MusicSection) {
 	m.mlSettle()
 }
 
-// mlPushColl opens the tracks of an album or a playlist.
+// mlPushColl opens the tracks of an album or a playlist. A collection opened from
+// the search takes its query out of the list so the tracks show; esc puts it back.
 func (m *Model) mlPushColl(it MusicItem) {
 	m.mlPush(m.mu.list.sel)
 	parent := it
-	c := &musicColl{parent: parent, section: m.mu.tab}
+	sec, fromQ := m.mu.tab, ""
+	if q := m.mu.list.query; q != "" {
+		sec, fromQ = MusicSearch, q
+		m.mu.list.query = ""
+	}
+	c := &musicColl{parent: parent, section: sec, fromQ: fromQ}
 	if items, ok := m.mu.peek[parent.Key()]; ok {
 		c.items = slices.Clone(items)
 	} else {
 		c.loading = true
 	}
 	m.mu.coll = c
-	m.mu.reqTab, m.mu.reqColl = m.mu.tab, true
-	m.musicSend(m.mu.tab, &parent)
+	m.mu.reqTab, m.mu.reqColl = sec, true
+	m.musicSend(sec, &parent)
 	m.mu.list.sel, m.mu.gridTop = 0, 0
 	m.mu.glideSnap, m.mu.cascT = true, m.t
 	m.mlSettle()
@@ -689,11 +699,21 @@ func (m *Model) mlEnter() {
 			return
 		}
 		if l.it.Kind != MusicSong {
+			if m.mlPlaysAll(l.it) {
+				m.send(MusicPlayAll{Item: l.it})
+				return
+			}
 			m.mlPushColl(l.it)
 			return
 		}
 		m.mlPlay(l)
 	}
+}
+
+// mlPlaysAll is whether enter starts the row as a whole: an album of the search,
+// the top result included, instead of opening its tracklist.
+func (m *Model) mlPlaysAll(it MusicItem) bool {
+	return it.Kind == MusicAlbum && m.mu.list.query != ""
 }
 
 // mlPlay sends the row to the host: a song of a collection plays with it, a song of a
@@ -1573,7 +1593,11 @@ func (m *Model) mlBarCaps() [][2]string {
 	case l.kind == mlMore:
 		caps = append(caps, [2]string{"↵", tr("показать все", "show all")})
 	case l.kind == mlEntry || (l.kind == mlSong && l.it.Kind != MusicSong) || (l.kind == mlTile && l.it.Kind != MusicSong):
-		caps = append(caps, [2]string{"↵", tr("открыть", "open")})
+		label := tr("открыть", "open")
+		if m.mlPlaysAll(l.it) {
+			label = tr("играть всё", "play all")
+		}
+		caps = append(caps, [2]string{"↵", label})
 	default:
 		caps = append(caps, [2]string{"↵", tr("играть", "play")})
 	}

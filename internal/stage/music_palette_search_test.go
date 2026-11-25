@@ -163,7 +163,7 @@ func TestPaletteSearchHeroRules(t *testing.T) {
 	}
 }
 
-// A5: every action of a row works on the hero: play, open, queue.
+// A5: every action of a row works on the hero: play, play all, queue.
 func TestPaletteSearchHeroActions(t *testing.T) {
 	m, r := mlSearchSetup(t, "song 3")
 	m.Key("enter", "")
@@ -174,9 +174,9 @@ func TestPaletteSearchHeroActions(t *testing.T) {
 
 	m2, r2 := mlSearchSetup(t, "bl")
 	m2.Key("enter", "")
-	load := mlLastLoad(t, r2)
-	if load.Parent == nil || load.Parent.Title != "Blonde" {
-		t.Fatalf("load = %+v, want the tracks of Blonde", load)
+	alls := recorded[MusicPlayAll](r2)
+	if len(alls) != 1 || alls[0].Item.Title != "Blonde" || len(recorded[MusicAppend](r2)) != 0 {
+		t.Fatalf("play all = %+v, want the whole Blonde and no append", r2.acts)
 	}
 
 	m3, r3 := mlSearchSetup(t, "song 3")

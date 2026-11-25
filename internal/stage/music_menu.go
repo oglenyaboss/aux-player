@@ -129,7 +129,11 @@ func (m *Model) mlMenuChoose() {
 	case mlMenuPlay:
 		m.mlPlay(l)
 	case mlMenuOpen:
-		m.mlEnter()
+		if l.it.Unplayable != "" {
+			m.MusicNotice(l.it.Unplayable)
+			return
+		}
+		m.mlPushColl(l.it)
 	case mlMenuQueue:
 		m.mlAppend()
 	case mlMenuLibrary:
