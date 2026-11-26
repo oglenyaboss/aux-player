@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -13,6 +14,7 @@ env:
 
 jobs:
   verify:
+    if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/ci.yml
 
   # Linux/arm64 is built here rather than in the release job below because the
