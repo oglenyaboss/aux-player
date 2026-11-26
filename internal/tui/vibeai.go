@@ -912,6 +912,7 @@ func (m *Model) vibeAIAppend(ts []vibeai.Track) tea.Cmd {
 
 // setQueue replaces the player queue with tracks and starts the first one.
 func (m *Model) setQueue(tracks []provider.Track) tea.Cmd {
+	m.musicPlayGen++
 	ids := make([]string, len(tracks))
 	for i, t := range tracks {
 		ids[i] = PlaybackID(t)

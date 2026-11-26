@@ -99,6 +99,7 @@ type musicPlayAllMsg struct {
 
 // musicCollectionMsg is the expanded track list behind a play-all.
 type musicCollectionMsg struct {
+	gen    int
 	item   stage.MusicItem
 	tracks []provider.Track
 	err    error
@@ -254,13 +255,18 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			st.MusicNotice(item.Title + stage.Tr(" — не коллекция", " is not a collection"))
 			return nil
 		}
+		m.musicPlayGen++
+		gen := m.musicPlayGen
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), musicTimeout)
 			defer cancel()
 			r, err := store.Load(ctx, tgt.kind, tgt.id)
-			return musicCollectionMsg{item: item, tracks: r.Songs, err: err}
+			return musicCollectionMsg{gen: gen, item: item, tracks: r.Songs, err: err}
 		}
 	case musicCollectionMsg:
+		if msg.gen != m.musicPlayGen {
+			return nil
+		}
 		if msg.err != nil {
 			st.MusicNotice("Apple Music: " + msg.err.Error())
 			return nil
@@ -322,7 +328,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 			tracks = append(tracks, t)
 		}
 		if len(tracks) == 0 {
-			st.MusicNotice(stage.Tr("нечего добавить — все треки без каталога", "nothing to queue — every track is an upload without a catalog"))
+			st.MusicNotice(stage.Tr("нечего добавить — нет доступных для воспроизведения треков", "nothing to queue — no playable tracks"))
 			return nil
 		}
 		var cmd tea.Cmd
@@ -351,6 +357,7 @@ func (m *Model) handleMusicMsg(msg tea.Msg) tea.Cmd {
 // with the continuation switch on the agent starts picking what follows them.
 func (m *Model) musicPlayTracks(tracks []provider.Track, from *stage.MusicItem) tea.Cmd {
 	if len(tracks) == 0 {
+		m.vibeAIP.m.st.MusicNotice(stage.Tr("нет доступных для воспроизведения треков", "no playable tracks"))
 		return nil
 	}
 	m.cancelVibeAI()

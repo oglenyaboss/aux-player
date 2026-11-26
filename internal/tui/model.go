@@ -51,7 +51,8 @@ type Model struct {
 	libraryOf    string                    // the provider type and token the store was opened for
 	musicChecks  int                       // background library refreshes in flight
 	musicFound   map[string]musicSearchHit // recent searches by query
-	musicLast    *musicSelection           // the manual selection the queue holds; nil once replaced
+	musicPlayGen int
+	musicLast    *musicSelection // the manual selection the queue holds; nil once replaced
 	saves        map[string]saveState
 
 	artHTTP          *http.Client

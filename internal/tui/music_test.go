@@ -414,6 +414,57 @@ func TestMusicPlayAll(t *testing.T) {
 	}
 }
 
+func TestMusicLateAlbumCannotReplaceNewerPlay(t *testing.T) {
+	for _, song := range []bool{false, true} {
+		p := newMusicProvider()
+		m, mp := musicTestModel(t, p)
+		_, slow := m.Update(musicPlayAllMsg{item: musicAlbumItem(p.albums[0])})
+		var next tea.Cmd
+		want := []string{"i.g1"}
+		if song {
+			want = []string{"301"}
+			_, next = m.Update(musicPlayMsg{items: []stage.MusicItem{{Kind: stage.MusicSong, ID: "301"}}})
+		} else {
+			_, next = m.Update(musicPlayAllMsg{item: musicAlbumItem(p.albums[1])})
+		}
+		musicFeed(t, m, next)
+		musicFeed(t, m, slow)
+		if !slices.Equal(mp.setQueueIDs, want) {
+			t.Fatalf("song=%t: queue after late album = %v, want %v", song, mp.setQueueIDs, want)
+		}
+	}
+}
+
+func TestMusicPlaySearchAlbum(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		tracks []provider.Track
+		queue  []string
+		notice string
+	}{
+		{"catalog order", []provider.Track{{ID: "201", Title: "Nikes"}, {ID: "202", Title: "Ivy"}}, []string{"201", "202"}, "playing: Nikes"},
+		{"empty album", nil, nil, "no playable tracks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newMusicProvider()
+			p.searchRes.Albums[0].ID = "555"
+			p.collTracks["555"] = tc.tracks
+			m, mp := musicTestModel(t, p)
+			musicFeed(t, m, press(m, "ctrl+o"))
+			musicFeed(t, m, press(m, "b"))
+			m.vibeAIP.m.st.Step(0.4)
+			musicFeed(t, m, m.vibeAIP.m.flush())
+			musicFeed(t, m, press(m, "enter"))
+			if !p.called("GetAlbumTracks:555") || !slices.Equal(mp.setQueueIDs, tc.queue) {
+				t.Fatalf("calls = %v, queue = %v; want catalog album 555 and queue %v", p.calls, mp.setQueueIDs, tc.queue)
+			}
+			if frame := musicFrame(m, 0.2); !strings.Contains(frame, tc.notice) {
+				t.Fatalf("missing %q:\n%s", tc.notice, frame)
+			}
+		})
+	}
+}
+
 // A10: a failed load shows the provider's error inside the screen.
 func TestMusicLoadError(t *testing.T) {
 	p := newMusicProvider()
