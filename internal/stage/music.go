@@ -118,13 +118,15 @@ type musicTab struct {
 
 // musicColl is the tracks of one opened album or playlist.
 type musicColl struct {
-	parent  MusicItem
-	section MusicSection
-	fromQ   string // the search the collection was opened from, to come back to on esc
-	items   []MusicItem
-	err     string
-	loading bool
-	sel     int
+	parent    MusicItem
+	section   MusicSection
+	fromQ     string      // the search the collection was opened from, to come back to on esc
+	from      []MusicItem // the rows of that search, to put back on esc
+	fromSentQ string      // the query those rows answer
+	items     []MusicItem
+	err       string
+	loading   bool
+	sel       int
 }
 
 // The looks of the music screen: the full-screen list, a palette dropping over the

@@ -553,7 +553,7 @@ func (m *Model) mlBack() {
 		m.mu.coll = nil
 		m.mu.list.sel, m.mu.gridTop = m.mlPop(), 0
 		if c.fromQ != "" {
-			m.mu.list.query = c.fromQ
+			m.mlRestoreSearch(c)
 		}
 		m.mlSettle()
 	case !m.mu.list.root:
@@ -563,6 +563,24 @@ func (m *Model) mlBack() {
 	default:
 		m.closeMusic()
 	}
+}
+
+// mlRestoreSearch puts the search a collection was opened from back on esc: its
+// rows and the query they answer, not what a search typed inside the collection
+// replaced them with. A search still on its way is dropped with its answer.
+func (m *Model) mlRestoreSearch(c *musicColl) {
+	m.mu.list.query = c.fromQ
+	t := &m.mu.tabs[MusicSearch]
+	if t.query == c.fromQ {
+		return
+	}
+	t.items = slices.Clone(c.from)
+	t.fresh = slices.Clone(c.from)
+	t.query = c.fromSentQ
+	t.sent, t.loading, t.err = len(c.from) > 0, false, ""
+	m.mu.list.sentQ = c.fromSentQ
+	m.mu.gen++
+	m.mu.reqTab, m.mu.reqColl = MusicSearch, false
 }
 
 func (m *Model) mlPush(sel int) { m.mu.list.ret = append(m.mu.list.ret, sel) }
@@ -599,6 +617,10 @@ func (m *Model) mlPushColl(it MusicItem) {
 		m.mu.list.query = ""
 	}
 	c := &musicColl{parent: parent, section: sec, fromQ: fromQ}
+	if fromQ != "" {
+		t := &m.mu.tabs[MusicSearch]
+		c.from, c.fromSentQ = slices.Clone(t.items), t.query
+	}
 	if items, ok := m.mu.peek[parent.Key()]; ok {
 		c.items = slices.Clone(items)
 	} else {
@@ -778,15 +800,15 @@ func (m *Model) mlAgentText() string {
 }
 
 // mlCrumb is the breadcrumb of the level, empty at the root and under a query.
-// A song tab names the sort it is in.
+// A collection names the section it was opened from, a song tab the sort it is in.
 func (m *Model) mlCrumb() string {
 	if m.mu.list.query != "" || m.mu.list.root {
 		return ""
 	}
-	root := musicTabLabel(m.mu.tab)
 	if c := m.mu.coll; c != nil {
-		return root + " › " + c.parent.Title
+		return musicTabLabel(c.section) + " › " + c.parent.Title
 	}
+	root := musicTabLabel(m.mu.tab)
 	if mlSortable(m.mu.tab) {
 		return root + " · " + m.mu.tabs[m.mu.tab].sort.label()
 	}

@@ -188,6 +188,130 @@ func TestPaletteLibraryAlbumEnterStillOpens(t *testing.T) {
 	}
 }
 
+// mlOpenSearchAlbumFromAlbums opens the Albums section of the palette root, searches
+// bl and opens Blonde from the menu, leaving its tracks loading.
+func mlOpenSearchAlbumFromAlbums(t *testing.T, m *Model, r *recorder) {
+	t.Helper()
+	mlOpenSection(t, m, MusicAlbums)
+	mlType(m, "bl")
+	steps(m, 0.4)
+	m.MusicRows(mlLastLoad(t, r).Gen, mlBlondeRows(), "")
+	m.Key("ctrl+k", "")
+	m.Key("enter", "")
+	if load := mlLastLoad(t, r); load.Parent == nil || load.Parent.ID != "alb-blonde" {
+		t.Fatalf("load = %+v, want the tracks of Blonde", load)
+	}
+}
+
+// R1: an album opened from the search names the search as its origin, not the
+// section the palette was browsing.
+func TestPaletteSearchAlbumCrumbNamesSearch(t *testing.T) {
+	m, r := paletteRU(t, 160, 45)
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Key("m", "m")
+	steps(m, 0.2)
+	mlOpenSearchAlbumFromAlbums(t, m, r)
+	if got := m.mlCrumb(); got != "поиск › Blonde" {
+		t.Errorf("crumb = %q, want the search origin", got)
+	}
+	if frame := stripANSI(m.View()); !strings.Contains(frame, "поиск › Blonde") {
+		t.Errorf("the palette does not show the search breadcrumb:\n%s", frame)
+	}
+}
+
+// R2: a search typed inside a browsed search album replaces the rows only while the
+// album is open: esc twice puts the query, the bl results and Blonde back.
+func TestPaletteSearchAlbumBackRestoresResults(t *testing.T) {
+	m, r := paletteRU(t, 160, 45)
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Key("m", "m")
+	steps(m, 0.2)
+	mlOpenSearchAlbumFromAlbums(t, m, r)
+
+	mlType(m, "x")
+	steps(m, 0.4)
+	xLoad := mlLastLoad(t, r)
+	if xLoad.Parent != nil || xLoad.Query != "x" {
+		t.Fatalf("load = %+v, want the search for x", xLoad)
+	}
+	m.MusicRows(xLoad.Gen, []MusicItem{
+		musicAlbum("alb-x", "X", "Xylophone", 9),
+		musicSong("s-x", "X", "X Song", 100),
+	}, "")
+
+	m.Key("esc", "")
+	m.Key("esc", "")
+	if m.mu.coll != nil {
+		t.Fatal("esc did not leave the album")
+	}
+	if m.mu.list.query != "bl" {
+		t.Errorf("query after esc = %q, want the search text back", m.mu.list.query)
+	}
+	if l, ok := m.mlSelected(); !ok || l.it.ID != "alb-blonde" {
+		t.Errorf("selection after esc = %+v, want the Blonde hero", l)
+	}
+	frame := stripANSI(m.View())
+	for _, want := range []string{"лучшее совпадение", "Blonde", "Chill"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("the results after esc lose %q:\n%s", want, frame)
+		}
+	}
+	if strings.Contains(frame, "Xylophone") {
+		t.Errorf("the x results are still on screen after esc:\n%s", frame)
+	}
+
+	before := len(recorded[MusicLoad](r))
+	steps(m, 0.4)
+	if got := len(recorded[MusicLoad](r)); got != before {
+		t.Errorf("esc sent %d searches, want the rows already on screen", got-before)
+	}
+
+	m.Key("enter", "")
+	alls := recorded[MusicPlayAll](r)
+	if len(alls) != 1 || alls[0].Item.ID != "alb-blonde" {
+		t.Fatalf("play all = %+v, want MusicPlayAll{alb-blonde}", r.acts)
+	}
+	if got := recorded[MusicPlay](r); len(got) != 0 {
+		t.Errorf("enter played %+v, want the album of the bl search", got)
+	}
+}
+
+// R2: a search already on its way when the listener backs out cannot replace the
+// rows and the selection esc restored.
+func TestPaletteSearchAlbumBackDropsLateSearch(t *testing.T) {
+	m, r := paletteRU(t, 160, 45)
+	m.JumpPlay(threeTracks(), 0, 0)
+	m.Key("m", "m")
+	steps(m, 0.2)
+	mlOpenSearchAlbumFromAlbums(t, m, r)
+
+	mlType(m, "x")
+	steps(m, 0.4)
+	xLoad := mlLastLoad(t, r)
+	if xLoad.Parent != nil || xLoad.Query != "x" {
+		t.Fatalf("load = %+v, want the search for x", xLoad)
+	}
+
+	m.Key("esc", "")
+	m.Key("esc", "")
+	m.MusicRows(xLoad.Gen, []MusicItem{musicAlbum("alb-x", "X", "Xylophone", 9)}, "")
+	if m.mu.list.query != "bl" {
+		t.Errorf("query after esc = %q, want the search text back", m.mu.list.query)
+	}
+	if l, ok := m.mlSelected(); !ok || l.it.ID != "alb-blonde" {
+		t.Errorf("selection after esc = %+v, want the Blonde hero", l)
+	}
+	if frame := stripANSI(m.View()); strings.Contains(frame, "Xylophone") {
+		t.Errorf("the late x answer reached the restored list:\n%s", frame)
+	}
+
+	m.Key("enter", "")
+	alls := recorded[MusicPlayAll](r)
+	if len(alls) != 1 || alls[0].Item.ID != "alb-blonde" {
+		t.Fatalf("play all = %+v, want MusicPlayAll{alb-blonde}", r.acts)
+	}
+}
+
 // R4: the bar names the new default on a search album, the old one elsewhere, and
 // the album menu still offers both actions in either language.
 func TestPaletteBarNamesSearchAlbumDefault(t *testing.T) {
